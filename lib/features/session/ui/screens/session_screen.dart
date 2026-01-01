@@ -477,9 +477,11 @@ class _SessionScreenState extends State<SessionScreen>
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
+          _buildStagingArea(context, provider),
+          const SizedBox(height: 12),
           SizedBox(
-            height: 160,
-            child: _buildFan(context, provider.state.myHand, provider),
+            height: 140, // Reduced from 160 to fit two lines better
+            child: _buildHandArea(context, provider.state.myHand, provider),
           ),
           const SizedBox(height: 12),
           Row(
@@ -576,7 +578,47 @@ class _SessionScreenState extends State<SessionScreen>
     );
   }
 
-  Widget _buildFan(
+  Widget _buildStagingArea(BuildContext context, SessionProvider provider) {
+    final selectedUnits = provider.state.myHand
+        .where((u) => provider.selectedUnitIds.contains(u.id))
+        .toList();
+
+    if (selectedUnits.isEmpty) {
+      return const SizedBox(height: 80);
+    }
+
+    return SizedBox(
+      height: 80,
+      child: Center(
+        child: Stack(
+          alignment: Alignment.center,
+          children: List.generate(selectedUnits.length, (index) {
+            final unit = selectedUnits[index];
+            final double overlap = 30.0;
+            final double totalWidth = 70 + (selectedUnits.length - 1) * overlap;
+            final double startX = -(totalWidth / 2) + 35;
+
+            return Positioned(
+              left:
+                  (MediaQuery.of(context).size.width / 2) +
+                  startX +
+                  (index * overlap) -
+                  35,
+              child: UnitCard(
+                unit: unit,
+                onTap: () => provider.toggleUnitSelection(unit.id),
+                isSelected: true,
+                width: 60,
+                height: 85,
+              ),
+            );
+          }),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildHandArea(
     BuildContext context,
     List<Unit> hand,
     SessionProvider provider,
@@ -586,36 +628,103 @@ class _SessionScreenState extends State<SessionScreen>
         child: Text("EMPTY HAND", style: TextStyle(color: Colors.white24)),
       );
     }
+
     return LayoutBuilder(
       builder: (context, constraints) {
         final double width = constraints.maxWidth;
-        final double cardWidth = 80;
+        final double cardWidth = 70;
         final int count = hand.length;
-        final double centerIndex = (count - 1) / 2;
 
-        return Stack(
-          alignment: Alignment.bottomCenter,
-          children: List.generate(count, (index) {
-            final unit = hand[index];
-            final isSelected = provider.selectedUnitIds.contains(unit.id);
-            final double rotation = (index - centerIndex) * 0.15;
-            final double offsetX = (index - centerIndex) * 25;
+        // Threshold of 7 for two lines as per request
+        final bool useTwoLines = count > 7;
+        final int cardsPerRow = useTwoLines ? (count / 2).ceil() : count;
+        final double overlap = calculateOverlap(width, cardsPerRow, cardWidth);
 
-            return Positioned(
-              bottom: isSelected ? 40 : 10,
-              left: (width / 2) - (cardWidth / 2) + offsetX,
-              child: Transform.rotate(
-                angle: rotation,
-                child: UnitCard(
-                  unit: unit,
-                  isSelected: isSelected,
-                  onTap: () => provider.toggleUnitSelection(unit.id),
+        if (!useTwoLines) {
+          return Center(
+            child: _buildRowContent(hand, provider, overlap, cardWidth, 0),
+          );
+        } else {
+          final int mid = (count / 2).ceil();
+          final backRow = hand.sublist(0, mid);
+          final frontRow = hand.sublist(mid);
+
+          return Stack(
+            alignment: Alignment.bottomCenter,
+            children: [
+              // Back Row (higher, slightly shifted for brick effect)
+              Positioned(
+                bottom: 40,
+                child: _buildRowContent(
+                  backRow,
+                  provider,
+                  overlap,
+                  cardWidth,
+                  0,
                 ),
               ),
-            );
-          }),
-        );
+              // Front Row (lower)
+              Positioned(
+                bottom: 0,
+                child: _buildRowContent(
+                  frontRow,
+                  provider,
+                  overlap,
+                  cardWidth,
+                  0.4, // Staggered shift like in commit logic
+                ),
+              ),
+            ],
+          );
+        }
       },
+    );
+  }
+
+  double calculateOverlap(double totalWidth, int count, double cardWidth) {
+    if (count <= 1) return 0;
+    final double availableWidth = totalWidth - cardWidth;
+    final double idealOverlap = 30.0;
+    final double requiredWidth = cardWidth + (count - 1) * idealOverlap;
+
+    if (requiredWidth <= totalWidth) return idealOverlap;
+    return availableWidth / (count - 1);
+  }
+
+  Widget _buildRowContent(
+    List<Unit> handSlice,
+    SessionProvider provider,
+    double overlap,
+    double cardWidth,
+    double staggerShift,
+  ) {
+    final int count = handSlice.length;
+    final double totalWidth = cardWidth + (count - 1 + staggerShift) * overlap;
+
+    return SizedBox(
+      width: totalWidth,
+      height: 100,
+      child: Stack(
+        children: List.generate(count, (index) {
+          final unit = handSlice[index];
+          final isSelected = provider.selectedUnitIds.contains(unit.id);
+
+          return Positioned(
+            left: (index + staggerShift) * overlap,
+            bottom: 0,
+            child: Opacity(
+              opacity: isSelected ? 0.4 : 1.0,
+              child: UnitCard(
+                unit: unit,
+                isSelected: isSelected,
+                onTap: () => provider.toggleUnitSelection(unit.id),
+                width: cardWidth,
+                height: 100,
+              ),
+            ),
+          );
+        }),
+      ),
     );
   }
 
