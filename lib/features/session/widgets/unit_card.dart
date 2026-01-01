@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import '../../../core/theme/colors.dart';
 import '../../../core/constants/dimens.dart';
 import '../models/unit.dart';
 
@@ -23,76 +22,136 @@ class UnitCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // For this app, assuming we show faces in "Hand" (which is where this is used mostly)
+    // If it's the player's hand, they see the face.
+    // The design shows a cream/off-white unit face.
+    const Color cardFaceColor = Color(0xFFFDFCF5);
+
+    final String rankLabel = _getRankLabel(unit.rank);
+    final bool isMultiChar = rankLabel.length > 1;
+
     return GestureDetector(
       onTap: onTap,
-      child: Transform.translate(
-        offset: Offset(0, isSelected ? -20 : 0),
-        child: Transform.rotate(
-          angle: rotation,
-          child: AnimatedContainer(
-            duration: const Duration(milliseconds: 200),
-            width: width,
-            height: height,
-            decoration: BoxDecoration(
-              color: AppColors
-                  .cardBack, // Or face color if revealed (not needed for Ph 1 usually)
-              borderRadius: BorderRadius.circular(AppDimens.radiusS),
-              boxShadow: isSelected
-                  ? [
-                      BoxShadow(
-                        color: AppColors.activeGlow.withValues(alpha: 0.4),
-                        blurRadius: 12,
-                        offset: const Offset(0, -4),
-                      ),
-                    ]
-                  : [
-                      BoxShadow(
-                        color: Colors.black.withValues(alpha: 0.3),
-                        blurRadius: 4,
-                        offset: const Offset(0, 2),
-                      ),
-                    ],
-              border: Border.all(
-                color: isSelected
-                    ? AppColors.primary
-                    : Colors.white.withValues(alpha: 0.1),
-                width: isSelected ? 2 : 1,
-              ),
+      child: Transform.rotate(
+        angle: rotation,
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 200),
+          width: width,
+          height: height,
+          decoration: BoxDecoration(
+            color: cardFaceColor,
+            borderRadius: BorderRadius.circular(12),
+            boxShadow: isSelected
+                ? [
+                    BoxShadow(
+                      color: const Color(
+                        0xFFFFD700,
+                      ).withValues(alpha: 0.6), // Gold glow
+                      blurRadius: 16,
+                      spreadRadius: 2,
+                      offset: const Offset(0, -4),
+                    ),
+                  ]
+                : [
+                    BoxShadow(
+                      color: Colors.black.withValues(alpha: 0.4),
+                      blurRadius: 6,
+                      offset: const Offset(0, 4),
+                    ),
+                  ],
+            border: Border.all(
+              color: isSelected ? const Color(0xFFFFD700) : Colors.transparent,
+              width: isSelected ? 2 : 0,
             ),
-            child: Stack(
-              children: [
-                // Corner Rank/Suit
-                Positioned(
-                  top: 4,
-                  left: 6,
-                  child: Column(
-                    children: [
-                      Text(
-                        _getRankLabel(unit.rank),
-                        style: TextStyle(
-                          color: _getSuitColor(unit.type),
-                          fontWeight: FontWeight.bold,
-                          fontSize: 14,
-                        ),
-                      ),
-                      Icon(
-                        _getSuitIcon(unit.type),
-                        size: 12,
+          ),
+          child: Stack(
+            children: [
+              // Top Left Rank & Suit
+              Positioned(
+                top: 6,
+                left: 5,
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      rankLabel,
+                      style: TextStyle(
                         color: _getSuitColor(unit.type),
+                        fontWeight: FontWeight.w900,
+                        fontSize: isMultiChar ? 13 : 16,
+                        fontFamily: 'Serif',
+                        height: 1.0,
+                        letterSpacing: -1.0,
                       ),
-                    ],
-                  ),
+                    ),
+                    const SizedBox(height: 1),
+                    Icon(
+                      _getSuitIcon(unit.type),
+                      size: 13,
+                      color: _getSuitColor(unit.type),
+                    ),
+                  ],
                 ),
-                // Center Icon (Simplified)
-                Center(
+              ),
+
+              // Center Large Suit Watermark
+              Center(
+                child: Opacity(
+                  opacity: 0.1,
                   child: Icon(
                     _getSuitIcon(unit.type),
-                    size: 24,
-                    color: _getSuitColor(unit.type).withValues(alpha: 0.2),
+                    size: width * 0.6,
+                    color: _getSuitColor(unit.type),
                   ),
                 ),
-              ],
-            ),
+              ),
+
+              // Bottom Right Rank (Inverted)
+              Positioned(
+                bottom: 8,
+                right: 8,
+                child: Transform.rotate(
+                  angle: 3.14159, // 180 degrees
+                  child: Text(
+                    _getRankLabel(unit.rank),
+                    style: TextStyle(
+                      color: _getSuitColor(unit.type),
+                      fontWeight: FontWeight.w900,
+                      fontSize: 16,
+                      fontFamily: 'Serif',
+                      height: 1.0,
+                    ),
+                  ),
+                ),
+              ),
+
+              // Selection Checkmark Badge
+              if (isSelected)
+                Positioned(
+                  top: -8,
+                  right: -8,
+                  child: Container(
+                    decoration: const BoxDecoration(
+                      color: Color(0xFFFFD700), // Gold
+                      shape: BoxShape.circle,
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.black26,
+                          blurRadius: 4,
+                          offset: Offset(0, 2),
+                        ),
+                      ],
+                    ),
+                    padding: const EdgeInsets.all(4),
+                    child: const Icon(
+                      Icons.check,
+                      size: 14,
+                      color: Colors.black,
+                    ),
+                  ),
+                ),
+            ],
           ),
         ),
       ),
@@ -100,7 +159,7 @@ class UnitCard extends StatelessWidget {
   }
 
   String _getRankLabel(UnitRank rank) {
-    if (rank == UnitRank.joker) return 'J';
+    if (rank == UnitRank.joker) return 'JK';
     if (rank.index <= UnitRank.ten.index && rank.index >= UnitRank.two.index) {
       return (rank.index + 2).toString();
     }
@@ -111,27 +170,28 @@ class UnitCard extends StatelessWidget {
     switch (type) {
       case UnitType.hearts:
       case UnitType.diamonds:
-        return AppColors.danger; // Use danger/red color
+        return const Color(0xFFD32F2F); // Crimson Red
       case UnitType.spades:
       case UnitType.clubs:
-        return AppColors.textPrimary;
+        return const Color(0xFF212121); // Almost Black
       default:
-        return AppColors.primary;
+        return Colors.black;
     }
   }
 
   IconData _getSuitIcon(UnitType type) {
     switch (type) {
       case UnitType.spades:
-        return Icons.eco; // Placeholder for Spade
+        return Icons
+            .spoke; // Material doesn't have perfect suit icons, using approximations or standard
       case UnitType.hearts:
         return Icons.favorite;
       case UnitType.diamonds:
         return Icons.diamond;
       case UnitType.clubs:
-        return Icons.yard; // Placeholder for Club
+        return Icons.local_florist; // Approximation
       case UnitType.joker:
-        return Icons.sentiment_very_satisfied;
+        return Icons.theater_comedy;
     }
   }
 }
