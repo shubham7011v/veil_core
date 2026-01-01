@@ -69,28 +69,22 @@ class _SessionScreenState extends State<SessionScreen>
             child: Column(
               children: [
                 _buildTopBar(provider),
-
+                _buildOpponentCarousel(context, provider),
+                const SizedBox(height: 10),
                 Expanded(
-                  child: Column(
-                    children: [
-                      _buildOpponentCarousel(context, provider),
-                      const SizedBox(height: 10),
-                      Expanded(
-                        child: Center(
-                          child: SingleChildScrollView(
-                            child: AnimatedSwitcher(
-                              duration: const Duration(milliseconds: 400),
-                              child: provider.shouldShowRankSelector
-                                  ? _buildRankSelector(provider)
-                                  : _buildCenterPile(provider),
-                            ),
-                          ),
-                        ),
+                  child: Center(
+                    child: SingleChildScrollView(
+                      child: AnimatedSwitcher(
+                        duration: const Duration(milliseconds: 400),
+                        child: provider.shouldShowRankSelector
+                            ? _buildRankSelector(provider)
+                            : _buildCenterPile(provider),
                       ),
-                    ],
+                    ),
                   ),
                 ),
-
+                _buildStagingArea(context, provider),
+                const SizedBox(height: 4),
                 _buildBottomControls(context, provider),
               ],
             ),
@@ -391,12 +385,12 @@ class _SessionScreenState extends State<SessionScreen>
             letterSpacing: 2,
           ),
         ),
-        const SizedBox(height: 24),
+        const SizedBox(height: 12),
         Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 24),
+          padding: const EdgeInsets.symmetric(horizontal: 16),
           child: Wrap(
             spacing: 8,
-            runSpacing: 12,
+            runSpacing: 8,
             alignment: WrapAlignment.center,
             children: ranks.map((rank) {
               final isStaged = provider.stagedRank == rank;
@@ -404,33 +398,24 @@ class _SessionScreenState extends State<SessionScreen>
                 onTap: () => provider.stageRank(rank),
                 child: AnimatedContainer(
                   duration: const Duration(milliseconds: 200),
-                  width: 48,
-                  height: 64,
+                  width: 36,
+                  height: 36,
                   decoration: BoxDecoration(
-                    color: isStaged ? const Color(0xFFFFD700) : Colors.white,
-                    borderRadius: BorderRadius.circular(8),
+                    color: isStaged
+                        ? const Color(0xFFFFD700)
+                        : const Color(0xFF1E1E1E),
+                    shape: BoxShape.circle,
                     border: Border.all(
-                      color: isStaged ? Colors.white : Colors.black12,
-                      width: 2,
+                      color: isStaged ? Colors.white : Colors.white10,
+                      width: 1.0,
                     ),
-                    boxShadow: isStaged
-                        ? [
-                            BoxShadow(
-                              color: const Color(
-                                0xFFFFD700,
-                              ).withValues(alpha: 0.4),
-                              blurRadius: 10,
-                              spreadRadius: 2,
-                            ),
-                          ]
-                        : null,
                   ),
                   child: Center(
                     child: Text(
                       getRankSymbol(rank),
                       style: TextStyle(
-                        color: const Color(0xFF121212),
-                        fontSize: getRankSymbol(rank).length > 1 ? 20 : 24,
+                        color: isStaged ? Colors.black : Colors.white70,
+                        fontSize: 14,
                         fontWeight: FontWeight.w900,
                       ),
                     ),
@@ -440,7 +425,7 @@ class _SessionScreenState extends State<SessionScreen>
             }).toList(),
           ),
         ),
-        const SizedBox(height: 24),
+        const SizedBox(height: 12),
         if (provider.stagedRank != null)
           TextButton(
             onPressed: () => provider.toggleRankSelectionMode(),
@@ -473,14 +458,12 @@ class _SessionScreenState extends State<SessionScreen>
           stops: const [0.0, 0.4, 1.0],
         ),
       ),
-      padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+      padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          _buildStagingArea(context, provider),
-          const SizedBox(height: 12),
           SizedBox(
-            height: 140, // Reduced from 160 to fit two lines better
+            height: 130, // Reduced from 140
             child: _buildHandArea(
               context,
               provider.state.myHand
@@ -489,7 +472,7 @@ class _SessionScreenState extends State<SessionScreen>
               provider,
             ),
           ),
-          const SizedBox(height: 12),
+          const SizedBox(height: 8),
           Row(
             children: [
               Expanded(
@@ -590,11 +573,11 @@ class _SessionScreenState extends State<SessionScreen>
         .toList();
 
     if (selectedUnits.isEmpty) {
-      return const SizedBox(height: 80);
+      return const SizedBox(height: 75);
     }
 
     return SizedBox(
-      height: 80,
+      height: 75,
       child: Center(
         child: Stack(
           alignment: Alignment.center,
@@ -614,8 +597,8 @@ class _SessionScreenState extends State<SessionScreen>
                 unit: unit,
                 onTap: () => provider.toggleUnitSelection(unit.id),
                 isSelected: true,
-                width: 60,
-                height: 85,
+                width: 50,
+                height: 70,
               ),
             );
           }),
@@ -641,7 +624,7 @@ class _SessionScreenState extends State<SessionScreen>
         final double cardWidth = 70;
         final double overlap = 25;
 
-        if (hand.length <= 7) {
+        if (hand.length <= 10) {
           return _buildSingleRow(hand, provider, width, cardWidth, overlap);
         } else {
           // Split hand into two rows
