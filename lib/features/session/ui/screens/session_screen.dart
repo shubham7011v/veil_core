@@ -537,7 +537,7 @@ class _SessionScreenState extends State<SessionScreen>
                 child: SizedBox(
                   height: 52,
                   child: ElevatedButton(
-                    onPressed: isRoundSet
+                    onPressed: (isRoundSet && isMyTurn)
                         ? () => provider.raiseChallenge()
                         : null,
                     style: ElevatedButton.styleFrom(
@@ -735,11 +735,12 @@ class _SessionScreenState extends State<SessionScreen>
           DocSection(
             heading: "Rules",
             bulletPoints: [
-              "Select cards from your hand.",
-              "If it's the first turn, choose a Rank.",
-              "Bluff if you don't have the rank cards!",
-              "If caught bluffing, you pick up the pile.",
-              "If you challenge someone and they were telling the truth, YOU pick up the pile.",
+              "Standard 52-card deck is used.",
+              "Select cards from your hand and declare a rank.",
+              "Bluff if you don't have the cards—but don't get caught!",
+              "Only the next player in rotation can challenge a bluff.",
+              "If caught bluffing, you pick up the entire pile.",
+              "If a challenge is false, the challenger picks up the pile.",
             ],
           ),
         ],

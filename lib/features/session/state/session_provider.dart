@@ -184,7 +184,7 @@ class SessionProvider extends ChangeNotifier {
   }
 
   void raiseChallenge() {
-    if (_lastMove == null) return;
+    if (!isMyTurn || _lastMove == null) return;
 
     final wasBluff = _checkIfBluff(_lastMove!);
     final blufferId = _lastMove!.playerId;

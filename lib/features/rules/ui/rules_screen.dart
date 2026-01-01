@@ -74,7 +74,7 @@ class RulesScreen extends StatelessWidget {
                     _buildRuleItem(
                       'Calling a Bluff',
                       Icons.gavel,
-                      'If you suspect deception, you may "Challenge" the previous play. If they lied, they pick up the pile. If they told the truth, you pick up the pile.',
+                      'If you suspect deception, you may "Challenge" the previous play when it becomes your turn. Only the immediate next player in rotation has the right to challenge. If they lied, they pick up the pile. If they told the truth, you pick up the pile.',
                     ),
                     const SizedBox(height: AppDimens.paddingM),
                     _buildRuleItem(
