@@ -1,19 +1,15 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart'; // For SystemChrome
 import 'package:provider/provider.dart';
 import 'dart:math' as math;
 import 'dart:ui' show lerpDouble;
-import '../../../../core/theme/colors.dart';
 import '../../../../core/constants/dimens.dart';
-import '../../../../core/constants/strings.dart';
 import '../../../../core/animations/anim_utils.dart';
 import '../../../../core/utils/responsive.dart';
-import '../../../../shared/components/primary_button.dart';
-import '../../../../shared/components/glass_container.dart';
 import '../../models/unit.dart';
 import '../../state/session_provider.dart';
 import '../../widgets/unit_card.dart';
 import '../../widgets/participant_avatar.dart';
+import '../../widgets/doc_viewer.dart';
 
 class SessionScreen extends StatefulWidget {
   const SessionScreen({super.key});
@@ -28,8 +24,8 @@ class _SessionScreenState extends State<SessionScreen>
   final GlobalKey _pileKey = GlobalKey();
 
   // Flight Animation State
-  List<Unit> _flyingUnits = [];
-  Offset _pilePosition = Offset.zero;
+  final List<Unit> _flyingUnits = [];
+  final Offset _pilePosition = Offset.zero;
   late AnimationController _flightController;
 
   @override
@@ -67,36 +63,10 @@ class _SessionScreenState extends State<SessionScreen>
     super.dispose();
   }
 
-  void _triggerSubmitAnimation(SessionProvider provider) {
-    if (provider.selectedUnitIds.isEmpty) return;
-
-    final RenderBox? pileBox =
-        _pileKey.currentContext?.findRenderObject() as RenderBox?;
-    if (pileBox != null) {
-      final position = pileBox.localToGlobal(Offset.zero);
-      _pilePosition =
-          position + Offset(pileBox.size.width / 2, pileBox.size.height / 2);
-    } else {
-      _pilePosition = Offset(
-        Responsive.screenWidth / 2,
-        Responsive.screenHeight * 0.35,
-      );
-    }
-
-    final flying = provider.state.myHand
-        .where((u) => provider.selectedUnitIds.contains(u.id))
-        .toList();
-    setState(() {
-      _flyingUnits = flying;
-    });
-    _flightController.forward();
-  }
-
   @override
   Widget build(BuildContext context) {
     Responsive.init(context);
     final provider = context.watch<SessionProvider>();
-    final state = provider.state;
 
     // Dark Background with Gradient
     return Scaffold(
@@ -132,29 +102,13 @@ class _SessionScreenState extends State<SessionScreen>
                       // Participants Arc
                       _buildOpponents(context, provider),
 
-                      // Center Pile & Info
+                      // Center Area (Rank Selection or Active Pile)
                       Center(
-                        child: Column(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            if (state.lastActionText != null)
-                              Padding(
-                                padding: const EdgeInsets.only(bottom: 24),
-                                child: Text(
-                                  state.lastActionText!,
-                                  textAlign: TextAlign.center,
-                                  style: const TextStyle(
-                                    color: Color(0xFFE0E0E0),
-                                    fontSize: 18,
-                                    fontStyle: FontStyle.italic,
-                                    fontFamily: 'Serif', // Placeholder
-                                    fontWeight: FontWeight.w500,
-                                  ),
-                                ),
-                              ),
-                            // Pile Visual
-                            _buildPile(state.pileCount),
-                          ],
+                        child: AnimatedSwitcher(
+                          duration: const Duration(milliseconds: 400),
+                          child: provider.isSelectingRank
+                              ? _buildRankSelector(provider)
+                              : _buildCenterPile(provider),
                         ),
                       ),
                     ],
@@ -175,55 +129,170 @@ class _SessionScreenState extends State<SessionScreen>
   }
 
   Widget _buildTopBar() {
+    final provider = context.watch<SessionProvider>();
+    final isRoundSet = provider.isRoundSet;
+    final rankName = provider.currentRank?.name.toUpperCase() ?? "???";
+
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          // Menu Button
-          _buildCircleButton(Icons.menu, () {}),
+          _buildCircleButton(Icons.menu, () => _showGameMenu(context)),
 
-          // Current Bet / Info Pill
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
-            decoration: BoxDecoration(
-              color: const Color(0xFF1E1E1E),
-              borderRadius: BorderRadius.circular(30),
-              border: Border.all(color: const Color(0xFF3E3E3E)),
-              boxShadow: [
-                BoxShadow(
-                  color: Colors.black.withValues(alpha: 0.5),
-                  blurRadius: 10,
-                  offset: const Offset(0, 4),
+          // Premium Round Indicator
+          Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Text(
+                "👑 CURRENT ROUND",
+                style: TextStyle(
+                  color: Colors.white54,
+                  fontSize: 10,
+                  fontWeight: FontWeight.w900,
+                  letterSpacing: 1.5,
                 ),
-              ],
-            ),
-            child: Row(
-              children: const [
-                Icon(
-                  Icons.emoji_events,
-                  color: Color(0xFFFFD700),
-                  size: 18,
-                ), // Crown/Trophy
-                SizedBox(width: 8),
-                Text(
-                  "Kings", // Placeholder for Current Bet
-                  style: TextStyle(
-                    color: Color(0xFFF0F0F0),
-                    fontSize: 16,
-                    fontWeight: FontWeight.bold,
-                    fontFamily: 'Serif',
+              ),
+              ShaderMask(
+                shaderCallback: (bounds) => const LinearGradient(
+                  colors: [
+                    Color(0xFFFFD700),
+                    Color(0xFFFFECB3),
+                    Color(0xFFB8860B),
+                  ],
+                ).createShader(bounds),
+                child: Text(
+                  isRoundSet ? rankName : "WAITING...",
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 24,
+                    fontWeight: FontWeight.w900,
+                    letterSpacing: 0.5,
                   ),
                 ),
-                SizedBox(width: 8),
-                Icon(Icons.emoji_events, color: Color(0xFFFFD700), size: 18),
-              ],
-            ),
+              ),
+            ],
           ),
 
-          // Chat Button
           _buildCircleButton(Icons.chat_bubble_outline, () {}),
         ],
+      ),
+    );
+  }
+
+  void _showGameMenu(BuildContext context) {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: const Color(0xFF1E1E1E),
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      builder: (context) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            ListTile(
+              leading: const Icon(Icons.rule, color: Color(0xFFFFD700)),
+              title: const Text(
+                "Game Rules",
+                style: TextStyle(color: Colors.white),
+              ),
+              onTap: () {
+                Navigator.pop(context);
+                DocViewer.show(
+                  context,
+                  title: "Indian Bluff Rules",
+                  sections: [
+                    DocSection(
+                      heading: "Objective",
+                      bulletPoints: ["Be the first to discard all your cards."],
+                    ),
+                    DocSection(
+                      heading: "Gameplay",
+                      bulletPoints: [
+                        "Play 1-4 cards and declare their rank (e.g., 'Three Kings').",
+                        "The declared rank follows an Ace to King sequence.",
+                        "You can bluff! The actual cards don't have to match the rank.",
+                      ],
+                    ),
+                    DocSection(
+                      heading: "Calling Bluff",
+                      bulletPoints: [
+                        "Anyone can challenge a play by clicking 'Bluff'.",
+                        "The loser of the challenge picks up the whole center pile.",
+                      ],
+                    ),
+                  ],
+                );
+              },
+            ),
+            ListTile(
+              leading: const Icon(Icons.architecture, color: Color(0xFFFFD700)),
+              title: const Text(
+                "Project Architecture",
+                style: TextStyle(color: Colors.white),
+              ),
+              onTap: () {
+                Navigator.pop(context);
+                DocViewer.show(
+                  context,
+                  title: "Veil Core Arch",
+                  sections: [
+                    DocSection(
+                      heading: "Technology Stack",
+                      bulletPoints: [
+                        "Flutter for Cross-Platform UI.",
+                        "Provider for State Management.",
+                        "Standard 52-card deck logic.",
+                      ],
+                    ),
+                    DocSection(
+                      heading: "Internal Flow",
+                      bulletPoints: [
+                        "SessionProvider manages hand state and selection.",
+                        "Custom Fan rendering for responsive card layout.",
+                        "Staging system for card validation before play.",
+                      ],
+                    ),
+                  ],
+                );
+              },
+            ),
+            ListTile(
+              leading: const Icon(Icons.touch_app, color: Color(0xFFFFD700)),
+              title: const Text(
+                "App Flow",
+                style: TextStyle(color: Colors.white),
+              ),
+              onTap: () {
+                Navigator.pop(context);
+                DocViewer.show(
+                  context,
+                  title: "How to Navigate",
+                  sections: [
+                    DocSection(
+                      heading: "Controls",
+                      bulletPoints: [
+                        "Tap cards in your hand to move them to Staging.",
+                        "Tap 'Play' to submit staged cards to the pile.",
+                        "Use 'Pass' to skip your turn.",
+                        "Click 'Bluff' to challenge the last player.",
+                      ],
+                    ),
+                    DocSection(
+                      heading: "Indicators",
+                      bulletPoints: [
+                        "Staging Banner: shows current selection count.",
+                        "Glow Avatar: identifies the current active player.",
+                      ],
+                    ),
+                  ],
+                );
+              },
+            ),
+            const SizedBox(height: 16),
+          ],
+        ),
       ),
     );
   }
@@ -309,54 +378,210 @@ class _SessionScreenState extends State<SessionScreen>
     );
   }
 
-  Widget _buildPile(int count) {
-    return Container(
-      key: _pileKey,
-      width: 120,
-      height: 160,
-      decoration: BoxDecoration(
-        color: const Color(0xFF2C221C), // Card Back Dark
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: const Color(0xFF4E342E), width: 2),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.6),
-            blurRadius: 20,
-            offset: const Offset(0, 8),
+  Widget _buildCenterPile(SessionProvider provider) {
+    final state = provider.state;
+    final isRoundSet = provider.isRoundSet;
+
+    return GestureDetector(
+      onTap: () {
+        if (!isRoundSet && provider.state.activeParticipantId == 'me') {
+          provider.initiateRankSelection();
+        }
+      },
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          // Dynamic Header Text
+          if (isRoundSet)
+            Padding(
+              padding: const EdgeInsets.only(bottom: 20),
+              child: ShaderMask(
+                shaderCallback: (bounds) => const LinearGradient(
+                  colors: [
+                    Color(0xFFFFD700),
+                    Color(0xFFFFECB3),
+                    Color(0xFFB8860B),
+                  ],
+                ).createShader(bounds),
+                child: Text(
+                  "👑 ROUND: ${provider.currentRank?.name.toUpperCase()}S",
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 22,
+                    fontWeight: FontWeight.bold,
+                    letterSpacing: 2.0,
+                    shadows: [
+                      Shadow(
+                        color: Colors.black54,
+                        blurRadius: 10,
+                        offset: Offset(0, 4),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+
+          // The Pile Card
+          Container(
+            key: _pileKey,
+            width: 120,
+            height: 160,
+            decoration: BoxDecoration(
+              color: const Color(0xFF1A1A1A),
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(
+                color: isRoundSet
+                    ? const Color(0xFFFFD700)
+                    : const Color(0xFF3E3E3E),
+                width: 2,
+              ),
+              boxShadow: [
+                BoxShadow(
+                  color: (isRoundSet ? const Color(0xFFFFD700) : Colors.black)
+                      .withValues(alpha: 0.3),
+                  blurRadius: 20,
+                  spreadRadius: 2,
+                ),
+              ],
+            ),
+            child: Stack(
+              children: [
+                // Interior Design
+                if (!isRoundSet)
+                  Center(
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        const Icon(
+                          Icons.help_outline,
+                          color: Color(0xFFFFD700),
+                          size: 40,
+                        ),
+                        const SizedBox(height: 12),
+                        const Text(
+                          "TAP TO\nCHOOSE",
+                          textAlign: TextAlign.center,
+                          style: TextStyle(
+                            color: Colors.white54,
+                            fontSize: 10,
+                            fontWeight: FontWeight.w900,
+                            letterSpacing: 1.5,
+                          ),
+                        ),
+                      ],
+                    ),
+                  )
+                else
+                  Center(
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        const Icon(
+                          Icons.emoji_events,
+                          color: Color(0xFFFFD700),
+                          size: 48,
+                        ),
+                        const SizedBox(height: 8),
+                        Text(
+                          provider.currentRank?.name[0].toUpperCase() ?? "",
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 32,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                        Text(
+                          "Piled: ${state.pileCount}",
+                          style: const TextStyle(
+                            color: Colors.white54,
+                            fontSize: 10,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+              ],
+            ),
           ),
         ],
       ),
-      child: Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            const Icon(Icons.layers, color: Color(0xFF8D6E63), size: 32),
-            const SizedBox(height: 8),
-            Text(
-              count.toString(),
-              style: const TextStyle(
-                color: Color(0xFFD7CCC8),
-                fontSize: 24,
-                fontWeight: FontWeight.bold,
-              ),
-            ),
-          ],
+    );
+  }
+
+  Widget _buildRankSelector(SessionProvider provider) {
+    final ranks = UnitRank.values.where((r) => r != UnitRank.joker).toList();
+
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        const Text(
+          "SELECT ROUND RANK",
+          style: TextStyle(
+            color: Color(0xFFFFD700),
+            fontSize: 14,
+            fontWeight: FontWeight.w900,
+            letterSpacing: 2,
+          ),
         ),
-      ),
+        const SizedBox(height: 30),
+        SizedBox(
+          height: 200,
+          child: SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            padding: const EdgeInsets.symmetric(horizontal: 40),
+            child: Row(
+              children: ranks.map((rank) {
+                return Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 4),
+                  child: GestureDetector(
+                    onTap: () => provider.setRoundRank(rank),
+                    child: Container(
+                      width: 80,
+                      height: 120,
+                      decoration: BoxDecoration(
+                        color: Colors.white,
+                        borderRadius: BorderRadius.circular(8),
+                        boxShadow: const [
+                          BoxShadow(
+                            color: Colors.black45,
+                            blurRadius: 4,
+                            offset: Offset(0, 2),
+                          ),
+                        ],
+                        border: Border.all(color: Colors.black12),
+                      ),
+                      child: Center(
+                        child: Text(
+                          rank.name[0].toUpperCase(),
+                          style: const TextStyle(
+                            color: Color(0xFF121212),
+                            fontSize: 32,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                );
+              }).toList(),
+            ),
+          ),
+        ),
+        const SizedBox(height: 20),
+        TextButton(
+          onPressed: () => provider.submitSelectedUnits(), // Back if needed
+          child: const Text("CANCEL", style: TextStyle(color: Colors.white54)),
+        ),
+      ],
     );
   }
 
   Widget _buildBottomControls(BuildContext context, SessionProvider provider) {
     final hasSelection = provider.selectedUnitIds.isNotEmpty;
     final selectionCount = provider.selectedUnitIds.length;
-
-    final allUnits = provider.state.myHand;
-    final selectedUnits = allUnits
-        .where((u) => provider.selectedUnitIds.contains(u.id))
-        .toList();
-    final unselectedUnits = allUnits
-        .where((u) => !provider.selectedUnitIds.contains(u.id))
-        .toList();
+    final isMyTurn = provider.state.activeParticipantId == 'me';
+    final isRoundSet = provider.isRoundSet;
 
     return Container(
       decoration: BoxDecoration(
@@ -371,172 +596,120 @@ class _SessionScreenState extends State<SessionScreen>
           stops: const [0.0, 0.4, 1.0],
         ),
       ),
-      padding: const EdgeInsets.fromLTRB(16, 0, 16, 8), // Reduced padding
+      padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          // Staging Area (Selected Cards)
-          if (hasSelection)
-            Container(
-              height: 90,
-              margin: const EdgeInsets.only(bottom: 4),
-              alignment: Alignment.center,
-              child: Stack(
-                alignment: Alignment.center,
-                clipBehavior: Clip.none,
-                children: List.generate(selectedUnits.length, (index) {
-                  final unit = selectedUnits[index];
-                  // Overlap them slightly
-                  final double offset =
-                      (index - (selectedUnits.length - 1) / 2) * 30.0;
-
-                  return Positioned(
-                    left: 0,
-                    right: 0,
-                    child: Center(
-                      child: Transform.translate(
-                        offset: Offset(offset, 0),
-                        child: Transform.rotate(
-                          angle: (index - (selectedUnits.length - 1) / 2) * 0.1,
-                          child: UnitCard(
-                            unit: unit,
-                            onTap: () => provider.toggleUnitSelection(unit.id),
-                            isSelected: true,
-                            width: 50,
-                            height: 75,
-                          ),
-                        ),
-                      ),
-                    ),
-                  );
-                }),
-              ),
-            ),
-
-          // The Hand Fan (Unselected Cards)
+          // Player Hand (Fan)
           SizedBox(
-            height: 165,
-            child: _buildFan(context, unselectedUnits, provider),
+            height: 220,
+            child: _buildFan(context, provider.state.myHand, provider),
           ),
+          const SizedBox(height: 12),
 
-          const SizedBox(height: 8), // Reduced gap
-          // Action Buttons: Pass | Play | Bluff
+          // Action Buttons
           Row(
             children: [
               // PASS Button
               Expanded(
-                flex: 1,
                 child: SizedBox(
-                  height: 46, // Increased slightly
+                  height: 52,
                   child: OutlinedButton(
-                    onPressed: provider.selectedUnitIds.isEmpty
-                        ? () => provider.passTurn()
-                        : null,
+                    onPressed: isMyTurn ? () => provider.passTurn() : null,
                     style: OutlinedButton.styleFrom(
-                      side: const BorderSide(color: Color(0xFF4A4A4A)),
-                      padding: EdgeInsets.zero, // Prevent clipping
+                      side: const BorderSide(color: Colors.white24),
                       shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(8),
+                        borderRadius: BorderRadius.circular(12),
                       ),
-                      backgroundColor: const Color(0xFF1E1E1E),
                     ),
                     child: const Text(
-                      "Pass",
-                      textAlign: TextAlign.center,
+                      "PASS",
                       style: TextStyle(
-                        color: Colors.white70,
-                        fontSize: 14,
-                        fontWeight: FontWeight.w600,
+                        color: Colors.white54,
+                        fontWeight: FontWeight.bold,
+                        letterSpacing: 1,
                       ),
                     ),
                   ),
                 ),
               ),
-              const SizedBox(width: 8),
+              const SizedBox(width: 12),
 
               // PLAY Button
               Expanded(
                 flex: 2,
-                child: SizedBox(
-                  height: 46, // Increased slightly
-                  child: Container(
-                    decoration: BoxDecoration(
-                      borderRadius: BorderRadius.circular(8),
-                      gradient: hasSelection
-                          ? const LinearGradient(
-                              colors: [Color(0xFFD4AF37), Color(0xFFA67C00)],
-                              begin: Alignment.topCenter,
-                              end: Alignment.bottomCenter,
-                            )
-                          : const LinearGradient(
-                              colors: [Color(0xFF333333), Color(0xFF222222)],
+                child: Container(
+                  height: 52,
+                  decoration: BoxDecoration(
+                    borderRadius: BorderRadius.circular(12),
+                    gradient: hasSelection
+                        ? const LinearGradient(
+                            colors: [Color(0xFFFFD700), Color(0xFFFFA000)],
+                          )
+                        : const LinearGradient(
+                            colors: [Color(0xFF2C2C2C), Color(0xFF1A1A1A)],
+                          ),
+                    boxShadow: hasSelection
+                        ? [
+                            BoxShadow(
+                              color: const Color(
+                                0xFFFFD700,
+                              ).withValues(alpha: 0.3),
+                              blurRadius: 10,
+                              spreadRadius: 1,
                             ),
-                      boxShadow: hasSelection
-                          ? [
-                              BoxShadow(
-                                color: const Color(
-                                  0xFFFFD700,
-                                ).withValues(alpha: 0.3),
-                                blurRadius: 4,
-                                offset: const Offset(0, 2),
-                              ),
-                            ]
-                          : [],
-                    ),
-                    child: ElevatedButton(
-                      onPressed: hasSelection
-                          ? () => _triggerSubmitAnimation(provider)
-                          : null,
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: Colors.transparent,
-                        shadowColor: Colors.transparent,
-                        padding: EdgeInsets.zero, // Prevent clipping
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(8),
-                        ),
+                          ]
+                        : [],
+                  ),
+                  child: ElevatedButton(
+                    onPressed: isMyTurn && hasSelection
+                        ? () => provider.submitSelectedUnits()
+                        : null,
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.transparent,
+                      shadowColor: Colors.transparent,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12),
                       ),
-                      child: Text(
-                        hasSelection ? "Play $selectionCount" : "Play",
-                        textAlign: TextAlign.center,
-                        style: TextStyle(
-                          color: hasSelection
-                              ? const Color(0xFF1E1200)
-                              : Colors.white24,
-                          fontSize: 15,
-                          fontWeight: FontWeight.bold,
-                        ),
+                    ),
+                    child: Text(
+                      hasSelection ? "PLAY $selectionCount" : "PLAY",
+                      style: TextStyle(
+                        color: hasSelection ? Colors.black : Colors.white24,
+                        fontWeight: FontWeight.w900,
+                        fontSize: 16,
+                        letterSpacing: 1,
                       ),
                     ),
                   ),
                 ),
               ),
-              const SizedBox(width: 8),
+              const SizedBox(width: 12),
 
-              // CALL BLUFF Button
+              // BLUFF Button
               Expanded(
-                flex: 1,
                 child: SizedBox(
-                  height: 46, // Increased slightly
+                  height: 52,
                   child: ElevatedButton(
-                    onPressed: () => provider.raiseChallenge(),
+                    onPressed: isRoundSet
+                        ? () => provider.raiseChallenge()
+                        : null,
                     style: ElevatedButton.styleFrom(
-                      backgroundColor: const Color(0xFF3D0C0C),
-                      foregroundColor: const Color(0xFFEF5350),
-                      padding: EdgeInsets.zero, // Prevent clipping
-                      elevation: 0,
+                      backgroundColor: isRoundSet
+                          ? const Color(0xFFD32F2F)
+                          : const Color(0xFF1E1E1E),
+                      disabledBackgroundColor: const Color(0xFF1A1A1A),
                       shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(8),
-                        side: BorderSide(
-                          color: const Color(0xFFD32F2F).withValues(alpha: 0.3),
-                        ),
+                        borderRadius: BorderRadius.circular(12),
                       ),
                     ),
-                    child: const Text(
-                      "Bluff",
-                      textAlign: TextAlign.center,
+                    child: Text(
+                      "BLUFF",
                       style: TextStyle(
-                        fontSize: 12,
+                        color: isRoundSet ? Colors.white : Colors.white10,
                         fontWeight: FontWeight.bold,
+                        fontSize: 12,
+                        letterSpacing: 1,
                       ),
                     ),
                   ),

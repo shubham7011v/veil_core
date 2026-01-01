@@ -12,6 +12,28 @@ class SessionProvider extends ChangeNotifier {
   final List<String> _selectedUnitIds = [];
   List<String> get selectedUnitIds => List.unmodifiable(_selectedUnitIds);
 
+  // Round Management
+  UnitRank? _currentRank;
+  UnitRank? get currentRank => _currentRank;
+
+  bool _isRoundSet = false;
+  bool get isRoundSet => _isRoundSet;
+
+  bool _isSelectingRank = false;
+  bool get isSelectingRank => _isSelectingRank;
+
+  void initiateRankSelection() {
+    _isSelectingRank = true;
+    notifyListeners();
+  }
+
+  void setRoundRank(UnitRank rank) {
+    _currentRank = rank;
+    _isRoundSet = true;
+    _isSelectingRank = false;
+    notifyListeners();
+  }
+
   SessionProvider() {
     _initializeMockSession();
   }
@@ -78,6 +100,14 @@ class SessionProvider extends ChangeNotifier {
   void submitSelectedUnits() async {
     if (_selectedUnitIds.isEmpty) return;
 
+    // If round isn't set, we can't play yet (UI should have triggered selection)
+    if (!_isRoundSet && !_isSelectingRank) {
+      initiateRankSelection();
+      return;
+    }
+
+    if (!_isRoundSet) return; // Still selecting
+
     // 1. Remove from hand
     final remainingHand = _state.myHand
         .where((u) => !_selectedUnitIds.contains(u.id))
@@ -116,8 +146,7 @@ class SessionProvider extends ChangeNotifier {
 
     // Bot 'p3' plays
     final updatedParticipants = _state.participants.map((p) {
-      if (p.id == 'p3')
-        return p.copyWith(isActive: false, unitCount: p.unitCount - 1);
+      if (p.id == 'p3') p.copyWith(isActive: false, unitCount: p.unitCount - 1);
       if (p.id == 'p1') return p.copyWith(isActive: true);
       return p;
     }).toList();
