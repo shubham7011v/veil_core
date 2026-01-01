@@ -491,6 +491,7 @@ class _SessionScreenState extends State<SessionScreen>
                       style: TextStyle(
                         color: Colors.white54,
                         fontWeight: FontWeight.w900,
+                        fontSize: 12,
                       ),
                     ),
                   ),
@@ -548,6 +549,7 @@ class _SessionScreenState extends State<SessionScreen>
                       shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(12),
                       ),
+                      padding: const EdgeInsets.symmetric(horizontal: 8),
                     ),
                     child: Text(
                       "BLUFF",
