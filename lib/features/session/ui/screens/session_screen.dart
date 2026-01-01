@@ -338,7 +338,7 @@ class _SessionScreenState extends State<SessionScreen>
   }
 
   Widget _buildRankSelector(SessionProvider provider) {
-    final ranks = UnitRank.values.where((r) => r != UnitRank.joker).toList();
+    final ranks = UnitRank.values.toList();
 
     String getRankSymbol(UnitRank rank) {
       switch (rank) {
@@ -368,8 +368,6 @@ class _SessionScreenState extends State<SessionScreen>
           return "Q";
         case UnitRank.king:
           return "K";
-        default:
-          return "?";
       }
     }
 

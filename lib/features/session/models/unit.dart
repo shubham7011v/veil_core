@@ -1,11 +1,19 @@
-
-enum UnitType {
-  spades, hearts, diamonds, clubs, joker
-}
+enum UnitType { spades, hearts, diamonds, clubs }
 
 enum UnitRank {
-  two, three, four, five, six, seven, eight, nine, ten,
-  jack, queen, king, ace, joker
+  two,
+  three,
+  four,
+  five,
+  six,
+  seven,
+  eight,
+  nine,
+  ten,
+  jack,
+  queen,
+  king,
+  ace,
 }
 
 class Unit {
@@ -20,9 +28,8 @@ class Unit {
     required this.rank,
     this.isSelected = false,
   });
-  
+
   String get label {
-    if (rank == UnitRank.joker) return 'Joker';
     return '${rank.name[0].toUpperCase()}${rank.name.substring(1)} of ${type.name}';
   }
 }

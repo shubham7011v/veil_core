@@ -197,7 +197,6 @@ class UnitCard extends StatelessWidget {
   }
 
   String _getRankLabel(UnitRank rank) {
-    if (rank == UnitRank.joker) return 'JK';
     if (rank.index <= UnitRank.ten.index && rank.index >= UnitRank.two.index) {
       return (rank.index + 2).toString();
     }
@@ -212,8 +211,6 @@ class UnitCard extends StatelessWidget {
       case UnitType.spades:
       case UnitType.clubs:
         return const Color(0xFF212121); // Almost Black
-      default:
-        return Colors.black;
     }
   }
 
@@ -228,8 +225,6 @@ class UnitCard extends StatelessWidget {
         return Icons.diamond;
       case UnitType.clubs:
         return Icons.local_florist; // Approximation
-      case UnitType.joker:
-        return Icons.theater_comedy;
     }
   }
 }

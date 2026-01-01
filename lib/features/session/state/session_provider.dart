@@ -118,7 +118,6 @@ class SessionProvider extends ChangeNotifier {
     int idCounter = 0;
     for (var suit in UnitType.values) {
       for (var rank in UnitRank.values) {
-        if (rank == UnitRank.joker) continue;
         deck.add(Unit(id: 'card_${idCounter++}', type: suit, rank: rank));
       }
     }
@@ -330,8 +329,7 @@ class SessionProvider extends ChangeNotifier {
     }
 
     // 2. Play
-    _currentRank ??=
-        UnitRank.values[Random().nextInt(UnitRank.values.length - 1)];
+    _currentRank ??= UnitRank.values[Random().nextInt(UnitRank.values.length)];
 
     final int cardsToPlay = Random().nextInt(2) + 1;
     final bool isBluff = Random().nextDouble() > 0.7;
