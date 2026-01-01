@@ -187,14 +187,18 @@ class _ParticipantAvatarState extends State<ParticipantAvatar>
                 ),
             ],
           ),
-          const SizedBox(height: 12),
+          const SizedBox(height: 4),
           Text(
             widget.participant.name,
             style: TextStyle(
-              color: isActive ? const Color(0xFFFFD700) : Colors.white70,
+              fontFamily: 'Inter',
+              color: isActive
+                  ? const Color(0xFFFFD700)
+                  : Colors.white.withValues(alpha: 0.702),
               fontSize: 12,
-              fontWeight: isActive ? FontWeight.bold : FontWeight.w500,
+              fontWeight: FontWeight.w500,
               letterSpacing: 0.3,
+              height: 1.4,
             ),
             maxLines: 1,
             overflow: TextOverflow.ellipsis,

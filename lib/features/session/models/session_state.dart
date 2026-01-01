@@ -1,4 +1,3 @@
-
 import 'participant.dart';
 import 'unit.dart';
 
@@ -6,7 +5,7 @@ enum SessionPhase {
   lobby,
   thinking, // Waiting for someone to play
   challenging, // Time to challenge
-  finished
+  finished,
 }
 
 class SessionState {
@@ -17,6 +16,7 @@ class SessionState {
   final SessionPhase currentPhase;
   final String? activeParticipantId;
   final String? lastActionText; // e.g. "Rahul played 2 Units"
+  final String? winnerId;
 
   SessionState({
     required this.roomId,
@@ -26,6 +26,7 @@ class SessionState {
     required this.currentPhase,
     this.activeParticipantId,
     this.lastActionText,
+    this.winnerId,
   });
 
   // Factory for initial/empty state
@@ -47,6 +48,7 @@ class SessionState {
     SessionPhase? currentPhase,
     String? activeParticipantId,
     String? lastActionText,
+    String? winnerId,
   }) {
     return SessionState(
       roomId: roomId ?? this.roomId,
@@ -56,6 +58,7 @@ class SessionState {
       currentPhase: currentPhase ?? this.currentPhase,
       activeParticipantId: activeParticipantId ?? this.activeParticipantId,
       lastActionText: lastActionText ?? this.lastActionText,
+      winnerId: winnerId ?? this.winnerId,
     );
   }
 }

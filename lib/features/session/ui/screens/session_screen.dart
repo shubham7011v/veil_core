@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 import '../../../../core/animations/anim_utils.dart';
 import '../../../../core/utils/responsive.dart';
 import '../../models/unit.dart';
+import '../../models/session_state.dart';
 import '../../state/session_provider.dart';
 import '../../widgets/unit_card.dart';
 import '../../widgets/participant_avatar.dart';
@@ -73,14 +74,16 @@ class _SessionScreenState extends State<SessionScreen>
                   child: Column(
                     children: [
                       _buildOpponentCarousel(context, provider),
-                      const SizedBox(height: 20),
+                      const SizedBox(height: 10),
                       Expanded(
                         child: Center(
-                          child: AnimatedSwitcher(
-                            duration: const Duration(milliseconds: 400),
-                            child: provider.isSelectingRank
-                                ? _buildRankSelector(provider)
-                                : _buildCenterPile(provider),
+                          child: SingleChildScrollView(
+                            child: AnimatedSwitcher(
+                              duration: const Duration(milliseconds: 400),
+                              child: provider.shouldShowRankSelector
+                                  ? _buildRankSelector(provider)
+                                  : _buildCenterPile(provider),
+                            ),
                           ),
                         ),
                       ),
@@ -92,7 +95,72 @@ class _SessionScreenState extends State<SessionScreen>
               ],
             ),
           ),
+
+          if (provider.state.currentPhase == SessionPhase.finished)
+            _buildWinOverlay(context, provider),
         ],
+      ),
+    );
+  }
+
+  Widget _buildWinOverlay(BuildContext context, SessionProvider provider) {
+    final winnerName = provider.pNames[provider.state.winnerId] ?? "Someone";
+    final isMe = provider.state.winnerId == 'me';
+
+    return Container(
+      color: Colors.black.withValues(alpha: 0.85),
+      child: Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(
+              isMe ? Icons.emoji_events : Icons.sentiment_very_dissatisfied,
+              size: 100,
+              color: const Color(0xFFFFD700),
+            ),
+            const SizedBox(height: 24),
+            Text(
+              isMe ? "VICTORY!" : "GAME OVER",
+              style: const TextStyle(
+                color: Colors.white,
+                fontSize: 40,
+                fontWeight: FontWeight.w900,
+                letterSpacing: 4,
+              ),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              isMe
+                  ? "You have cleared all your cards!"
+                  : "$winnerName has won the game.",
+              style: const TextStyle(color: Colors.white70, fontSize: 16),
+            ),
+            const SizedBox(height: 48),
+            SizedBox(
+              width: 200,
+              height: 56,
+              child: ElevatedButton(
+                onPressed: () => Navigator.of(
+                  context,
+                ).pushNamedAndRemoveUntil('/home', (route) => false),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: const Color(0xFFFFD700),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(28),
+                  ),
+                ),
+                child: const Text(
+                  "BACK TO HOME",
+                  style: TextStyle(
+                    color: Colors.black,
+                    fontWeight: FontWeight.w900,
+                    letterSpacing: 1.2,
+                  ),
+                ),
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -169,7 +237,7 @@ class _SessionScreenState extends State<SessionScreen>
     });
 
     return SizedBox(
-      height: 110,
+      height: 100,
       child: ListView.builder(
         controller: _carouselController,
         scrollDirection: Axis.horizontal,
@@ -270,20 +338,6 @@ class _SessionScreenState extends State<SessionScreen>
               ),
             ),
           ),
-
-          if (!isRoundSet && isMyTurn && provider.stagedRank == null)
-            const Padding(
-              padding: EdgeInsets.only(top: 16),
-              child: Text(
-                "TAP TO CHOOSE RANK",
-                style: TextStyle(
-                  color: Color(0xFFFFD700),
-                  fontSize: 10,
-                  fontWeight: FontWeight.w900,
-                  letterSpacing: 1,
-                ),
-              ),
-            ),
         ],
       ),
     );
@@ -291,6 +345,39 @@ class _SessionScreenState extends State<SessionScreen>
 
   Widget _buildRankSelector(SessionProvider provider) {
     final ranks = UnitRank.values.where((r) => r != UnitRank.joker).toList();
+
+    String getRankSymbol(UnitRank rank) {
+      switch (rank) {
+        case UnitRank.ace:
+          return "A";
+        case UnitRank.two:
+          return "2";
+        case UnitRank.three:
+          return "3";
+        case UnitRank.four:
+          return "4";
+        case UnitRank.five:
+          return "5";
+        case UnitRank.six:
+          return "6";
+        case UnitRank.seven:
+          return "7";
+        case UnitRank.eight:
+          return "8";
+        case UnitRank.nine:
+          return "9";
+        case UnitRank.ten:
+          return "10";
+        case UnitRank.jack:
+          return "J";
+        case UnitRank.queen:
+          return "Q";
+        case UnitRank.king:
+          return "K";
+        default:
+          return "?";
+      }
+    }
 
     return Column(
       mainAxisSize: MainAxisSize.min,
@@ -304,48 +391,64 @@ class _SessionScreenState extends State<SessionScreen>
             letterSpacing: 2,
           ),
         ),
-        const SizedBox(height: 30),
-        SizedBox(
-          height: 160,
-          child: SingleChildScrollView(
-            scrollDirection: Axis.horizontal,
-            padding: const EdgeInsets.symmetric(horizontal: 40),
-            child: Row(
-              children: ranks.map((rank) {
-                return Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 4),
-                  child: GestureDetector(
-                    onTap: () => provider.stageRank(rank),
-                    child: Container(
-                      width: 80,
-                      height: 120,
-                      decoration: BoxDecoration(
-                        color: Colors.white,
-                        borderRadius: BorderRadius.circular(8),
-                        border: Border.all(color: Colors.black12),
-                      ),
-                      child: Center(
-                        child: Text(
-                          rank.name[0].toUpperCase(),
-                          style: const TextStyle(
-                            color: Color(0xFF121212),
-                            fontSize: 32,
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
+        const SizedBox(height: 24),
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 24),
+          child: Wrap(
+            spacing: 8,
+            runSpacing: 12,
+            alignment: WrapAlignment.center,
+            children: ranks.map((rank) {
+              final isStaged = provider.stagedRank == rank;
+              return GestureDetector(
+                onTap: () => provider.stageRank(rank),
+                child: AnimatedContainer(
+                  duration: const Duration(milliseconds: 200),
+                  width: 48,
+                  height: 64,
+                  decoration: BoxDecoration(
+                    color: isStaged ? const Color(0xFFFFD700) : Colors.white,
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(
+                      color: isStaged ? Colors.white : Colors.black12,
+                      width: 2,
+                    ),
+                    boxShadow: isStaged
+                        ? [
+                            BoxShadow(
+                              color: const Color(
+                                0xFFFFD700,
+                              ).withValues(alpha: 0.4),
+                              blurRadius: 10,
+                              spreadRadius: 2,
+                            ),
+                          ]
+                        : null,
+                  ),
+                  child: Center(
+                    child: Text(
+                      getRankSymbol(rank),
+                      style: TextStyle(
+                        color: const Color(0xFF121212),
+                        fontSize: getRankSymbol(rank).length > 1 ? 20 : 24,
+                        fontWeight: FontWeight.w900,
                       ),
                     ),
                   ),
-                );
-              }).toList(),
-            ),
+                ),
+              );
+            }).toList(),
           ),
         ),
-        const SizedBox(height: 20),
-        TextButton(
-          onPressed: () => provider.toggleRankSelectionMode(),
-          child: const Text("CANCEL", style: TextStyle(color: Colors.white54)),
-        ),
+        const SizedBox(height: 24),
+        if (provider.stagedRank != null)
+          TextButton(
+            onPressed: () => provider.toggleRankSelectionMode(),
+            child: const Text(
+              "CANCEL",
+              style: TextStyle(color: Colors.white54),
+            ),
+          ),
       ],
     );
   }
@@ -375,7 +478,7 @@ class _SessionScreenState extends State<SessionScreen>
         mainAxisSize: MainAxisSize.min,
         children: [
           SizedBox(
-            height: 220,
+            height: 160,
             child: _buildFan(context, provider.state.myHand, provider),
           ),
           const SizedBox(height: 12),

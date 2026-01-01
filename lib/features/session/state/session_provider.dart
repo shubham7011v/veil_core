@@ -28,6 +28,9 @@ class SessionProvider extends ChangeNotifier {
   bool _isSelectingRank = false;
   bool get isSelectingRank => _isSelectingRank;
 
+  bool get shouldShowRankSelector =>
+      isMyTurn && !isRoundSet && (_isSelectingRank || _stagedRank == null);
+
   // -- Getters --
   bool get isMyTurn => state.activeParticipantId == 'me';
   int get pileCount => _pile.length;
@@ -256,7 +259,11 @@ class SessionProvider extends ChangeNotifier {
     // Win Condition
     if (updatedParticipants.firstWhere((p) => p.id == playerId).unitCount <=
         0) {
-      _state = _state.copyWith(lastActionText: "${pNames[playerId]} WINS!");
+      _state = _state.copyWith(
+        lastActionText: "${pNames[playerId]} WINS!",
+        currentPhase: SessionPhase.finished,
+        winnerId: playerId,
+      );
       notifyListeners();
       return;
     }
