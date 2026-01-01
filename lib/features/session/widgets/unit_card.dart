@@ -1,4 +1,3 @@
-
 import 'package:flutter/material.dart';
 import '../../../core/theme/colors.dart';
 import '../../../core/constants/dimens.dart';
@@ -35,25 +34,28 @@ class UnitCard extends StatelessWidget {
             width: width,
             height: height,
             decoration: BoxDecoration(
-              color: AppColors.cardBack, // Or face color if revealed (not needed for Ph 1 usually)
+              color: AppColors
+                  .cardBack, // Or face color if revealed (not needed for Ph 1 usually)
               borderRadius: BorderRadius.circular(AppDimens.radiusS),
               boxShadow: isSelected
                   ? [
                       BoxShadow(
-                        color: AppColors.activeGlow.withOpacity(0.4),
+                        color: AppColors.activeGlow.withValues(alpha: 0.4),
                         blurRadius: 12,
                         offset: const Offset(0, -4),
-                      )
+                      ),
                     ]
                   : [
                       BoxShadow(
-                        color: Colors.black.withOpacity(0.3),
+                        color: Colors.black.withValues(alpha: 0.3),
                         blurRadius: 4,
                         offset: const Offset(0, 2),
-                      )
+                      ),
                     ],
               border: Border.all(
-                color: isSelected ? AppColors.primary : Colors.white.withOpacity(0.1),
+                color: isSelected
+                    ? AppColors.primary
+                    : Colors.white.withValues(alpha: 0.1),
                 width: isSelected ? 2 : 1,
               ),
             ),
@@ -86,7 +88,7 @@ class UnitCard extends StatelessWidget {
                   child: Icon(
                     _getSuitIcon(unit.type),
                     size: 24,
-                    color: _getSuitColor(unit.type).withOpacity(0.2),
+                    color: _getSuitColor(unit.type).withValues(alpha: 0.2),
                   ),
                 ),
               ],

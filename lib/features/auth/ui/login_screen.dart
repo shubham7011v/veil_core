@@ -1,4 +1,3 @@
-
 import 'package:flutter/material.dart';
 import '../../../../core/theme/colors.dart';
 import '../../../../core/constants/dimens.dart';
@@ -12,7 +11,7 @@ class LoginScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     Responsive.init(context);
-    
+
     return Scaffold(
       backgroundColor: AppColors.background,
       body: SafeArea(
@@ -24,15 +23,19 @@ class LoginScreen extends StatelessWidget {
               children: [
                 // Logo / Header
                 GlassContainer(
-                   width: Responsive.w(120),
-                   height: Responsive.w(120),
-                   borderRadius: 100,
-                   child: Center(
-                     child: Icon(Icons.security, size: Responsive.w(60), color: AppColors.primary),
-                   ),
+                  width: Responsive.w(120),
+                  height: Responsive.w(120),
+                  borderRadius: 100,
+                  child: Center(
+                    child: Icon(
+                      Icons.security,
+                      size: Responsive.w(60),
+                      color: AppColors.primary,
+                    ),
+                  ),
                 ),
                 SizedBox(height: Responsive.h(AppDimens.paddingXL)),
-                
+
                 Text(
                   'Welcome to the\nRoyal Court',
                   textAlign: TextAlign.center,
@@ -55,20 +58,34 @@ class LoginScreen extends StatelessWidget {
                 SizedBox(height: Responsive.h(48)),
 
                 // Form
-                _buildInput(context, 'USERNAME OR EMAIL', 'Enter your royal alias', Icons.person),
+                _buildInput(
+                  context,
+                  'USERNAME OR EMAIL',
+                  'Enter your royal alias',
+                  Icons.person,
+                ),
                 SizedBox(height: Responsive.h(AppDimens.paddingL)),
-                _buildInput(context, 'PASSWORD', 'Enter your secret key', Icons.visibility_off, isPassword: true),
-                
+                _buildInput(
+                  context,
+                  'PASSWORD',
+                  'Enter your secret key',
+                  Icons.visibility_off,
+                  isPassword: true,
+                ),
+
                 Align(
                   alignment: Alignment.centerRight,
                   child: TextButton(
                     onPressed: () {},
-                    child: const Text('Forgot Password?', style: TextStyle(color: AppColors.primaryDim)),
+                    child: const Text(
+                      'Forgot Password?',
+                      style: TextStyle(color: AppColors.primaryDim),
+                    ),
                   ),
                 ),
-                
+
                 SizedBox(height: Responsive.h(AppDimens.paddingL)),
-                
+
                 SizedBox(
                   width: double.infinity,
                   child: PrimaryButton(
@@ -79,28 +96,34 @@ class LoginScreen extends StatelessWidget {
                     },
                   ),
                 ),
-                
+
                 SizedBox(height: Responsive.h(AppDimens.paddingXL)),
                 Text(
                   'OR CONTINUE WITH',
-                  style: TextStyle(color: AppColors.textTertiary, fontSize: Responsive.sp(12)),
+                  style: TextStyle(
+                    color: AppColors.textTertiary,
+                    fontSize: Responsive.sp(12),
+                  ),
                 ),
                 SizedBox(height: Responsive.h(AppDimens.paddingL)),
-                
+
                 Row(
                   children: [
-                    Expanded(child: _buildSocialButton('Google', Icons.circle)), 
+                    Expanded(child: _buildSocialButton('Google', Icons.circle)),
                     SizedBox(width: Responsive.w(AppDimens.paddingM)),
                     Expanded(child: _buildSocialButton('Apple', Icons.apple)),
                   ],
                 ),
-                
+
                 SizedBox(height: Responsive.h(AppDimens.paddingXL)),
-                
+
                 Row(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
-                    const Text('New Player? ', style: TextStyle(color: AppColors.textSecondary)),
+                    const Text(
+                      'New Player? ',
+                      style: TextStyle(color: AppColors.textSecondary),
+                    ),
                     GestureDetector(
                       onTap: () {},
                       child: const Text(
@@ -121,7 +144,13 @@ class LoginScreen extends StatelessWidget {
     );
   }
 
-  Widget _buildInput(BuildContext context, String label, String hint, IconData suffixIcon, {bool isPassword = false}) {
+  Widget _buildInput(
+    BuildContext context,
+    String label,
+    String hint,
+    IconData suffixIcon, {
+    bool isPassword = false,
+  }) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -139,7 +168,9 @@ class LoginScreen extends StatelessWidget {
           decoration: BoxDecoration(
             color: Colors.transparent,
             borderRadius: BorderRadius.circular(AppDimens.radiusM),
-            border: Border.all(color: AppColors.primaryDim.withOpacity(0.3)),
+            border: Border.all(
+              color: AppColors.primaryDim.withValues(alpha: 0.3),
+            ),
           ),
           child: TextField(
             obscureText: isPassword,
@@ -152,7 +183,11 @@ class LoginScreen extends StatelessWidget {
               hintText: hint,
               hintStyle: const TextStyle(color: AppColors.textTertiary),
               border: InputBorder.none,
-              suffixIcon: Icon(suffixIcon, color: AppColors.primaryDim, size: Responsive.w(24)),
+              suffixIcon: Icon(
+                suffixIcon,
+                color: AppColors.primaryDim,
+                size: Responsive.w(24),
+              ),
             ),
           ),
         ),

@@ -1,9 +1,7 @@
-
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'core/theme/app_theme.dart';
 
-import 'features/session/models/session_state.dart';
 import 'features/session/state/session_provider.dart';
 import 'features/session/ui/screens/session_screen.dart';
 import 'features/session/ui/screens/lobby_screen.dart';
@@ -24,9 +22,7 @@ class VeilApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return MultiProvider(
-      providers: [
-        ChangeNotifierProvider(create: (_) => SessionProvider()),
-      ],
+      providers: [ChangeNotifierProvider(create: (_) => SessionProvider())],
       child: MaterialApp(
         title: 'Veil Core',
         debugShowCheckedModeBanner: false,
@@ -39,7 +35,8 @@ class VeilApp extends StatelessWidget {
           '/settings': (context) => const SettingsScreen(),
           '/rules': (context) => const RulesScreen(),
           '/deck': (context) => const DeckCollectionScreen(),
-          '/lobby': (context) => const LobbyWrapper(), // Wrapped to inject real data if needed
+          '/lobby': (context) =>
+              const LobbyWrapper(), // Wrapped to inject real data if needed
           '/session': (context) => const SessionScreen(),
         },
       ),
@@ -53,10 +50,10 @@ class LobbyWrapper extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    // In a real app, arguments would be passed here. 
+    // In a real app, arguments would be passed here.
     // For now, we read from provider or static mocks.
     final provider = context.watch<SessionProvider>();
-    
+
     return LobbyScreen(
       roomId: provider.state.roomId,
       participants: provider.state.participants,
@@ -64,6 +61,6 @@ class LobbyWrapper extends StatelessWidget {
         provider.startSession();
         Navigator.pushReplacementNamed(context, '/session');
       },
-    ); 
+    );
   }
 }

@@ -1,4 +1,3 @@
-
 import 'package:flutter/material.dart';
 import '../../core/theme/colors.dart';
 import '../../core/constants/dimens.dart';
@@ -30,7 +29,7 @@ class PrimaryButton extends StatelessWidget {
     Color backgroundColor;
     Color textColor;
     Color borderColor = Colors.transparent;
-    
+
     switch (type) {
       case ButtonType.primary:
         backgroundColor = AppColors.primary;
@@ -42,18 +41,18 @@ class PrimaryButton extends StatelessWidget {
         borderColor = AppColors.primaryDim;
         break;
       case ButtonType.danger:
-        backgroundColor = AppColors.danger.withOpacity(0.2);
+        backgroundColor = AppColors.danger.withValues(alpha: 0.2);
         textColor = AppColors.danger;
         borderColor = AppColors.danger;
         break;
     }
 
     if (isDisabled) {
-      backgroundColor = backgroundColor.withOpacity(0.4);
-      textColor = textColor.withOpacity(0.4);
-      borderColor = borderColor.withOpacity(0.4);
+      backgroundColor = backgroundColor.withValues(alpha: 0.4);
+      textColor = textColor.withValues(alpha: 0.4);
+      borderColor = borderColor.withValues(alpha: 0.4);
     }
-    
+
     // The visual container of the button
     final Widget buttonContent = Container(
       height: 50,
@@ -62,8 +61,14 @@ class PrimaryButton extends StatelessWidget {
         color: backgroundColor,
         borderRadius: BorderRadius.circular(AppDimens.radiusM),
         border: Border.all(color: borderColor),
-        boxShadow: (type == ButtonType.primary && !isDisabled) 
-            ? [BoxShadow(color: AppColors.primary.withOpacity(0.3), blurRadius: 10, spreadRadius: 1)] 
+        boxShadow: (type == ButtonType.primary && !isDisabled)
+            ? [
+                BoxShadow(
+                  color: AppColors.primary.withValues(alpha: 0.3),
+                  blurRadius: 10,
+                  spreadRadius: 1,
+                ),
+              ]
             : null,
       ),
       child: Center(
@@ -98,13 +103,10 @@ class PrimaryButton extends StatelessWidget {
 
     // If disabled, just return the container to show disabled state, no interaction
     if (isDisabled) {
-       return buttonContent;
+      return buttonContent;
     }
 
     // Wrap with AnimatedButton for interaction
-    return AnimatedButton(
-       onPressed: onPressed,
-       child: buttonContent,
-    );
+    return AnimatedButton(onPressed: onPressed, child: buttonContent);
   }
 }
