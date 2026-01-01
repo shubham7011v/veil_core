@@ -182,7 +182,10 @@ class _CreateRoomScreenState extends State<CreateRoomScreen> {
                       child: PrimaryButton(
                         label: 'Create Room',
                         icon: Icons.arrow_forward,
-                        onPressed: () {},
+                        onPressed: () {
+                           // Navigate to Lobby
+                           Navigator.pushReplacementNamed(context, '/lobby');
+                        },
                       ),
                     ),
                  ],

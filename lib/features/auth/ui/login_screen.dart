@@ -74,8 +74,8 @@ class LoginScreen extends StatelessWidget {
                   child: PrimaryButton(
                     label: 'LOGIN',
                     onPressed: () {
-                      // Navigate to Lobby
-                      Navigator.of(context).popUntil((route) => route.isFirst); 
+                      // Navigate to Home
+                      Navigator.pushReplacementNamed(context, '/home');
                     },
                   ),
                 ),
