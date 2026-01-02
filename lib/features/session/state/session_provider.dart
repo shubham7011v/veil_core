@@ -7,9 +7,25 @@ import '../models/unit.dart';
 
 enum BotPersonality { conservative, aggressive, balanced, ghost }
 
+enum SessionEventType {
+  none,
+  turnChanged,
+  cardsPlayed,
+  passed,
+  bluffCalled,
+  bluffResolved,
+  pileDiscarded,
+}
+
 class SessionProvider extends ChangeNotifier {
   SessionState _state = SessionState.initial();
   SessionState get state => _state;
+
+  // -- Event State for Animations --
+  SessionEventType _lastEvent = SessionEventType.none;
+  SessionEventType get lastEvent => _lastEvent;
+  String? _lastEventActorId; // who caused the event
+  String? get lastEventActorId => _lastEventActorId;
 
   // -- UI Selection State --
   final List<String> _selectedUnitIds = [];
@@ -75,6 +91,8 @@ class SessionProvider extends ChangeNotifier {
     _selectedUnitIds.clear();
     _lastPlayedById = null;
     _passCount = 0;
+    _lastEvent = SessionEventType.none; // Reset event state
+    _lastEventActorId = null;
 
     final deck = _generateDeck();
     deck.shuffle();
@@ -212,6 +230,8 @@ class SessionProvider extends ChangeNotifier {
   void passTurn() {
     if (!isMyTurn) return;
     _passCount++;
+    _lastEvent = SessionEventType.passed;
+    _lastEventActorId = state.activeParticipantId;
     _advanceTurn();
   }
 
@@ -223,9 +243,17 @@ class SessionProvider extends ChangeNotifier {
   void raiseChallenge() {
     if (!isMyTurn || _lastMove == null) return;
 
-    final wasBluff = _checkIfBluff(_lastMove!);
     final blufferId = _lastMove!.playerId;
     final challengerId = state.activeParticipantId!;
+
+    _lastEvent = SessionEventType.bluffCalled;
+    _lastEventActorId = challengerId;
+    notifyListeners();
+
+    // Small delay to allow "Call" animation before resolution (optional, handled by UI)
+    // For now we resolve immediately logic-wise, but UI can show overlay
+
+    final wasBluff = _checkIfBluff(_lastMove!);
 
     String resultText;
     String loserId;
@@ -242,27 +270,13 @@ class SessionProvider extends ChangeNotifier {
 
     _distributePileTo(loserId);
 
-    // After Bluff Resolution: Round Resets
-    _currentRank = null;
-    _lastMove = null;
-    _stagedRank = null;
-    _lastPlayedById = null;
-    _passCount = 0;
-
     // Next turn goes to the winner of the challenge
     final winnerId = wasBluff ? challengerId : blufferId;
     final nextId = winnerId;
 
-    final updatedParticipants = _state.participants.map((p) {
-      return p.copyWith(isActive: p.id == nextId);
-    }).toList();
+    _resetRoundState(nextId, wasDiscarded: false, winnerId: winnerId);
 
-    _state = _state.copyWith(
-      lastActionText: resultText,
-      activeParticipantId: nextId,
-      participants: updatedParticipants,
-      pileCount: 0,
-    );
+    _state = _state.copyWith(lastActionText: resultText);
     notifyListeners();
 
     if (nextId != 'me') {
@@ -308,6 +322,9 @@ class SessionProvider extends ChangeNotifier {
       lastActionText: "${pNames[playerId]} played ${units.length} cards",
     );
 
+    _lastEvent = SessionEventType.cardsPlayed;
+    _lastEventActorId = playerId;
+
     // Win Condition
     if (updatedParticipants.firstWhere((p) => p.id == playerId).unitCount <=
         0) {
@@ -323,6 +340,38 @@ class SessionProvider extends ChangeNotifier {
     _advanceTurn();
   }
 
+  void _resetRoundState(
+    String startId, {
+    required bool wasDiscarded,
+    String? winnerId,
+  }) {
+    _currentRank = null;
+    _lastMove = null;
+    _stagedRank = null;
+    _lastPlayedById = null;
+    _passCount = 0;
+    _pile.clear();
+    _selectedUnitIds.clear(); // Reset selection
+
+    if (wasDiscarded) {
+      _lastEvent = SessionEventType.pileDiscarded;
+      _lastEventActorId = startId; // The player who started the new round
+    } else {
+      _lastEvent = SessionEventType.bluffResolved;
+      _lastEventActorId = winnerId; // Winner gets the spotlight
+    }
+
+    final updatedParticipants = _state.participants.map((p) {
+      return p.copyWith(isActive: p.id == startId);
+    }).toList();
+
+    _state = _state.copyWith(
+      participants: updatedParticipants,
+      activeParticipantId: startId,
+      pileCount: 0,
+    );
+  }
+
   void _advanceTurn() {
     final pIds = _state.participants.map((p) => p.id).toList();
     final currentIdx = pIds.indexOf(_state.activeParticipantId ?? 'me');
@@ -332,21 +381,9 @@ class SessionProvider extends ChangeNotifier {
     // PASS-CYCLE END RULE
     // If turn comes back to the player who last played and everyone passed
     if (nextId == _lastPlayedById && _passCount >= pIds.length - 1) {
-      _pile.clear();
-      _currentRank = null;
-      _lastMove = null;
-      _stagedRank = null;
-      _lastPlayedById = null;
-      _passCount = 0;
-
-      final updatedParticipants = _state.participants.map((p) {
-        return p.copyWith(isActive: p.id == nextId);
-      }).toList();
+      _resetRoundState(nextId, wasDiscarded: true);
 
       _state = _state.copyWith(
-        participants: updatedParticipants,
-        activeParticipantId: nextId,
-        pileCount: 0,
         lastActionText:
             "Everyone passed! Pile discarded. ${pNames[nextId]} starts new round.",
       );
@@ -361,6 +398,9 @@ class SessionProvider extends ChangeNotifier {
     final updatedParticipants = _state.participants.map((p) {
       return p.copyWith(isActive: p.id == nextId);
     }).toList();
+
+    _lastEvent = SessionEventType.turnChanged;
+    _lastEventActorId = nextId;
 
     _state = _state.copyWith(
       participants: updatedParticipants,
@@ -436,6 +476,8 @@ class SessionProvider extends ChangeNotifier {
 
       if (Random().nextDouble() < passChance) {
         _passCount++;
+        _lastEvent = SessionEventType.passed;
+        _lastEventActorId = botId;
         _advanceTurn();
         return;
       }
@@ -469,6 +511,8 @@ class SessionProvider extends ChangeNotifier {
       } else {
         // Just pass instead of bluffing if unsure
         _passCount++;
+        _lastEvent = SessionEventType.passed;
+        _lastEventActorId = botId;
         _advanceTurn();
         return;
       }
@@ -487,6 +531,8 @@ class SessionProvider extends ChangeNotifier {
 
     if (botUnitsToPlay.isEmpty) {
       _passCount++;
+      _lastEvent = SessionEventType.passed;
+      _lastEventActorId = botId;
       _advanceTurn();
       return;
     }

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'dart:math' as dart_math;
 import '../../../../core/animations/anim_utils.dart';
 import '../../../../core/utils/responsive.dart';
 import '../../models/unit.dart';
@@ -44,10 +45,86 @@ class _SessionScreenState extends State<SessionScreen>
     super.dispose();
   }
 
+  // Animation State
+  final List<Widget> _particles = []; // Overlay particles for discard effect
+
+  void _triggerPileDiscardEffect() {
+    // Add particle explosion
+    if (mounted) {
+      setState(() {
+        _particles.add(
+          const ParticleExplosionOverlay(
+            key: ValueKey('discard'),
+            color: Color(0xFFFFD700),
+          ),
+        );
+        _particles.add(
+          Positioned.fill(
+            child: Center(
+              child: TweenAnimationBuilder<double>(
+                tween: Tween(begin: 0.0, end: 1.0),
+                duration: const Duration(milliseconds: 300),
+                builder: (context, value, child) {
+                  return Opacity(
+                    opacity: value,
+                    child: Transform.scale(
+                      scale: 0.5 + (value * 0.5),
+                      child: child,
+                    ),
+                  );
+                },
+                child: const Text(
+                  "PILE DISCARDED",
+                  style: TextStyle(
+                    color: Color(0xFFFFD700),
+                    fontSize: 28,
+                    fontWeight: FontWeight.w900,
+                    letterSpacing: 4,
+                    shadows: [
+                      BoxShadow(
+                        color: Colors.black,
+                        blurRadius: 20,
+                        spreadRadius: 10,
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          ),
+        );
+      });
+
+      // Clear after animation
+      Future.delayed(const Duration(milliseconds: 1500), () {
+        if (mounted) {
+          setState(() {
+            _particles.clear();
+          });
+        }
+      });
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     Responsive.init(context);
+
+    // Listen for One-Shot Events
+    context.select<SessionProvider, void>((p) {
+      if (p.lastEvent == SessionEventType.pileDiscarded) {
+        // We need to trigger this only ONCE per event.
+        // Since build runs often, we might need a better trigger mechanic or check ID.
+        // A simple way is to trust the provider resets event to 'none' or we track last handled event ID.
+        // For V1, we'll trigger and let the provider logic handle state.
+        // Ideally: add a listener in initState/didChangeDependencies.
+      }
+    });
+
     final provider = context.watch<SessionProvider>();
+
+    // Hacky trigger for V1: check if event is 'pileDiscarded' and local state hasn't fired recently?
+    // Better: use a listener.
 
     return Scaffold(
       backgroundColor: const Color(0xFF121212),
@@ -68,30 +145,150 @@ class _SessionScreenState extends State<SessionScreen>
           SafeArea(
             child: Column(
               children: [
-                _buildTopBar(provider),
-                _buildOpponentCarousel(context, provider),
+                // Top Bar (0.0 - 0.4)
+                SlideTransition(
+                  position:
+                      Tween<Offset>(
+                        begin: const Offset(0, -0.5),
+                        end: Offset.zero,
+                      ).animate(
+                        CurvedAnimation(
+                          parent: _entryController,
+                          curve: const Interval(
+                            0.0,
+                            0.4,
+                            curve: Curves.easeOutCubic,
+                          ),
+                        ),
+                      ),
+                  child: FadeTransition(
+                    opacity: CurvedAnimation(
+                      parent: _entryController,
+                      curve: const Interval(0.0, 0.4, curve: Curves.easeOut),
+                    ),
+                    child: _buildTopBar(provider),
+                  ),
+                ),
+
+                // Opponents (0.1 - 0.5)
+                SlideTransition(
+                  position:
+                      Tween<Offset>(
+                        begin: const Offset(0, -0.2),
+                        end: Offset.zero,
+                      ).animate(
+                        CurvedAnimation(
+                          parent: _entryController,
+                          curve: const Interval(
+                            0.1,
+                            0.5,
+                            curve: Curves.easeOutCubic,
+                          ),
+                        ),
+                      ),
+                  child: FadeTransition(
+                    opacity: CurvedAnimation(
+                      parent: _entryController,
+                      curve: const Interval(0.1, 0.5, curve: Curves.easeOut),
+                    ),
+                    child: _buildOpponentCarousel(context, provider),
+                  ),
+                ),
                 const SizedBox(height: 10),
+
+                // Center Pile (0.2 - 0.7)
                 Expanded(
                   child: Center(
                     child: SingleChildScrollView(
-                      child: AnimatedSwitcher(
-                        duration: const Duration(milliseconds: 400),
-                        child: provider.shouldShowRankSelector
-                            ? _buildRankSelector(provider)
-                            : _buildCenterPile(provider),
+                      child: ScaleTransition(
+                        scale: CurvedAnimation(
+                          parent: _entryController,
+                          curve: const Interval(
+                            0.2,
+                            0.7,
+                            curve: Curves.elasticOut,
+                          ),
+                        ),
+                        child: AnimatedSwitcher(
+                          duration: const Duration(milliseconds: 400),
+                          child: provider.shouldShowRankSelector
+                              ? _buildRankSelector(provider)
+                              : _buildCenterPile(provider),
+                        ),
                       ),
                     ),
                   ),
                 ),
-                _buildStagingArea(context, provider),
+
+                // Staging Area (0.4 - 0.8)
+                SlideTransition(
+                  position:
+                      Tween<Offset>(
+                        begin: const Offset(0, 0.2),
+                        end: Offset.zero,
+                      ).animate(
+                        CurvedAnimation(
+                          parent: _entryController,
+                          curve: const Interval(
+                            0.4,
+                            0.8,
+                            curve: Curves.easeOutCubic,
+                          ),
+                        ),
+                      ),
+                  child: FadeTransition(
+                    opacity: CurvedAnimation(
+                      parent: _entryController,
+                      curve: const Interval(0.4, 0.8, curve: Curves.easeOut),
+                    ),
+                    child: _buildStagingArea(context, provider),
+                  ),
+                ),
                 const SizedBox(height: 4),
-                _buildBottomControls(context, provider),
+
+                // Bottom Controls (0.5 - 1.0)
+                SlideTransition(
+                  position:
+                      Tween<Offset>(
+                        begin: const Offset(0, 0.5),
+                        end: Offset.zero,
+                      ).animate(
+                        CurvedAnimation(
+                          parent: _entryController,
+                          curve: const Interval(
+                            0.5,
+                            1.0,
+                            curve: Curves.easeOutCubic,
+                          ),
+                        ),
+                      ),
+                  child: FadeTransition(
+                    opacity: CurvedAnimation(
+                      parent: _entryController,
+                      curve: const Interval(0.5, 1.0, curve: Curves.easeOut),
+                    ),
+                    child: _buildBottomControls(context, provider),
+                  ),
+                ),
               ],
             ),
           ),
 
           if (provider.state.currentPhase == SessionPhase.finished)
             _buildWinOverlay(context, provider),
+
+          // Particle Layer
+          ..._particles,
+
+          // Invisible Event Listener Wrapper
+          _EventListenerWrapper(
+            provider: provider,
+            onEvent: (event) {
+              if (event == SessionEventType.pileDiscarded) {
+                _triggerPileDiscardEffect();
+              }
+            },
+          ),
         ],
       ),
     );
@@ -249,91 +446,17 @@ class _SessionScreenState extends State<SessionScreen>
   }
 
   Widget _buildCenterPile(SessionProvider provider) {
-    final isRoundSet = provider.isRoundSet;
-    final isMyTurn = provider.isMyTurn;
-
-    return GestureDetector(
+    return AnimatedPileView(
+      pileCount: provider.pileCount,
+      isRoundSet: provider.isRoundSet,
+      currentRank: provider.currentRank,
+      stagedRank: provider.stagedRank,
+      isMyTurn: provider.isMyTurn,
       onTap: () {
-        if (!isRoundSet && isMyTurn) {
+        if (!provider.isRoundSet && provider.isMyTurn) {
           provider.toggleRankSelectionMode();
         }
       },
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          if (isRoundSet || provider.stagedRank != null)
-            Padding(
-              padding: const EdgeInsets.only(bottom: 12),
-              child: ShaderMask(
-                shaderCallback: (bounds) => const LinearGradient(
-                  colors: [
-                    Color(0xFFFFD700),
-                    Color(0xFFFFECB3),
-                    Color(0xFFB8860B),
-                  ],
-                ).createShader(bounds),
-                child: Text(
-                  (isRoundSet ? provider.currentRank! : provider.stagedRank!)
-                      .name
-                      .toUpperCase(),
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontSize: 18,
-                    fontWeight: FontWeight.w900,
-                    letterSpacing: 2.0,
-                  ),
-                ),
-              ),
-            ),
-
-          Container(
-            width: 140,
-            height: 140,
-            decoration: BoxDecoration(
-              shape: BoxShape.circle,
-              color: const Color(0xFF1A1A1A),
-              border: Border.all(
-                color: isRoundSet
-                    ? const Color(0xFFFFD700)
-                    : const Color(0xFF3E3E3E),
-                width: 3,
-              ),
-              boxShadow: [
-                BoxShadow(
-                  color: (isRoundSet ? const Color(0xFFFFD700) : Colors.black)
-                      .withValues(alpha: 0.2),
-                  blurRadius: 30,
-                  spreadRadius: 5,
-                ),
-              ],
-            ),
-            child: Center(
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Text(
-                    "${provider.pileCount}",
-                    style: const TextStyle(
-                      color: Colors.white,
-                      fontSize: 48,
-                      fontWeight: FontWeight.w900,
-                    ),
-                  ),
-                  const Text(
-                    "CARDS",
-                    style: TextStyle(
-                      color: Colors.white38,
-                      fontSize: 10,
-                      fontWeight: FontWeight.bold,
-                      letterSpacing: 2,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
-        ],
-      ),
     );
   }
 
@@ -749,5 +872,292 @@ class _SessionScreenState extends State<SessionScreen>
         ],
       ),
     );
+  }
+}
+
+class AnimatedPileView extends StatefulWidget {
+  final int pileCount;
+  final bool isRoundSet;
+  final UnitRank? currentRank;
+  final UnitRank? stagedRank;
+  final bool isMyTurn;
+  final VoidCallback onTap;
+
+  const AnimatedPileView({
+    super.key,
+    required this.pileCount,
+    required this.isRoundSet,
+    required this.currentRank,
+    required this.stagedRank,
+    required this.isMyTurn,
+    required this.onTap,
+  });
+
+  @override
+  State<AnimatedPileView> createState() => _AnimatedPileViewState();
+}
+
+class _AnimatedPileViewState extends State<AnimatedPileView>
+    with SingleTickerProviderStateMixin {
+  late AnimationController _bounceController;
+  late Animation<double> _scaleAnimation;
+
+  @override
+  void initState() {
+    super.initState();
+    _bounceController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 300),
+    );
+    _scaleAnimation =
+        TweenSequence<double>([
+          TweenSequenceItem(tween: Tween(begin: 1.0, end: 1.15), weight: 50),
+          TweenSequenceItem(tween: Tween(begin: 1.15, end: 1.0), weight: 50),
+        ]).animate(
+          CurvedAnimation(parent: _bounceController, curve: Curves.easeInOut),
+        );
+  }
+
+  @override
+  void didUpdateWidget(AnimatedPileView oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.pileCount > oldWidget.pileCount) {
+      _bounceController.forward(from: 0.0);
+    }
+  }
+
+  @override
+  void dispose() {
+    _bounceController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: widget.onTap,
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          if (widget.isRoundSet || widget.stagedRank != null)
+            Padding(
+              padding: const EdgeInsets.only(bottom: 12),
+              child: ShaderMask(
+                shaderCallback: (bounds) => const LinearGradient(
+                  colors: [
+                    Color(0xFFFFD700),
+                    Color(0xFFFFECB3),
+                    Color(0xFFB8860B),
+                  ],
+                ).createShader(bounds),
+                child: Text(
+                  (widget.isRoundSet ? widget.currentRank! : widget.stagedRank!)
+                      .name
+                      .toUpperCase(),
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 18,
+                    fontWeight: FontWeight.w900,
+                    letterSpacing: 2.0,
+                  ),
+                ),
+              ),
+            ),
+          ScaleTransition(
+            scale: _scaleAnimation,
+            child: Container(
+              width: 140,
+              height: 140,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                color: const Color(0xFF1A1A1A),
+                border: Border.all(
+                  color: widget.isRoundSet
+                      ? const Color(0xFFFFD700)
+                      : const Color(0xFF3E3E3E),
+                  width: 3,
+                ),
+                boxShadow: [
+                  BoxShadow(
+                    color:
+                        (widget.isRoundSet
+                                ? const Color(0xFFFFD700)
+                                : Colors.black)
+                            .withValues(alpha: 0.2),
+                    blurRadius: 30,
+                    spreadRadius: 5,
+                  ),
+                ],
+              ),
+              child: Center(
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    AnimatedSwitcher(
+                      duration: const Duration(milliseconds: 200),
+                      transitionBuilder: (child, animation) =>
+                          ScaleTransition(scale: animation, child: child),
+                      child: Text(
+                        "${widget.pileCount}",
+                        key: ValueKey(widget.pileCount),
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 48,
+                          fontWeight: FontWeight.w900,
+                        ),
+                      ),
+                    ),
+                    const Text(
+                      "CARDS",
+                      style: TextStyle(
+                        color: Colors.white38,
+                        fontSize: 10,
+                        fontWeight: FontWeight.bold,
+                        letterSpacing: 2,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _EventListenerWrapper extends StatefulWidget {
+  final SessionProvider provider;
+  final Function(SessionEventType) onEvent;
+
+  const _EventListenerWrapper({required this.provider, required this.onEvent});
+
+  @override
+  State<_EventListenerWrapper> createState() => _EventListenerWrapperState();
+}
+
+class _EventListenerWrapperState extends State<_EventListenerWrapper> {
+  SessionEventType _lastHandled = SessionEventType.none;
+  String? _lastActor = "";
+
+  @override
+  Widget build(BuildContext context) {
+    // Check if event changed
+    final currentEvent = widget.provider.lastEvent;
+    final currentActor = widget.provider.lastEventActorId;
+
+    if (currentEvent != SessionEventType.none &&
+        (currentEvent != _lastHandled || currentActor != _lastActor)) {
+      // Fire callback on next frame to avoid build conflicts
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        // Prevent re-firing
+        if (mounted) {
+          widget.onEvent(currentEvent);
+        }
+      });
+
+      _lastHandled = currentEvent;
+      _lastActor = currentActor;
+    }
+
+    return const SizedBox.shrink();
+  }
+}
+
+class ParticleExplosionOverlay extends StatefulWidget {
+  final Color color;
+  const ParticleExplosionOverlay({super.key, required this.color});
+
+  @override
+  State<ParticleExplosionOverlay> createState() =>
+      _ParticleExplosionOverlayState();
+}
+
+class _ParticleExplosionOverlayState extends State<ParticleExplosionOverlay>
+    with SingleTickerProviderStateMixin {
+  late AnimationController _controller;
+  final List<_Particle> _particles = [];
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = AnimationController(
+      vsync: this,
+      duration: const Duration(seconds: 1),
+    );
+
+    // Generate particles
+    for (int i = 0; i < 30; i++) {
+      _particles.add(_Particle());
+    }
+
+    _controller.forward();
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AnimatedBuilder(
+      animation: _controller,
+      builder: (context, child) {
+        return Stack(
+          children: _particles.map((p) {
+            final progress = _controller.value;
+            final double x =
+                (MediaQuery.of(context).size.width / 2) +
+                (p.dx * progress * 300); // Spread width
+            final double y =
+                (MediaQuery.of(context).size.height / 2) -
+                50 + // Start slightly higher
+                (p.dy * progress * 300) +
+                (progress * progress * 150); // Gravity
+
+            return Positioned(
+              left: x,
+              top: y,
+              child: Opacity(
+                opacity: (1.0 - progress).clamp(0.0, 1.0),
+                child: Container(
+                  width: 6 + (1 - progress) * 4,
+                  height: 6 + (1 - progress) * 4,
+                  decoration: BoxDecoration(
+                    color: widget.color.withValues(alpha: 0.8),
+                    shape: BoxShape.circle,
+                    boxShadow: [
+                      BoxShadow(
+                        color: widget.color.withValues(alpha: 0.5),
+                        blurRadius: 10,
+                        spreadRadius: 2,
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            );
+          }).toList(),
+        );
+      },
+    );
+  }
+}
+
+class _Particle {
+  late double dx;
+  late double dy;
+
+  _Particle() {
+    final rnd = dart_math.Random();
+    // Explosion pattern: full circle
+    final angle = rnd.nextDouble() * 2 * dart_math.pi;
+    // Speed variaiton
+    final speed = 0.3 + rnd.nextDouble() * 0.7;
+    dx = dart_math.cos(angle) * speed;
+    dy = dart_math.sin(angle) * speed;
   }
 }
