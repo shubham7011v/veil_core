@@ -11,6 +11,10 @@ class LocalBotSessionHandler implements GameSessionHandler {
   // Streams
   final _stateController = StreamController<SessionState>.broadcast();
   final _eventController = StreamController<SessionEventType>.broadcast();
+  Timer? _turnTimer;
+  int _currentTimerSeconds = 0;
+  static const int _firstTurnLimitS = 60;
+  static const int _standardTurnLimitS = 30;
 
   @override
   Stream<SessionState> get sessionStateStream => _stateController.stream;
@@ -61,7 +65,8 @@ class LocalBotSessionHandler implements GameSessionHandler {
   UnitRank? _currentRank;
   String? _lastPlayedById;
   int _passCount = 0;
-  int _botThinkingTimeS = 10;
+  int _botThinkingTimeS =
+      2; // Reduced for better flow since we have a global timer
 
   bool _isRevealingBluff = false;
 
@@ -184,6 +189,7 @@ class LocalBotSessionHandler implements GameSessionHandler {
         lastActionText: 'Game Started! Select cards and choose a rank.',
       );
       _emitState();
+      _startTurnTimer();
     });
   }
 
@@ -214,6 +220,7 @@ class LocalBotSessionHandler implements GameSessionHandler {
     _activeEventActorId = _currentState.activeParticipantId;
     _eventController.add(SessionEventType.passed);
     _addToLog("${pNames['me']} passed.");
+    _stopTurnTimer();
     _advanceTurn();
   }
 
@@ -260,11 +267,53 @@ class LocalBotSessionHandler implements GameSessionHandler {
     _emitState();
   }
 
-  // Use dispose to close streams
   @override
   void dispose() {
+    _stopTurnTimer();
     _stateController.close();
     _eventController.close();
+  }
+
+  void _startTurnTimer() {
+    _stopTurnTimer();
+    _currentTimerSeconds = (_currentRank == null)
+        ? _firstTurnLimitS
+        : _standardTurnLimitS;
+    _currentState = _currentState.copyWith(turnTimerS: _currentTimerSeconds);
+    _emitState();
+
+    _turnTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
+      if (_currentTimerSeconds > 0) {
+        _currentTimerSeconds--;
+        _currentState = _currentState.copyWith(
+          turnTimerS: _currentTimerSeconds,
+        );
+        _emitState();
+      } else {
+        _stopTurnTimer();
+        _handleTimeout();
+      }
+    });
+  }
+
+  void _stopTurnTimer() {
+    _turnTimer?.cancel();
+    _turnTimer = null;
+    _currentState = _currentState.copyWith(clearTimer: true);
+    _emitState();
+  }
+
+  void _handleTimeout() {
+    final activeId = _currentState.activeParticipantId;
+    if (activeId == null) return;
+
+    _addToLog("${pNames[activeId]} time out!");
+
+    // Auto pass
+    _passCount++;
+    _activeEventActorId = activeId;
+    _eventController.add(SessionEventType.passed);
+    _advanceTurn();
   }
 
   // --- Private Helpers (Ported) ---
@@ -324,6 +373,7 @@ class LocalBotSessionHandler implements GameSessionHandler {
     _addToLog(
       "${pNames[playerId]} claimed ${units.length} ${declaredRank.name}s.",
     );
+    _stopTurnTimer();
     _emitState();
 
     // Phase 2: Deferred update once cards reach the pile (approx 700ms)
@@ -383,6 +433,7 @@ class LocalBotSessionHandler implements GameSessionHandler {
     );
     _emitState();
 
+    _startTurnTimer();
     if (nextId != 'me') _scheduleBotTurn(nextId);
   }
 
@@ -417,6 +468,8 @@ class LocalBotSessionHandler implements GameSessionHandler {
       activeParticipantId: startId,
       pileCount: 0,
     );
+    _emitState();
+    _startTurnTimer(); // Reset timer for new round starter
   }
 
   void _finalizeChallenge(String blufferId, String challengerId) {
@@ -519,6 +572,7 @@ class LocalBotSessionHandler implements GameSessionHandler {
         _addToLog("${pNames[botId]} called bluff on ${pNames[blufferId]}!");
 
         Future.delayed(const Duration(milliseconds: 2000), () {
+          _stopTurnTimer();
           _finalizeChallenge(blufferId, botId);
         });
         return;

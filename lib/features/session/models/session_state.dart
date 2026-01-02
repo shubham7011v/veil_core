@@ -19,6 +19,8 @@ class SessionState extends Equatable {
   final String? lastActionText; // e.g. "Rahul played 2 Units"
   final String? winnerId;
 
+  final int? turnTimerS;
+
   const SessionState({
     required this.roomId,
     required this.participants,
@@ -28,6 +30,7 @@ class SessionState extends Equatable {
     this.activeParticipantId,
     this.lastActionText,
     this.winnerId,
+    this.turnTimerS,
   });
 
   @override
@@ -40,11 +43,12 @@ class SessionState extends Equatable {
     activeParticipantId,
     lastActionText,
     winnerId,
+    turnTimerS,
   ];
 
   // Factory for initial/empty state
   factory SessionState.initial() {
-    return SessionState(
+    return const SessionState(
       roomId: '000',
       participants: [],
       myHand: [],
@@ -62,6 +66,8 @@ class SessionState extends Equatable {
     String? activeParticipantId,
     String? lastActionText,
     String? winnerId,
+    int? turnTimerS,
+    bool clearTimer = false,
   }) {
     return SessionState(
       roomId: roomId ?? this.roomId,
@@ -72,6 +78,7 @@ class SessionState extends Equatable {
       activeParticipantId: activeParticipantId ?? this.activeParticipantId,
       lastActionText: lastActionText ?? this.lastActionText,
       winnerId: winnerId ?? this.winnerId,
+      turnTimerS: clearTimer ? null : (turnTimerS ?? this.turnTimerS),
     );
   }
 }

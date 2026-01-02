@@ -19,16 +19,27 @@ class SessionTopBar extends StatelessWidget {
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
           _CircleButton(icon: Icons.menu, onTap: () => _showGameMenu(context)),
-          const Column(
+          Column(
             mainAxisSize: MainAxisSize.min,
             children: [
               Text(
-                "BLUFFDEV",
-                style: TextStyle(
-                  color: Colors.white54,
-                  fontSize: 12,
+                state.engineState.turnTimerS != null
+                    ? "00:${state.engineState.turnTimerS!.toString().padLeft(2, '0')}"
+                    : "WAITING...",
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 16,
                   fontWeight: FontWeight.w900,
                   letterSpacing: 1.5,
+                  fontFamily: 'Monospace',
+                ),
+              ),
+              const Text(
+                "TIME REMAINING",
+                style: TextStyle(
+                  color: Colors.white38,
+                  fontSize: 8,
+                  fontWeight: FontWeight.bold,
                 ),
               ),
             ],
