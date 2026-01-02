@@ -174,6 +174,10 @@ class LocalBotSessionHandler implements GameSessionHandler {
 
     // Phase 2: Deferred "Deal" (triggers flycard animation from pile)
     Future.delayed(const Duration(milliseconds: 1500), () {
+      _activeEventActorId = 'pile';
+      _lastCountClaimed = 0; // Trigger deal from center
+      _eventController.add(SessionEventType.cardsDealt);
+
       _currentState = _currentState.copyWith(
         participants: participants,
         myHand: _hands['me']!,
@@ -445,6 +449,8 @@ class LocalBotSessionHandler implements GameSessionHandler {
     );
 
     // Emit resolved event after state is set so UI can read loserId
+    _activeEventActorId = loserId;
+    _lastCountClaimed = _pile.length;
     _eventController.add(SessionEventType.bluffResolved);
 
     // DEFERRED Phase: Distribute cards after animation delay

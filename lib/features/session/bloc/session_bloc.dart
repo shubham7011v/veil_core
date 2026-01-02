@@ -30,7 +30,11 @@ class SessionBloc extends Bloc<SessionEvent, SessionBlocState> {
     );
     on<EngineEventReceived>(
       (event, emit) => emit(
-        state.copyWith(lastEvent: event.type, lastEventActorId: event.actorId),
+        state.copyWith(
+          lastEvent: event.type,
+          lastEventActorId: event.actorId,
+          lastEventCardCount: event.cardCount,
+        ),
       ),
     );
 
@@ -43,7 +47,13 @@ class SessionBloc extends Bloc<SessionEvent, SessionBlocState> {
     });
 
     _eventSub = _handler.eventStream.listen((event) {
-      add(EngineEventReceived(event, _handler.activeEventActorId));
+      add(
+        EngineEventReceived(
+          event,
+          _handler.activeEventActorId,
+          cardCount: _handler.lastCountClaimed,
+        ),
+      );
     });
   }
 

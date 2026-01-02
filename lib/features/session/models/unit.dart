@@ -1,3 +1,5 @@
+import 'package:equatable/equatable.dart';
+
 enum UnitType { spades, hearts, diamonds, clubs }
 
 enum UnitRank {
@@ -16,18 +18,21 @@ enum UnitRank {
   ace,
 }
 
-class Unit {
+class Unit extends Equatable {
   final String id;
   final UnitType type;
   final UnitRank rank;
-  bool isSelected;
+  final bool isSelected;
 
-  Unit({
+  const Unit({
     required this.id,
     required this.type,
     required this.rank,
     this.isSelected = false,
   });
+
+  @override
+  List<Object?> get props => [id, type, rank, isSelected];
 
   String get label {
     return '${rank.name[0].toUpperCase()}${rank.name.substring(1)} of ${type.name}';

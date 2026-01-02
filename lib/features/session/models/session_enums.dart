@@ -7,5 +7,8 @@ enum SessionEventType {
   passed,
   bluffCalled,
   bluffResolved,
+  bluffRevealed,
+  cardsDealt,
+  cardsPickedUp,
   pileDiscarded,
 }

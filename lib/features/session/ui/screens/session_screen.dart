@@ -1,18 +1,16 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
-import 'dart:math' as dart_math;
 import '../../bloc/session_bloc.dart';
-import '../../bloc/session_event.dart';
 import '../../bloc/session_state.dart';
-import '../../models/unit.dart';
-import '../../widgets/unit_card.dart';
-import '../../widgets/participant_avatar.dart';
-import '../../widgets/doc_viewer.dart';
+import '../../models/session_enums.dart';
+import '../../models/session_state.dart' as engine;
 import '../../widgets/bluff_reveal_overlay.dart';
 import '../../widgets/flying_cards_layer.dart';
-
-import '../../models/session_state.dart';
-import '../../models/session_enums.dart';
+import '../../widgets/session_top_bar.dart';
+import '../../widgets/opponent_carousel.dart';
+import '../../widgets/game_table_view.dart';
+import '../../widgets/session_staging_area.dart';
+import '../../widgets/session_bottom_controls.dart';
 
 class SessionScreen extends StatefulWidget {
   const SessionScreen({super.key});
@@ -24,7 +22,6 @@ class SessionScreen extends StatefulWidget {
 class _SessionScreenState extends State<SessionScreen>
     with TickerProviderStateMixin {
   late AnimationController _entryController;
-  late ScrollController _carouselController;
 
   final Map<String, GlobalKey> _avatarKeys = {
     'me': GlobalKey(),
@@ -41,201 +38,105 @@ class _SessionScreenState extends State<SessionScreen>
   final GlobalKey _pileKey = GlobalKey();
   final List<FlyingCard> _flyingCards = [];
   Color? _flashColor;
-  final Map<String, int> _lastKnownCounts = {};
+  final List<Widget> _particles = [];
 
   @override
   void initState() {
     super.initState();
-    _carouselController = ScrollController();
     _entryController = AnimationController(
       vsync: this,
       duration: const Duration(milliseconds: 1200),
     );
-
     _entryController.forward();
   }
 
   @override
   void dispose() {
     _entryController.dispose();
-    _carouselController.dispose();
     super.dispose();
   }
 
-  // Animation State
-  final List<Widget> _particles = []; // Overlay particles for discard effect
-
-  void _triggerPileDiscardEffect() {
-    if (mounted) {
-      setState(() {
-        _particles.add(
-          const ParticleExplosionOverlay(
-            key: ValueKey('discard'),
-            color: Color(0xFFFFD700),
-          ),
-        );
-        _particles.add(
-          Positioned.fill(
-            child: Center(
-              child: TweenAnimationBuilder<double>(
-                tween: Tween(begin: 0.0, end: 1.0),
-                duration: const Duration(milliseconds: 300),
-                builder: (context, value, child) {
-                  return Opacity(
-                    opacity: value,
-                    child: Transform.scale(
-                      scale: 0.5 + (value * 0.5),
-                      child: child,
-                    ),
-                  );
-                },
-                child: const Text(
-                  "PILE DISCARDED",
-                  style: TextStyle(
-                    color: Color(0xFFFFD700),
-                    fontSize: 28,
-                    fontWeight: FontWeight.w900,
-                    letterSpacing: 4,
-                    shadows: [
-                      BoxShadow(
-                        color: Colors.black,
-                        blurRadius: 20,
-                        spreadRadius: 10,
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-            ),
-          ),
-        );
-      });
-
-      Future.delayed(const Duration(seconds: 2), () {
-        if (mounted) {
-          setState(() {
-            _particles.clear();
-          });
-        }
-      });
-    }
-  }
-
-  void _handleGameEvents(SessionEventType event, SessionBlocState state) {
-    debugPrint("===== EVENT RECEIVED: $event =====");
-    if (event == SessionEventType.pileDiscarded) {
-      _triggerPileDiscardEffect();
-    } else if (event == SessionEventType.cardsPlayed) {
-      debugPrint(
-        "Cards played by: ${state.lastEventActorId}, count: ${state.engineState.lastActionText}", // Assuming count is in action text or we need a proper field
-      );
-      // For now, let's assume the handler still has the lastCountClaimed if we need it
-      final count = context.read<SessionBloc>().handler.lastCountClaimed;
-
-      Future.delayed(const Duration(milliseconds: 100), () {
-        if (mounted) {
-          _triggerCardAnimation(
-            sourceId: state.lastEventActorId ?? 'me',
-            targetId: 'pile',
-            count: count,
-          );
-        }
-      });
-    } else if (event == SessionEventType.bluffResolved) {
-      final isSuccess = context.read<SessionBloc>().handler.isBluffSuccessful;
-      _triggerFlash(
-        isSuccess == true
-            ? Colors.green.withValues(alpha: 0.4)
-            : Colors.red.withValues(alpha: 0.4),
-      );
-    }
-  }
-
-  void _triggerFlash(Color color) {
-    if (!mounted) return;
-    setState(() {
-      _flashColor = color;
-    });
-    Future.delayed(const Duration(milliseconds: 600), () {
-      if (mounted) {
-        setState(() {
-          _flashColor = null;
-        });
-      }
-    });
+  Offset _getCenterOffset(GlobalKey key) {
+    final renderBox = key.currentContext?.findRenderObject() as RenderBox?;
+    if (renderBox == null) return Offset.zero;
+    final size = renderBox.size;
+    final position = renderBox.localToGlobal(Offset.zero);
+    return Offset(position.dx + size.width / 2, position.dy + size.height / 2);
   }
 
   void _triggerCardAnimation({
     required String sourceId,
     required String targetId,
-    required int count,
+    int count = 1,
   }) {
     if (!mounted) return;
 
-    // 1. Get Start Position
-    Offset startPos;
-    if (sourceId == 'pile') {
-      if (_pileKey.currentContext == null) {
-        debugPrint("Animation failed: Pile anchor context is null.");
-        return;
-      }
-      final box = _pileKey.currentContext!.findRenderObject() as RenderBox;
-      startPos =
-          box.localToGlobal(Offset.zero) +
-          Offset(box.size.width / 2, box.size.height / 2);
-    } else {
-      final key = _avatarKeys[sourceId];
-      if (key == null || key.currentContext == null) {
-        debugPrint(
-          "Animation failed: Avatar key/context for $sourceId is null.",
+    final sourceKey = sourceId == 'pile' ? _pileKey : _avatarKeys[sourceId];
+    final targetKey = targetId == 'pile' ? _pileKey : _avatarKeys[targetId];
+
+    if (sourceKey == null || targetKey == null) return;
+
+    // Use addPostFrameCallback to ensure keys are rendered
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      final start = _getCenterOffset(sourceKey);
+      final end = _getCenterOffset(targetKey);
+
+      if (start == Offset.zero || end == Offset.zero) return;
+
+      final id =
+          DateTime.now().millisecondsSinceEpoch.toString() +
+          sourceId +
+          targetId;
+      setState(() {
+        _flyingCards.add(
+          FlyingCard(id: id, start: start, end: end, count: count),
         );
-        return;
-      }
-      final box = key.currentContext!.findRenderObject() as RenderBox;
-      startPos =
-          box.localToGlobal(Offset.zero) +
-          Offset(box.size.width / 2, box.size.height / 2);
-    }
+      });
 
-    // 2. Get End Position
-    Offset endPos;
-    if (targetId == 'pile') {
-      if (_pileKey.currentContext == null) {
-        debugPrint("Animation failed: Pile anchor context is null.");
-        return;
-      }
-      final box = _pileKey.currentContext!.findRenderObject() as RenderBox;
-      endPos =
-          box.localToGlobal(Offset.zero) +
-          Offset(box.size.width / 2, box.size.height / 2);
-    } else {
-      final key = _avatarKeys[targetId];
-      if (key == null || key.currentContext == null) {
-        debugPrint(
-          "Animation failed: Avatar key/context for $targetId is null.",
-        );
-        return;
-      }
-      final box = key.currentContext!.findRenderObject() as RenderBox;
-      endPos =
-          box.localToGlobal(Offset.zero) +
-          Offset(box.size.width / 2, box.size.height / 2);
-    }
-
-    debugPrint("Flying $count cards from $sourceId to $targetId");
-
-    setState(() {
-      _flyingCards.add(FlyingCard(start: startPos, end: endPos, count: count));
+      Future.delayed(const Duration(milliseconds: 800), () {
+        if (mounted) {
+          setState(() {
+            _flyingCards.removeWhere((anim) => anim.id == id);
+          });
+        }
+      });
     });
+  }
 
-    // Cleanup after animation duration
-    Future.delayed(const Duration(milliseconds: 800), () {
-      if (mounted) {
-        setState(() {
-          if (_flyingCards.isNotEmpty) _flyingCards.removeAt(0);
-        });
-      }
-    });
+  void _handleGameEvents(SessionEventType event, SessionBlocState state) {
+    debugPrint("SessionScreen: Handling Event -> $event");
+    switch (event) {
+      case SessionEventType.cardsPlayed:
+        if (state.lastEventActorId != null) {
+          _triggerCardAnimation(
+            sourceId: state.lastEventActorId!,
+            targetId: 'pile',
+            count: state.lastEventCardCount,
+          );
+        }
+        break;
+      case SessionEventType.bluffResolved:
+        if (state.lastEventActorId != null) {
+          _triggerCardAnimation(
+            sourceId: 'pile',
+            targetId: state.lastEventActorId!,
+            count: state.lastEventCardCount,
+          );
+        }
+        break;
+      case SessionEventType.cardsDealt:
+        for (var p in state.engineState.participants) {
+          _triggerCardAnimation(
+            sourceId: 'pile',
+            targetId: p.id,
+            count: 4, // Visual representation of deal
+          );
+        }
+        break;
+      default:
+        break;
+    }
   }
 
   @override
@@ -254,42 +155,6 @@ class _SessionScreenState extends State<SessionScreen>
         builder: (context, state) {
           final bloc = context.read<SessionBloc>();
           final handler = bloc.handler;
-          final engineState = state.engineState;
-
-          // --- Card Pickup Detection (State Diffing) ---
-          WidgetsBinding.instance.addPostFrameCallback((_) {
-            if (!mounted) return;
-
-            final totalCards = engineState.participants.fold<int>(
-              0,
-              (sum, p) => sum + p.unitCount,
-            );
-
-            if (totalCards == 0 && engineState.participants.isNotEmpty) {
-              if (_lastKnownCounts.isNotEmpty) {
-                _lastKnownCounts.clear();
-              }
-              return;
-            }
-
-            for (var p in engineState.participants) {
-              final oldCount = _lastKnownCounts[p.id] ?? 0;
-              final newCount = p.unitCount;
-
-              if (newCount > oldCount) {
-                final diff = newCount - oldCount;
-                _triggerCardAnimation(
-                  sourceId: 'pile',
-                  targetId: p.id,
-                  count: diff,
-                );
-              }
-
-              if (newCount != oldCount) {
-                _lastKnownCounts[p.id] = newCount;
-              }
-            }
-          });
 
           return Scaffold(
             backgroundColor: const Color(0xFF121212),
@@ -341,7 +206,7 @@ class _SessionScreenState extends State<SessionScreen>
                               curve: Curves.easeOut,
                             ),
                           ),
-                          child: _buildTopBar(context, state),
+                          child: SessionTopBar(state: state),
                         ),
                       ),
 
@@ -370,7 +235,10 @@ class _SessionScreenState extends State<SessionScreen>
                               curve: Curves.easeOut,
                             ),
                           ),
-                          child: _buildOpponentCarousel(context, state),
+                          child: OpponentCarousel(
+                            state: state,
+                            avatarKeys: _avatarKeys,
+                          ),
                         ),
                       ),
                       const SizedBox(height: 10),
@@ -380,7 +248,6 @@ class _SessionScreenState extends State<SessionScreen>
                         child: Center(
                           child: SingleChildScrollView(
                             child: Stack(
-                              key: _pileKey,
                               clipBehavior: Clip.none,
                               alignment: Alignment.center,
                               children: [
@@ -393,11 +260,9 @@ class _SessionScreenState extends State<SessionScreen>
                                       curve: Curves.elasticOut,
                                     ),
                                   ),
-                                  child: AnimatedSwitcher(
-                                    duration: const Duration(milliseconds: 400),
-                                    child: state.shouldShowRankSelector
-                                        ? _buildRankSelector(context, state)
-                                        : _buildCenterPile(context, state),
+                                  child: GameTableView(
+                                    state: state,
+                                    pileKey: _pileKey,
                                   ),
                                 ),
                               ],
@@ -431,7 +296,10 @@ class _SessionScreenState extends State<SessionScreen>
                               curve: Curves.easeOut,
                             ),
                           ),
-                          child: _buildStagingArea(context, state),
+                          child: SessionStagingArea(
+                            state: state,
+                            myAvatarKey: _avatarKeys['me']!,
+                          ),
                         ),
                       ),
                       const SizedBox(height: 4),
@@ -461,14 +329,18 @@ class _SessionScreenState extends State<SessionScreen>
                               curve: Curves.easeOut,
                             ),
                           ),
-                          child: _buildBottomControls(context, state),
+                          child: SessionBottomControls(
+                            state: state,
+                            myAvatarKey: _avatarKeys['me']!,
+                          ),
                         ),
                       ),
                     ],
                   ),
                 ),
 
-                if (state.engineState.currentPhase == SessionPhase.finished)
+                if (state.engineState.currentPhase ==
+                    engine.SessionPhase.finished)
                   _buildWinOverlay(context, state),
 
                 // Action Overlays (Flying Cards, Badges)
@@ -558,1053 +430,6 @@ class _SessionScreenState extends State<SessionScreen>
           ],
         ),
       ),
-    );
-  }
-
-  Widget _buildTopBar(BuildContext context, SessionBlocState state) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-        children: [
-          _buildCircleButton(Icons.menu, () => _showGameMenu(context, state)),
-          Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              const Text(
-                "BLUFFDEV",
-                style: TextStyle(
-                  color: Colors.white54,
-                  fontSize: 12,
-                  fontWeight: FontWeight.w900,
-                  letterSpacing: 1.5,
-                ),
-              ),
-            ],
-          ),
-          _buildCircleButton(Icons.chat_bubble_outline, () {}),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildOpponentCarousel(BuildContext context, SessionBlocState state) {
-    final participants = state.engineState.participants
-        .where((p) => p.id != 'me')
-        .toList();
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (_carouselController.hasClients) {
-        final activeIdx = participants.indexWhere((p) => p.isActive);
-        if (activeIdx != -1) {
-          const double itemWidth = 85.0;
-          final double screenWidth = MediaQuery.of(context).size.width;
-          final double offset =
-              (activeIdx * itemWidth) - (screenWidth / 2) + (itemWidth / 2);
-          _carouselController.animateTo(
-            offset.clamp(0.0, _carouselController.position.maxScrollExtent),
-            duration: const Duration(milliseconds: 500),
-            curve: Curves.easeInOutCubic,
-          );
-        }
-      }
-    });
-
-    return SizedBox(
-      height: 100,
-      child: ListView.builder(
-        controller: _carouselController,
-        scrollDirection: Axis.horizontal,
-        padding: const EdgeInsets.symmetric(horizontal: 20),
-        itemCount: participants.length,
-        itemBuilder: (context, index) {
-          final p = participants[index];
-          return Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 8),
-            child: ParticipantAvatar(
-              key: _avatarKeys[p.id],
-              participant: p,
-              size: 65,
-            ),
-          );
-        },
-      ),
-    );
-  }
-
-  Widget _buildCenterPile(BuildContext context, SessionBlocState state) {
-    final bloc = context.read<SessionBloc>();
-    final handler = bloc.handler;
-    final currentRank = handler.lastMove?.declaredRank ?? state.stagedRank;
-    final rankName = currentRank?.name.toUpperCase() ?? "???";
-    final isRoundSet = handler.lastMove != null;
-    final roundStatus = isRoundSet ? "${rankName}S" : "WAITING";
-
-    return AnimatedPileView(
-      pileCount: state.engineState.pileCount,
-      roundStatus: roundStatus,
-      onTap: () {
-        if (!isRoundSet && state.isMyTurn) {
-          bloc.add(RankSelectionToggleRequested());
-        }
-      },
-    );
-  }
-
-  Widget _buildRankSelector(BuildContext context, SessionBlocState state) {
-    final bloc = context.read<SessionBloc>();
-    final ranks = UnitRank.values.toList();
-    String getRankSymbol(UnitRank rank) {
-      switch (rank) {
-        case UnitRank.ace:
-          return "A";
-        case UnitRank.jack:
-          return "J";
-        case UnitRank.queen:
-          return "Q";
-        case UnitRank.king:
-          return "K";
-        default:
-          return (rank.index + 1).toString();
-      }
-    }
-
-    return Container(
-      padding: const EdgeInsets.symmetric(vertical: 20, horizontal: 16),
-      margin: const EdgeInsets.symmetric(horizontal: 24),
-      decoration: BoxDecoration(
-        color: Colors.black.withValues(alpha: 0.9),
-        borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: Colors.white12),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.5),
-            blurRadius: 16,
-            spreadRadius: 4,
-          ),
-        ],
-      ),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          const Text(
-            "SELECT ROUND RANK",
-            style: TextStyle(
-              color: Color(0xFFFFD700),
-              fontSize: 14,
-              fontWeight: FontWeight.w900,
-              letterSpacing: 2,
-            ),
-          ),
-          const SizedBox(height: 12),
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 8),
-            child: Wrap(
-              spacing: 8,
-              runSpacing: 8,
-              alignment: WrapAlignment.center,
-              children: ranks.map((rank) {
-                final isStaged = state.stagedRank == rank;
-                return GestureDetector(
-                  onTap: () => bloc.add(RankStaged(rank)),
-                  child: AnimatedContainer(
-                    duration: const Duration(milliseconds: 200),
-                    width: 36,
-                    height: 36,
-                    decoration: BoxDecoration(
-                      color: isStaged
-                          ? const Color(0xFFFFD700)
-                          : const Color(0xFF1E1E1E),
-                      shape: BoxShape.circle,
-                      border: Border.all(
-                        color: isStaged ? Colors.white : Colors.white10,
-                        width: 1.0,
-                      ),
-                    ),
-                    child: Center(
-                      child: Text(
-                        getRankSymbol(rank),
-                        style: TextStyle(
-                          color: isStaged ? Colors.black : Colors.white70,
-                          fontSize: 14,
-                          fontWeight: FontWeight.w900,
-                        ),
-                      ),
-                    ),
-                  ),
-                );
-              }).toList(),
-            ),
-          ),
-          const SizedBox(height: 12),
-          TextButton(
-            onPressed: () => bloc.add(RankSelectionToggleRequested()),
-            child: const Text(
-              "CANCEL",
-              style: TextStyle(color: Colors.white54, fontSize: 12),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildBottomControls(BuildContext context, SessionBlocState state) {
-    final bloc = context.read<SessionBloc>();
-    final selectionCount = state.selectedUnitIds.length;
-    final hasSelection = selectionCount > 0;
-    final isMyTurn = state.isMyTurn;
-    final isRoundSet = bloc.handler.lastMove != null;
-    final canSubmit = state.canSubmit(isRoundSet);
-
-    return Container(
-      decoration: BoxDecoration(
-        gradient: LinearGradient(
-          begin: Alignment.topCenter,
-          end: Alignment.bottomCenter,
-          colors: [
-            Colors.transparent,
-            Colors.black.withValues(alpha: 0.95),
-            Colors.black,
-          ],
-          stops: const [0.0, 0.4, 1.0],
-        ),
-      ),
-      padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          // Anchor for flying cards animation
-          SizedBox(
-            height: 130,
-            child: _buildHandArea(
-              context,
-              state.engineState.myHand
-                  .where((u) => !state.selectedUnitIds.contains(u.id))
-                  .toList(),
-              state,
-            ),
-          ),
-          const SizedBox(height: 8),
-          Row(
-            children: [
-              Expanded(
-                child: SizedBox(
-                  height: 52,
-                  child: OutlinedButton(
-                    onPressed: isMyTurn
-                        ? () => bloc.add(TurnPassRequested())
-                        : null,
-                    style: OutlinedButton.styleFrom(
-                      side: const BorderSide(color: Colors.white24),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                    ),
-                    child: const Text(
-                      "PASS",
-                      style: TextStyle(
-                        color: Colors.white54,
-                        fontWeight: FontWeight.w900,
-                        fontSize: 12,
-                      ),
-                    ),
-                  ),
-                ),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                flex: 2,
-                child: Container(
-                  height: 52,
-                  decoration: BoxDecoration(
-                    borderRadius: BorderRadius.circular(12),
-                    gradient: canSubmit
-                        ? const LinearGradient(
-                            colors: [Color(0xFFFFD700), Color(0xFFFFA000)],
-                          )
-                        : const LinearGradient(
-                            colors: [Color(0xFF2C2C2C), Color(0xFF1A1A1A)],
-                          ),
-                  ),
-                  child: ElevatedButton(
-                    onPressed: canSubmit
-                        ? () => bloc.add(CardsPlayRequested())
-                        : null,
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: Colors.transparent,
-                      shadowColor: Colors.transparent,
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                    ),
-                    child: Text(
-                      hasSelection ? "PLAY $selectionCount" : "PLAY",
-                      style: TextStyle(
-                        color: canSubmit ? Colors.black : Colors.white24,
-                        fontWeight: FontWeight.w900,
-                        fontSize: 16,
-                      ),
-                    ),
-                  ),
-                ),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: SizedBox(
-                  height: 52,
-                  child: ElevatedButton(
-                    onPressed: (isRoundSet && isMyTurn)
-                        ? () => bloc.add(ChallengeRaiseRequested())
-                        : null,
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: isRoundSet
-                          ? const Color(0xFFD32F2F)
-                          : const Color(0xFF1E1E1E),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                      padding: const EdgeInsets.symmetric(horizontal: 8),
-                    ),
-                    child: Text(
-                      "BLUFF",
-                      style: TextStyle(
-                        color: isRoundSet ? Colors.white : Colors.white10,
-                        fontWeight: FontWeight.bold,
-                        fontSize: 12,
-                      ),
-                    ),
-                  ),
-                ),
-              ),
-            ],
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildStagingArea(BuildContext context, SessionBlocState state) {
-    final bloc = context.read<SessionBloc>();
-    final selectedUnits = state.engineState.myHand
-        .where((u) => state.selectedUnitIds.contains(u.id))
-        .toList();
-
-    return SizedBox(
-      key: _avatarKeys['me'],
-      height: 75,
-      child: selectedUnits.isEmpty
-          ? const SizedBox.shrink()
-          : Center(
-              child: Stack(
-                alignment: Alignment.center,
-                children: List.generate(selectedUnits.length, (index) {
-                  final unit = selectedUnits[index];
-                  const double overlap = 30.0;
-                  final double totalWidth =
-                      70 + (selectedUnits.length - 1) * overlap;
-                  final double startX = -(totalWidth / 2) + 35;
-
-                  return Positioned(
-                    left:
-                        (MediaQuery.of(context).size.width / 2) +
-                        startX +
-                        (index * overlap) -
-                        35,
-                    child: UnitCard(
-                      unit: unit,
-                      onTap: () => bloc.add(UnitToggled(unit.id)),
-                      isSelected: true,
-                      width: 50,
-                      height: 70,
-                    ),
-                  );
-                }),
-              ),
-            ),
-    );
-  }
-
-  Widget _buildHandArea(
-    BuildContext context,
-    List<Unit> hand,
-    SessionBlocState state,
-  ) {
-    if (hand.isEmpty) {
-      return const Center(
-        child: Text("EMPTY HAND", style: TextStyle(color: Colors.white24)),
-      );
-    }
-
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        final double width = constraints.maxWidth;
-        const double cardWidth = 70;
-        const double overlap = 25;
-
-        if (hand.length <= 10) {
-          return _buildRowContent(hand, state, width, cardWidth, overlap);
-        } else {
-          final int mid = (hand.length / 2).ceil();
-          final backRow = hand.sublist(0, mid);
-          final frontRow = hand.sublist(mid);
-          return Stack(
-            alignment: Alignment.bottomCenter,
-            children: [
-              Positioned(
-                bottom: 30,
-                child: _buildRowContent(
-                  backRow,
-                  state,
-                  width,
-                  cardWidth,
-                  overlap,
-                ),
-              ),
-              Positioned(
-                bottom: 0,
-                child: _buildRowContent(
-                  frontRow,
-                  state,
-                  width,
-                  cardWidth,
-                  overlap,
-                ),
-              ),
-            ],
-          );
-        }
-      },
-    );
-  }
-
-  Widget _buildRowContent(
-    List<Unit> handSlice,
-    SessionBlocState state,
-    double maxWidth,
-    double cardWidth,
-    double overlap,
-  ) {
-    final bloc = context.read<SessionBloc>();
-    final double scrollWidth = cardWidth + (handSlice.length - 1) * overlap;
-
-    return SizedBox(
-      height: 100,
-      width: maxWidth,
-      child: Center(
-        child: SingleChildScrollView(
-          scrollDirection: Axis.horizontal,
-          child: SizedBox(
-            width: scrollWidth + 40, // padding for drag
-            child: ReorderableListView.builder(
-              scrollDirection: Axis.horizontal,
-              buildDefaultDragHandles: true,
-              itemCount: handSlice.length,
-              onReorder: (oldIndex, newIndex) {
-                bloc.add(HandReorderRequested(oldIndex, newIndex));
-              },
-              proxyDecorator: (child, index, animation) {
-                return AnimatedBuilder(
-                  animation: animation,
-                  builder: (context, child) {
-                    return Transform.scale(
-                      scale: 1.0 + (animation.value * 0.1),
-                      child: Material(color: Colors.transparent, child: child),
-                    );
-                  },
-                  child: child,
-                );
-              },
-              itemBuilder: (context, index) {
-                final unit = handSlice[index];
-                return SizedBox(
-                  key: ValueKey(unit.id),
-                  width: index == handSlice.length - 1 ? cardWidth : overlap,
-                  child: OverflowBox(
-                    maxWidth: cardWidth,
-                    minWidth: cardWidth,
-                    alignment: Alignment.centerLeft,
-                    child: UnitCard(
-                      unit: unit,
-                      isSelected: false,
-                      onTap: () => bloc.add(UnitToggled(unit.id)),
-                      width: cardWidth,
-                      height: 100,
-                    ),
-                  ),
-                );
-              },
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildCircleButton(IconData icon, VoidCallback onTap) {
-    return Container(
-      decoration: const BoxDecoration(
-        color: Color(0xFF1E1E1E),
-        shape: BoxShape.circle,
-      ),
-      child: IconButton(
-        icon: Icon(icon, color: Colors.white70, size: 20),
-        onPressed: onTap,
-      ),
-    );
-  }
-
-  void _showGameMenu(BuildContext context, SessionBlocState state) {
-    final bloc = context.read<SessionBloc>();
-    showModalBottomSheet(
-      context: context,
-      backgroundColor: const Color(0xFF1A1A1A),
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-      ),
-      builder: (context) => Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          const SizedBox(height: 12),
-          Container(
-            width: 40,
-            height: 4,
-            decoration: BoxDecoration(
-              color: Colors.white24,
-              borderRadius: BorderRadius.circular(2),
-            ),
-          ),
-          const SizedBox(height: 24),
-          ListTile(
-            leading: const Icon(Icons.history, color: Color(0xFFFFD700)),
-            title: const Text(
-              "MATCH HISTORY",
-              style: TextStyle(
-                color: Colors.white,
-                fontWeight: FontWeight.bold,
-              ),
-            ),
-            onTap: () {
-              Navigator.pop(context);
-              _showHistory(context);
-            },
-          ),
-          const Divider(color: Colors.white12),
-          ListTile(
-            leading: const Icon(Icons.menu_book, color: Colors.white70),
-            title: const Text(
-              "GAME RULES",
-              style: TextStyle(
-                color: Colors.white,
-                fontWeight: FontWeight.bold,
-              ),
-            ),
-            onTap: () {
-              Navigator.pop(context);
-              _showRules(context);
-            },
-          ),
-          ListTile(
-            leading: const Icon(Icons.sort, color: Colors.blueAccent),
-            title: const Text(
-              "SORT CARDS (ASC)",
-              style: TextStyle(
-                color: Colors.white,
-                fontWeight: FontWeight.bold,
-              ),
-            ),
-            onTap: () {
-              Navigator.pop(context);
-              bloc.add(HandSortRequested());
-            },
-          ),
-          const Divider(color: Colors.white12),
-          ListTile(
-            leading: const Icon(Icons.exit_to_app, color: Colors.redAccent),
-            title: const Text(
-              "EXIT GAME",
-              style: TextStyle(
-                color: Colors.redAccent,
-                fontWeight: FontWeight.bold,
-              ),
-            ),
-            onTap: () {
-              Navigator.of(
-                context,
-              ).pushNamedAndRemoveUntil('/home', (r) => false);
-            },
-          ),
-          const SizedBox(height: 40),
-        ],
-      ),
-    );
-  }
-
-  void _showHistory(BuildContext context) {
-    showModalBottomSheet(
-      context: context,
-      backgroundColor: const Color(0xFF1A1A1A),
-      isScrollControlled: true,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-      ),
-      builder: (context) => DraggableScrollableSheet(
-        initialChildSize: 0.6,
-        minChildSize: 0.4,
-        maxChildSize: 0.9,
-        expand: false,
-        builder: (_, controller) => Column(
-          children: [
-            const SizedBox(height: 12),
-            const Text(
-              "MATCH LOG",
-              style: TextStyle(
-                color: Colors.white54,
-                fontWeight: FontWeight.bold,
-              ),
-            ),
-            const SizedBox(height: 12),
-            Expanded(
-              child: SingleChildScrollView(
-                controller: controller,
-                child: const Padding(
-                  padding: EdgeInsets.all(16.0),
-                  child: Center(
-                    // Re-use HistoryFeed here but unrestricted?
-                    // HistoryFeed is designed to be small and dim.
-                    // We can stick to using HistoryFeed or wrap it.
-                    // Actually, HistoryFeed has fixed height/width.
-                    // We should modify HistoryFeed to be flexible or create a new view.
-                    // For speed, let's just use HistoryFeed but maybe allow it to expand?
-                    // The existing HistoryFeed has fixed size. I'll modify HistoryFeed to be better suited for full view
-                    // OR just let it act as a list source.
-                    // Let's assume for now I will fix HistoryFeed to be responsive or use a custom list here.
-                    // Actually, let's just use a simple list builder here for the log since we have access to provider.
-                    child: _FullHistoryList(),
-                  ),
-                ),
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  void _showRules(BuildContext context) {
-    showModalBottomSheet(
-      context: context,
-      backgroundColor: const Color(0xFF1A1A1A),
-      isScrollControlled: true,
-      builder: (context) => DocViewer(
-        title: "GAME RULES",
-        sections: [
-          DocSection(
-            heading: "Core Rules",
-            bulletPoints: [
-              "Standard 52-card deck. Suits are ignored.",
-              "Play 1-4 cards or Pass.",
-              "Only the NEXT player can call a Bluff.",
-              "Bluff correct (Lie) -> Liar picks pile.",
-              "Bluff wrong (Truth) -> Caller picks pile.",
-            ],
-          ),
-          DocSection(
-            heading: "Pass-Cycle Rule",
-            bulletPoints: [
-              "If everyone passes and turn comes back to the last player:",
-              "1. Entire pile is DISCARDED.",
-              "2. That player starts a NEW round.",
-            ],
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class ParticleExplosionOverlay extends StatefulWidget {
-  final Color color;
-  const ParticleExplosionOverlay({super.key, required this.color});
-
-  @override
-  State<ParticleExplosionOverlay> createState() =>
-      _ParticleExplosionOverlayState();
-}
-
-class _ParticleExplosionOverlayState extends State<ParticleExplosionOverlay>
-    with SingleTickerProviderStateMixin {
-  late AnimationController _controller;
-  final List<_Particle> _particles = [];
-
-  @override
-  void initState() {
-    super.initState();
-    _controller = AnimationController(
-      vsync: this,
-      duration: const Duration(seconds: 1),
-    );
-    for (int i = 0; i < 30; i++) {
-      _particles.add(_Particle());
-    }
-    _controller.forward();
-  }
-
-  @override
-  void dispose() {
-    _controller.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return AnimatedBuilder(
-      animation: _controller,
-      builder: (context, child) {
-        return Stack(
-          children: _particles.map((p) {
-            final progress = _controller.value;
-            final double x =
-                (MediaQuery.of(context).size.width / 2) +
-                (p.dx * progress * 300);
-            final double y =
-                (MediaQuery.of(context).size.height / 2) -
-                50 +
-                (p.dy * progress * 300) +
-                (progress * progress * 150);
-
-            return Positioned(
-              left: x,
-              top: y,
-              child: Opacity(
-                opacity: (1.0 - progress).clamp(0.0, 1.0),
-                child: Container(
-                  width: 6 + (1 - progress) * 4,
-                  height: 6 + (1 - progress) * 4,
-                  decoration: BoxDecoration(
-                    color: widget.color.withValues(alpha: 0.8),
-                    shape: BoxShape.circle,
-                    boxShadow: [
-                      BoxShadow(
-                        color: widget.color.withValues(alpha: 0.5),
-                        blurRadius: 10,
-                        spreadRadius: 2,
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-            );
-          }).toList(),
-        );
-      },
-    );
-  }
-}
-
-class _Particle {
-  late double dx;
-  late double dy;
-  _Particle() {
-    final rnd = dart_math.Random();
-    final angle = rnd.nextDouble() * 2 * dart_math.pi;
-    final speed = 0.3 + rnd.nextDouble() * 0.7;
-    dx = dart_math.cos(angle) * speed;
-    dy = dart_math.sin(angle) * speed;
-  }
-}
-
-class AnimatedPileView extends StatefulWidget {
-  final int pileCount;
-  final String roundStatus;
-  final VoidCallback onTap;
-  const AnimatedPileView({
-    super.key,
-    required this.pileCount,
-    required this.roundStatus,
-    required this.onTap,
-  });
-
-  @override
-  State<AnimatedPileView> createState() => _AnimatedPileViewState();
-}
-
-class _AnimatedPileViewState extends State<AnimatedPileView>
-    with TickerProviderStateMixin {
-  late AnimationController _controller;
-  late AnimationController _pressureController;
-  late Animation<double> _scaleAnimation;
-  late Animation<double> _pressureAnimation;
-  int _prevCount = 0;
-
-  @override
-  void initState() {
-    super.initState();
-    _prevCount = widget.pileCount;
-    _controller = AnimationController(
-      vsync: this,
-      duration: const Duration(milliseconds: 300),
-    );
-    _scaleAnimation = TweenSequence<double>([
-      TweenSequenceItem(tween: Tween(begin: 1.0, end: 1.2), weight: 50),
-      TweenSequenceItem(tween: Tween(begin: 1.2, end: 1.0), weight: 50),
-    ]).animate(CurvedAnimation(parent: _controller, curve: Curves.easeInOut));
-
-    _pressureController = AnimationController(
-      vsync: this,
-      duration: const Duration(seconds: 2),
-    );
-    _pressureAnimation = Tween<double>(
-      begin: 0.0,
-      end: 1.0,
-    ).animate(_pressureController);
-    _pressureController.repeat();
-    _updatePressureSpeed();
-  }
-
-  void _updatePressureSpeed() {
-    // Intensity based on pileCount
-    final speedMultiplier = 1.0 + (widget.pileCount / 10).clamp(0.0, 4.0);
-    _pressureController.duration = Duration(
-      milliseconds: (2000 / speedMultiplier).toInt(),
-    );
-    _pressureController.repeat();
-  }
-
-  @override
-  void didUpdateWidget(AnimatedPileView oldWidget) {
-    super.didUpdateWidget(oldWidget);
-    if (widget.pileCount > _prevCount) {
-      _controller.forward(from: 0.0);
-      _updatePressureSpeed();
-    }
-    _prevCount = widget.pileCount;
-  }
-
-  @override
-  void dispose() {
-    _controller.dispose();
-    _pressureController.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final pressureColor = Color.lerp(
-      const Color(0xFFFFD700),
-      const Color(0xFFD32F2F),
-      (widget.pileCount / 30).clamp(0.0, 1.0),
-    )!;
-
-    return GestureDetector(
-      onTap: widget.onTap,
-      child: Stack(
-        alignment: Alignment.center,
-        children: [
-          // Pressure Ring (Static or Pulsing)
-          if (widget.pileCount > 0)
-            AnimatedBuilder(
-              animation: _pressureAnimation,
-              builder: (context, child) {
-                return Container(
-                  width: 190 + (20 * _pressureAnimation.value),
-                  height: 190 + (20 * _pressureAnimation.value),
-                  decoration: BoxDecoration(
-                    shape: BoxShape.circle,
-                    border: Border.all(
-                      color: pressureColor.withValues(
-                        alpha: 0.3 * (1 - _pressureAnimation.value),
-                      ),
-                      width: 4,
-                    ),
-                  ),
-                );
-              },
-            ),
-          ScaleTransition(
-            scale: _scaleAnimation,
-            child: Stack(
-              alignment: Alignment.center,
-              children: [
-                Container(
-                  width: 140,
-                  height: 180,
-                  decoration: BoxDecoration(
-                    color: Colors.white10,
-                    borderRadius: BorderRadius.circular(12),
-                    border: Border.all(
-                      color: widget.pileCount > 0
-                          ? pressureColor
-                          : Colors.white24,
-                      width: 2,
-                    ),
-                    boxShadow: [
-                      BoxShadow(
-                        color: pressureColor.withValues(alpha: 0.2),
-                        blurRadius: 15,
-                        spreadRadius: 2,
-                      ),
-                    ],
-                  ),
-                  child: Center(
-                    child: Padding(
-                      padding: const EdgeInsets.only(top: 8),
-                      child: Icon(
-                        Icons.style,
-                        size: 60,
-                        color: Colors.white.withValues(alpha: 0.1),
-                      ),
-                    ),
-                  ),
-                ),
-                if (widget.pileCount > 1)
-                  ...List.generate(
-                    dart_math.min(widget.pileCount, 5),
-                    (i) => Positioned(
-                      top: i * 2.0,
-                      left: i * 2.0,
-                      child: Container(
-                        width: 140,
-                        height: 180,
-                        decoration: BoxDecoration(
-                          color: Colors.white.withValues(alpha: 0.05),
-                          borderRadius: BorderRadius.circular(12),
-                          border: Border.all(color: Colors.white10, width: 1),
-                        ),
-                      ),
-                    ),
-                  ),
-                Positioned(
-                  top: 20,
-                  child: ShaderMask(
-                    shaderCallback: (bounds) => const LinearGradient(
-                      colors: [
-                        Color(0xFFFFD700),
-                        Color(0xFFFFECB3),
-                        Color(0xFFB8860B),
-                      ],
-                    ).createShader(bounds),
-                    child: Text(
-                      widget.roundStatus.toUpperCase(),
-                      style: const TextStyle(
-                        color: Colors.white,
-                        fontSize: 16,
-                        fontWeight: FontWeight.w900,
-                        letterSpacing: 1.5,
-                      ),
-                    ),
-                  ),
-                ),
-                // "PILE" label in Bottom Right
-                Positioned(
-                  bottom: 15,
-                  right: 15,
-                  child: Text(
-                    'PILE',
-                    style: TextStyle(
-                      color: pressureColor.withValues(alpha: 0.5),
-                      fontSize: 8,
-                      fontWeight: FontWeight.bold,
-                      letterSpacing: 1,
-                    ),
-                  ),
-                ),
-                // Pile Count (Number) in Bottom Middle
-                Positioned(
-                  bottom: 12,
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 12,
-                      vertical: 4,
-                    ),
-                    decoration: BoxDecoration(
-                      color: Colors.black54,
-                      shape: BoxShape.circle,
-                      border: Border.all(
-                        color: pressureColor.withValues(alpha: 0.3),
-                        width: 1,
-                      ),
-                    ),
-                    child: AnimatedSwitcher(
-                      duration: const Duration(milliseconds: 300),
-                      transitionBuilder: (child, anim) =>
-                          ScaleTransition(scale: anim, child: child),
-                      child: Text(
-                        '${widget.pileCount}',
-                        key: ValueKey(widget.pileCount),
-                        style: TextStyle(
-                          color: pressureColor,
-                          fontSize: 24,
-                          fontWeight: FontWeight.w900,
-                        ),
-                      ),
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _FullHistoryList extends StatelessWidget {
-  const _FullHistoryList();
-
-  @override
-  Widget build(BuildContext context) {
-    return BlocBuilder<SessionBloc, SessionBlocState>(
-      builder: (context, state) {
-        final bloc = context.read<SessionBloc>();
-        final logs = bloc.handler.gameLog;
-        if (logs.isEmpty) {
-          return const Center(
-            child: Text(
-              "NO RECORDS YET",
-              style: TextStyle(color: Colors.white24, fontSize: 12),
-            ),
-          );
-        }
-
-        return ListView.builder(
-          shrinkWrap: true,
-          physics: const NeverScrollableScrollPhysics(),
-          itemCount: logs.length,
-          itemBuilder: (context, index) {
-            return Padding(
-              padding: const EdgeInsets.only(bottom: 12),
-              child: Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Container(
-                    margin: const EdgeInsets.only(top: 6),
-                    width: 6,
-                    height: 6,
-                    decoration: const BoxDecoration(
-                      color: Color(0xFFFFD700),
-                      shape: BoxShape.circle,
-                    ),
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: Text(
-                      logs[index],
-                      style: TextStyle(
-                        color: index == 0 ? Colors.white : Colors.white70,
-                        fontSize: 14,
-                        fontWeight: index == 0
-                            ? FontWeight.bold
-                            : FontWeight.normal,
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            );
-          },
-        );
-      },
     );
   }
 }

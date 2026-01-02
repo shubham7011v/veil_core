@@ -14,6 +14,7 @@ class SessionBlocState extends Equatable {
   // -- Event State for Animations --
   final SessionEventType lastEvent;
   final String? lastEventActorId;
+  final int lastEventCardCount;
 
   const SessionBlocState({
     required this.engineState,
@@ -22,6 +23,7 @@ class SessionBlocState extends Equatable {
     required this.isSelectingRank,
     required this.lastEvent,
     this.lastEventActorId,
+    this.lastEventCardCount = 0,
   });
 
   factory SessionBlocState.initial() => SessionBlocState(
@@ -38,6 +40,7 @@ class SessionBlocState extends Equatable {
     bool? isSelectingRank,
     SessionEventType? lastEvent,
     String? lastEventActorId,
+    int? lastEventCardCount,
     bool clearStagedRank = false,
   }) {
     return SessionBlocState(
@@ -47,6 +50,7 @@ class SessionBlocState extends Equatable {
       isSelectingRank: isSelectingRank ?? this.isSelectingRank,
       lastEvent: lastEvent ?? this.lastEvent,
       lastEventActorId: lastEventActorId ?? this.lastEventActorId,
+      lastEventCardCount: lastEventCardCount ?? this.lastEventCardCount,
     );
   }
 
@@ -69,5 +73,6 @@ class SessionBlocState extends Equatable {
     isSelectingRank,
     lastEvent,
     lastEventActorId,
+    lastEventCardCount,
   ];
 }

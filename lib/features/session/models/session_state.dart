@@ -1,3 +1,4 @@
+import 'package:equatable/equatable.dart';
 import 'participant.dart';
 import 'unit.dart';
 
@@ -8,7 +9,7 @@ enum SessionPhase {
   finished,
 }
 
-class SessionState {
+class SessionState extends Equatable {
   final String roomId;
   final List<Participant> participants;
   final List<Unit> myHand;
@@ -18,7 +19,7 @@ class SessionState {
   final String? lastActionText; // e.g. "Rahul played 2 Units"
   final String? winnerId;
 
-  SessionState({
+  const SessionState({
     required this.roomId,
     required this.participants,
     required this.myHand,
@@ -28,6 +29,18 @@ class SessionState {
     this.lastActionText,
     this.winnerId,
   });
+
+  @override
+  List<Object?> get props => [
+    roomId,
+    participants,
+    myHand,
+    pileCount,
+    currentPhase,
+    activeParticipantId,
+    lastActionText,
+    winnerId,
+  ];
 
   // Factory for initial/empty state
   factory SessionState.initial() {

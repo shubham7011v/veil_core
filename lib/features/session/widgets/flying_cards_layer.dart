@@ -2,13 +2,18 @@ import 'package:flutter/material.dart';
 import 'dart:math' as math;
 
 class FlyingCard {
+  final String id;
   final Offset start;
   final Offset end;
   final int count;
   final DateTime startTime;
 
-  FlyingCard({required this.start, required this.end, required this.count})
-    : startTime = DateTime.now();
+  FlyingCard({
+    required this.id,
+    required this.start,
+    required this.end,
+    required this.count,
+  }) : startTime = DateTime.now();
 }
 
 class FlyingCardsLayer extends StatefulWidget {
@@ -34,6 +39,7 @@ class _FlyingCardsLayerState extends State<FlyingCardsLayer>
     return Stack(
       children: widget.activeAnimations.map((anim) {
         return _FlyingCardAnimation(
+          key: ValueKey(anim.id),
           anim: anim,
           onComplete: () {
             // We'll let the parent handle removal
@@ -48,7 +54,11 @@ class _FlyingCardAnimation extends StatefulWidget {
   final FlyingCard anim;
   final VoidCallback onComplete;
 
-  const _FlyingCardAnimation({required this.anim, required this.onComplete});
+  const _FlyingCardAnimation({
+    super.key,
+    required this.anim,
+    required this.onComplete,
+  });
 
   @override
   State<_FlyingCardAnimation> createState() => _FlyingCardAnimationState();

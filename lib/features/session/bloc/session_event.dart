@@ -69,9 +69,10 @@ class EngineStateUpdated extends SessionEvent {
 class EngineEventReceived extends SessionEvent {
   final SessionEventType type;
   final String? actorId;
+  final int cardCount;
 
-  const EngineEventReceived(this.type, this.actorId);
+  const EngineEventReceived(this.type, this.actorId, {this.cardCount = 0});
 
   @override
-  List<Object?> get props => [type, actorId];
+  List<Object?> get props => [type, actorId, cardCount];
 }
