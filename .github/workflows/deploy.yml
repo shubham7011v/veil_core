@@ -1,0 +1,139 @@
+name: Veil CI/CD
+
+on:
+  push:
+    branches: [ "main" ]
+    tags: [ "v*-internal", "v*-alpha", "v*-beta", "v*-prod" ]
+  pull_request:
+    branches: [ "main" ]
+
+env:
+  FLUTTER_VERSION: "3.24.0" # Updated to match your latest env
+  JAVA_VERSION: "17"
+
+jobs:
+  test:
+    name: Run Tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: ${{ env.JAVA_VERSION }}
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          channel: 'stable'
+          cache: true
+      
+      - name: Install dependencies
+        run: flutter pub get
+
+      - name: Analyze
+        run: flutter analyze
+
+      - name: Run Tests
+        run: flutter test
+
+  build-dev:
+    name: Build Dev APK
+    needs: test
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: ${{ env.JAVA_VERSION }}
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          channel: 'stable'
+          cache: true
+
+      - name: Install dependencies
+        run: flutter pub get
+
+      - name: Setup Keystore
+        run: |
+          echo "${{ secrets.KEYSTORE_BASE64 }}" | base64 --decode > android/app/upload-keystore.jks
+          echo "storeFile=upload-keystore.jks" > android/key.properties
+          echo "storePassword=${{ secrets.KEYSTORE_PASSWORD }}" >> android/key.properties
+          echo "keyPassword=${{ secrets.KEY_PASSWORD }}" >> android/key.properties
+          echo "keyAlias=${{ secrets.KEY_ALIAS }}" >> android/key.properties
+
+      - name: Build APK (Dev)
+        run: flutter build apk --flavor dev -t lib/main_dev.dart --release
+
+      - name: Upload Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: dev-release-apk
+          path: build/app/outputs/flutter-apk/app-dev-release.apk
+
+  deploy-play-store:
+    name: Deploy to Play Store
+    needs: test
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Set Track and Status
+        id: vars
+        run: |
+          TAG=${GITHUB_REF#refs/tags/}
+          if [[ $TAG == *"internal"* ]]; then
+            echo "track=internal" >> $GITHUB_OUTPUT
+            echo "status=completed" >> $GITHUB_OUTPUT
+          elif [[ $TAG == *"alpha"* ]]; then
+            echo "track=alpha" >> $GITHUB_OUTPUT
+            echo "status=completed" >> $GITHUB_OUTPUT
+          elif [[ $TAG == *"beta"* ]]; then
+            echo "track=beta" >> $GITHUB_OUTPUT
+            echo "status=completed" >> $GITHUB_OUTPUT
+          elif [[ $TAG == *"prod"* ]]; then
+            echo "track=production" >> $GITHUB_OUTPUT
+            echo "status=draft" >> $GITHUB_OUTPUT
+          else
+            echo "Unknown tag format"
+            exit 1
+          fi
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: ${{ env.JAVA_VERSION }}
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          channel: 'stable'
+          cache: true
+
+      - name: Install dependencies
+        run: flutter pub get
+
+      - name: Setup Keystore
+        run: |
+          echo "${{ secrets.KEYSTORE_BASE64 }}" | base64 --decode > android/app/upload-keystore.jks
+          echo "storeFile=upload-keystore.jks" > android/key.properties
+          echo "storePassword=${{ secrets.KEYSTORE_PASSWORD }}" >> android/key.properties
+          echo "keyPassword=${{ secrets.KEY_PASSWORD }}" >> android/key.properties
+          echo "keyAlias=${{ secrets.KEY_ALIAS }}" >> android/key.properties
+
+      - name: Build App Bundle (Prod)
+        run: flutter build appbundle --flavor prod -t lib/main_prod.dart --release
+
+      - name: Create Service Account
+        run: echo "${{ secrets.GOOGLE_SERVICES_JSON }}" | base64 --decode > service-account.json
+
+      - name: Upload to Play Store
+        uses: r0adkll/upload-google-play@v1
+        with:
+          serviceAccountJson: service-account.json
+          packageName: com.veil.bluff
+          releaseFiles: build/app/outputs/bundle/prodRelease/app-prod-release.aab
+          track: ${{ steps.vars.outputs.track }}
+          status: ${{ steps.vars.outputs.status }}

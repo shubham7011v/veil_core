@@ -6,13 +6,20 @@
 // tree, read text, and verify that the values of widget properties are correct.
 
 import 'package:flutter_test/flutter_test.dart';
-
-import 'package:veil_core/main.dart';
+import 'package:veil_core/config/app_config.dart';
+import 'package:veil_core/main_common.dart';
 
 void main() {
   testWidgets('Login screen smoke test', (WidgetTester tester) async {
+    final testConfig = AppConfig(
+      environment: Environment.dev,
+      appName: 'Veil Test',
+      apiBaseUrl: 'https://test-api.veil.game',
+      enableLogs: true,
+    );
+
     // Build our app and trigger a frame.
-    await tester.pumpWidget(const VeilApp());
+    await tester.pumpWidget(VeilApp(config: testConfig));
 
     // Verify that the login screen is displayed.
     expect(find.text('Welcome to the\nRoyal Court'), findsOneWidget);

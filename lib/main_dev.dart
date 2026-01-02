@@ -2,13 +2,12 @@ import 'config/app_config.dart';
 import 'main_common.dart';
 
 void main() {
-  // Default to Dev config if run without target
-  final defaultConfig = AppConfig(
+  final devConfig = AppConfig(
     environment: Environment.dev,
     appName: 'Veil Dev',
-    apiBaseUrl: 'https://dev-api.veil.game',
+    apiBaseUrl: 'https://dev-api.veil.game', // Placeholder
     enableLogs: true,
   );
 
-  mainCommon(defaultConfig);
+  mainCommon(devConfig);
 }
