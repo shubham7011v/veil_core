@@ -11,6 +11,7 @@ import 'features/lobby/ui/create_room_screen.dart';
 import 'features/settings/ui/settings_screen.dart';
 import 'features/rules/ui/rules_screen.dart';
 import 'features/collection/ui/deck_collection_screen.dart';
+import 'features/session/ui/screens/bot_settings_screen.dart';
 
 void main() {
   runApp(const VeilApp());
@@ -38,6 +39,7 @@ class VeilApp extends StatelessWidget {
           '/lobby': (context) =>
               const LobbyWrapper(), // Wrapped to inject real data if needed
           '/session': (context) => const SessionScreen(),
+          '/bot_settings': (context) => const BotSettingsScreen(),
         },
       ),
     );

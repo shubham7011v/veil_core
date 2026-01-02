@@ -12,7 +12,7 @@ class RulesScreen extends StatelessWidget {
       backgroundColor: AppColors.background,
       appBar: AppBar(
         title: const Text(
-          'ROYAL PROTOCOL',
+          'BLUFF (Indian Style) v1',
           style: TextStyle(
             fontWeight: FontWeight.bold,
             letterSpacing: 1.0,
@@ -47,46 +47,45 @@ class RulesScreen extends StatelessWidget {
                 child: Column(
                   children: [
                     _buildRuleItem(
-                      'The Objective',
-                      Icons.flag,
-                      'Your goal is simple yet treacherous: be the first player to discard all your cards. Place them face down into the center pile and declare their rank. But beware—honesty is merely a suggestion in the royal court.',
+                      'Game Setup',
+                      Icons.settings_suggest,
+                      '• Players: 2 to 10\n• Deck: Standard 52 cards\n• Suits: ❌ Ignored (Only Rank matters)\n• Distributed: Equally\n• Winner: First to reach 0 cards',
                       isExpanded: true,
                     ),
                     const SizedBox(height: AppDimens.paddingM),
                     _buildRuleItem(
-                      'The Deal',
-                      Icons.style,
-                      'All cards are distributed evenly among participants. Ace is highest rank. A standard 52-card deck is used.',
+                      'Game Start',
+                      Icons.play_circle_outline,
+                      '• First player: Winner of previous game.\n• At start: ❌ No rank selected.\n• First player plays 1–4 cards and declares a rank.',
                     ),
                     const SizedBox(height: AppDimens.paddingM),
                     _buildRuleItem(
-                      'Card Rankings',
-                      Icons.military_tech,
-                      'A > K > Q > J > 10... > 2. Aces are traditionally high.',
+                      'Turn Rules',
+                      Icons.swap_horiz,
+                      'On your turn, you can:\n• Play 1–4 cards face-down and declare a rank.\n• Pass (keeps bluff opportunity alive for others).',
                     ),
                     const SizedBox(height: AppDimens.paddingM),
                     _buildRuleItem(
-                      'How to Bluff',
-                      Icons.visibility_off,
-                      'You may declare any rank, regardless of the actual cards you play. However, you must play as many cards as you declared.',
+                      'Pass-Cycle End (Key Rule)',
+                      Icons.loop,
+                      'If ALL players pass and the turn returns to the one who last played:\n• 🗑️ Entire pile is DISCARDED.\n• 🔄 Round ends.\n• 🎴 Same player starts next round with a new rank.',
                     ),
                     const SizedBox(height: AppDimens.paddingM),
                     _buildRuleItem(
-                      'Calling a Bluff',
+                      'Bluff Rules',
                       Icons.gavel,
-                      'If you suspect deception, you may "Challenge" the previous play when it becomes your turn. Only the immediate next player in rotation has the right to challenge. If they lied, they pick up the pile. If they told the truth, you pick up the pile.',
+                      '• Only the next player in order can call Bluff.\n• Applies only to the LAST played cards.\n• Correct Bluff (Lie): Liar picks up pile.\n• Wrong Bluff (Truth): Caller picks up pile.',
                     ),
                     const SizedBox(height: AppDimens.paddingM),
                     _buildRuleItem(
-                      'Victory',
-                      Icons.emoji_events,
-                      'The first to have 0 cards wins. Points are awarded based on finishing order.',
+                      'After Bluff Resolution',
+                      Icons.restart_alt,
+                      '• 🔄 Rank resets.\n• 🆕 New round starts.\n• ▶️ Turn goes to the WINNER of the challenge.',
                     ),
                   ],
                 ),
               ),
             ),
-
             Padding(
               padding: const EdgeInsets.all(AppDimens.paddingM),
               child: SizedBox(
@@ -141,11 +140,14 @@ class RulesScreen extends StatelessWidget {
             AppDimens.paddingM,
           ),
           children: [
-            Text(
-              content,
-              style: const TextStyle(
-                color: AppColors.textSecondary,
-                height: 1.5,
+            Align(
+              alignment: Alignment.centerLeft,
+              child: Text(
+                content,
+                style: const TextStyle(
+                  color: AppColors.textSecondary,
+                  height: 1.5,
+                ),
               ),
             ),
           ],

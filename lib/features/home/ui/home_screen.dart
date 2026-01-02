@@ -134,8 +134,7 @@ class HomeScreen extends StatelessWidget {
                       'PLAY WITH BOT',
                       Icons.smart_toy,
                       () {
-                        // TODO: Initialize bot session
-                        Navigator.pushNamed(context, '/session');
+                        Navigator.pushNamed(context, '/bot_settings');
                       },
                     ),
                     SizedBox(height: Responsive.h(AppDimens.paddingM)),

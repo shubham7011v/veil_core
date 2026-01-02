@@ -5,6 +5,8 @@ import '../models/participant.dart';
 import '../models/session_state.dart';
 import '../models/unit.dart';
 
+enum BotPersonality { conservative, aggressive, balanced, ghost }
+
 class SessionProvider extends ChangeNotifier {
   SessionState _state = SessionState.initial();
   SessionState get state => _state;
@@ -35,6 +37,13 @@ class SessionProvider extends ChangeNotifier {
   bool get isMyTurn => state.activeParticipantId == 'me';
   int get pileCount => _pile.length;
 
+  // -- Game Logic Internals --
+  final Map<String, List<Unit>> _hands = {};
+  final Map<String, BotPersonality> _botPersonalities = {};
+  String? _lastPlayedById;
+  int _passCount = 0;
+  int _botThinkingTimeS = 10; // Default 10s
+
   // Names map for bots
   final Map<String, String> pNames = {
     'me': 'You',
@@ -50,7 +59,7 @@ class SessionProvider extends ChangeNotifier {
   };
 
   SessionProvider() {
-    _startNewGame(5); // Default to 5 players as requested (~middle of 2-10)
+    _startNewGame(5); // Initial default
   }
 
   // ---------------------------------------------------------------------------
@@ -64,6 +73,8 @@ class SessionProvider extends ChangeNotifier {
     _stagedRank = null;
     _isSelectingRank = false;
     _selectedUnitIds.clear();
+    _lastPlayedById = null;
+    _passCount = 0;
 
     final deck = _generateDeck();
     deck.shuffle();
@@ -101,10 +112,34 @@ class SessionProvider extends ChangeNotifier {
       );
     }).toList();
 
+    _hands.clear();
+    _botPersonalities.clear();
+
+    // Assign Personalities
+    final personalities = [
+      BotPersonality.conservative, // p1: Rahul
+      BotPersonality.aggressive, // p2: Priya
+      BotPersonality.balanced, // p3: Amit
+      BotPersonality.ghost, // p4: Soniya
+      BotPersonality.balanced, // p5
+      BotPersonality.conservative, // p6
+      BotPersonality.aggressive, // p7
+      BotPersonality.balanced, // p8
+      BotPersonality.ghost, // p9
+    ];
+
+    for (int i = 0; i < pIds.length; i++) {
+      final id = pIds[i];
+      _hands[id] = hands[id]!;
+      if (id != 'me') {
+        _botPersonalities[id] = personalities[(i - 1) % personalities.length];
+      }
+    }
+
     _state = _state.copyWith(
       roomId: '101',
       participants: participants,
-      myHand: hands['me']!,
+      myHand: _hands['me']!,
       currentPhase: SessionPhase.thinking,
       activeParticipantId: 'me',
       pileCount: 0,
@@ -176,11 +211,13 @@ class SessionProvider extends ChangeNotifier {
 
   void passTurn() {
     if (!isMyTurn) return;
+    _passCount++;
     _advanceTurn();
   }
 
-  void startSession() {
-    _startNewGame(5);
+  void startSession({int playerCount = 5, int thinkingTimeS = 10}) {
+    _botThinkingTimeS = thinkingTimeS;
+    _startNewGame(playerCount);
   }
 
   void raiseChallenge() {
@@ -205,19 +242,31 @@ class SessionProvider extends ChangeNotifier {
 
     _distributePileTo(loserId);
 
-    // Reset Round
+    // After Bluff Resolution: Round Resets
     _currentRank = null;
     _lastMove = null;
     _stagedRank = null;
+    _lastPlayedById = null;
+    _passCount = 0;
+
+    // Next turn goes to the winner of the challenge
+    final winnerId = wasBluff ? challengerId : blufferId;
+    final nextId = winnerId;
+
+    final updatedParticipants = _state.participants.map((p) {
+      return p.copyWith(isActive: p.id == nextId);
+    }).toList();
 
     _state = _state.copyWith(
       lastActionText: resultText,
-      activeParticipantId: loserId, // Loser starts new round
+      activeParticipantId: nextId,
+      participants: updatedParticipants,
+      pileCount: 0,
     );
     notifyListeners();
 
-    if (loserId != 'me') {
-      _scheduleBotTurn(loserId);
+    if (nextId != 'me') {
+      _scheduleBotTurn(nextId);
     }
   }
 
@@ -227,6 +276,8 @@ class SessionProvider extends ChangeNotifier {
 
   void _executeMove(String playerId, List<Unit> units, UnitRank declaredRank) {
     _pile.addAll(units);
+    _lastPlayedById = playerId;
+    _passCount = 0;
 
     _lastMove = _GameMove(
       playerId: playerId,
@@ -234,9 +285,11 @@ class SessionProvider extends ChangeNotifier {
       actualUnits: units,
     );
 
+    // Remove cards from player's hand
+    _hands[playerId]!.removeWhere((u) => units.contains(u));
+
     if (playerId == 'me') {
-      final newHand = _state.myHand.where((u) => !units.contains(u)).toList();
-      _state = _state.copyWith(myHand: newHand);
+      _state = _state.copyWith(myHand: _hands['me']!);
     }
 
     final updatedParticipants = _state.participants.map((p) {
@@ -276,6 +329,35 @@ class SessionProvider extends ChangeNotifier {
     final nextIdx = (currentIdx + 1) % pIds.length;
     final nextId = pIds[nextIdx];
 
+    // PASS-CYCLE END RULE
+    // If turn comes back to the player who last played and everyone passed
+    if (nextId == _lastPlayedById && _passCount >= pIds.length - 1) {
+      _pile.clear();
+      _currentRank = null;
+      _lastMove = null;
+      _stagedRank = null;
+      _lastPlayedById = null;
+      _passCount = 0;
+
+      final updatedParticipants = _state.participants.map((p) {
+        return p.copyWith(isActive: p.id == nextId);
+      }).toList();
+
+      _state = _state.copyWith(
+        participants: updatedParticipants,
+        activeParticipantId: nextId,
+        pileCount: 0,
+        lastActionText:
+            "Everyone passed! Pile discarded. ${pNames[nextId]} starts new round.",
+      );
+      notifyListeners();
+
+      if (nextId != 'me') {
+        _scheduleBotTurn(nextId);
+      }
+      return;
+    }
+
     final updatedParticipants = _state.participants.map((p) {
       return p.copyWith(isActive: p.id == nextId);
     }).toList();
@@ -292,14 +374,15 @@ class SessionProvider extends ChangeNotifier {
   }
 
   void _distributePileTo(String playerId) {
+    _hands[playerId]!.addAll(_pile);
+
     if (playerId == 'me') {
-      final currentHand = [..._state.myHand, ..._pile];
-      _state = _state.copyWith(myHand: currentHand);
+      _state = _state.copyWith(myHand: _hands['me']!);
     }
 
     final updatedParticipants = _state.participants.map((p) {
       if (p.id == playerId) {
-        return p.copyWith(unitCount: p.unitCount + _pile.length);
+        return p.copyWith(unitCount: _hands[playerId]!.length);
       }
       return p;
     }).toList();
@@ -318,44 +401,97 @@ class SessionProvider extends ChangeNotifier {
   // ---------------------------------------------------------------------------
 
   void _scheduleBotTurn(String botId) async {
-    await Future.delayed(const Duration(milliseconds: 1500));
+    await Future.delayed(Duration(seconds: _botThinkingTimeS));
+    final personality = _botPersonalities[botId] ?? BotPersonality.balanced;
 
     // 1. Chance to Challenge
     if (_lastMove != null && _lastMove!.playerId != botId) {
-      if (Random().nextDouble() < 0.2) {
+      double challengeChance = 0.15;
+      if (personality == BotPersonality.aggressive) challengeChance = 0.35;
+      if (personality == BotPersonality.conservative) {
+        challengeChance = _pile.length > 8 ? 0.25 : 0.05;
+      }
+
+      if (Random().nextDouble() < challengeChance) {
         raiseChallenge();
         return;
       }
     }
 
-    // 2. Play
-    _currentRank ??= UnitRank.values[Random().nextInt(UnitRank.values.length)];
-
-    final int cardsToPlay = Random().nextInt(2) + 1;
-    final bool isBluff = Random().nextDouble() > 0.7;
-
-    List<Unit> botUnits;
-    if (isBluff) {
-      botUnits = List.generate(
-        cardsToPlay,
-        (_) => Unit(
-          id: 'bot_${DateTime.now().millisecondsSinceEpoch}',
-          type: UnitType.spades,
-          rank: _currentRank == UnitRank.ace ? UnitRank.king : UnitRank.ace,
-        ),
-      );
+    // 2. Play Decisions
+    if (_currentRank == null) {
+      // Starting a new round: pick a rank the bot actually has if possible
+      if (_hands[botId]!.isNotEmpty) {
+        _currentRank =
+            _hands[botId]![Random().nextInt(_hands[botId]!.length)].rank;
+      } else {
+        _currentRank =
+            UnitRank.values[Random().nextInt(UnitRank.values.length)];
+      }
     } else {
-      botUnits = List.generate(
-        cardsToPlay,
-        (_) => Unit(
-          id: 'bot_${DateTime.now().millisecondsSinceEpoch}',
-          type: UnitType.hearts,
-          rank: _currentRank!,
-        ),
-      );
+      // Bot chance to pass
+      double passChance = 0.15;
+      if (personality == BotPersonality.ghost) passChance = 0.45;
+      if (personality == BotPersonality.conservative) passChance = 0.25;
+
+      if (Random().nextDouble() < passChance) {
+        _passCount++;
+        _advanceTurn();
+        return;
+      }
     }
 
-    _executeMove(botId, botUnits, _currentRank!);
+    final botHand = _hands[botId]!;
+    if (botHand.isEmpty) return;
+
+    final matchingCards = botHand.where((u) => u.rank == _currentRank).toList();
+    List<Unit> botUnitsToPlay = [];
+
+    // Personality Based Play
+    if (personality == BotPersonality.aggressive) {
+      // Aggressive: Play many if matching, or bluff big
+      if (matchingCards.isNotEmpty && Random().nextDouble() > 0.2) {
+        final count = min(matchingCards.length, 4);
+        botUnitsToPlay = matchingCards.sublist(0, count);
+      } else {
+        // Bluff big
+        final count = min(botHand.length, 3);
+        final shuffledHand = [...botHand]..shuffle();
+        botUnitsToPlay = shuffledHand.sublist(0, count);
+      }
+    } else if (personality == BotPersonality.conservative) {
+      // Conservative: Play 1 if matching, rarely bluff
+      if (matchingCards.isNotEmpty) {
+        botUnitsToPlay = [matchingCards.first];
+      } else if (Random().nextDouble() < 0.1) {
+        // Very rare bluff
+        botUnitsToPlay = [botHand[Random().nextInt(botHand.length)]];
+      } else {
+        // Just pass instead of bluffing if unsure
+        _passCount++;
+        _advanceTurn();
+        return;
+      }
+    } else {
+      // Balanced / Ghost
+      if (matchingCards.isNotEmpty && Random().nextDouble() > 0.4) {
+        final count = min(matchingCards.length, Random().nextInt(2) + 1);
+        botUnitsToPlay = matchingCards.sublist(0, count);
+      } else {
+        // Bluff moderate
+        final count = min(botHand.length, Random().nextInt(2) + 1);
+        final shuffledHand = [...botHand]..shuffle();
+        botUnitsToPlay = shuffledHand.sublist(0, count);
+      }
+    }
+
+    if (botUnitsToPlay.isEmpty) {
+      _passCount++;
+      _advanceTurn();
+      return;
+    }
+
+    _executeMove(botId, botUnitsToPlay, _currentRank!);
   }
 }
 

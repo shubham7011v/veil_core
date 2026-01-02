@@ -729,18 +729,21 @@ class _SessionScreenState extends State<SessionScreen>
         title: "GAME RULES",
         sections: [
           DocSection(
-            heading: "Objective",
-            bulletPoints: ["Be the first to finish your cards."],
+            heading: "Core Rules",
+            bulletPoints: [
+              "Standard 52-card deck. Suits are ignored.",
+              "Play 1-4 cards or Pass.",
+              "Only the NEXT player can call a Bluff.",
+              "Bluff correct (Lie) -> Liar picks pile.",
+              "Bluff wrong (Truth) -> Caller picks pile.",
+            ],
           ),
           DocSection(
-            heading: "Rules",
+            heading: "Pass-Cycle Rule",
             bulletPoints: [
-              "Standard 52-card deck is used.",
-              "Select cards from your hand and declare a rank.",
-              "Bluff if you don't have the cards—but don't get caught!",
-              "Only the next player in rotation can challenge a bluff.",
-              "If caught bluffing, you pick up the entire pile.",
-              "If a challenge is false, the challenger picks up the pile.",
+              "If everyone passes and turn comes back to the last player:",
+              "1. Entire pile is DISCARDED.",
+              "2. That player starts a NEW round.",
             ],
           ),
         ],
