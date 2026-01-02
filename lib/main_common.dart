@@ -45,7 +45,7 @@ class VeilApp extends StatelessWidget {
       ],
       child: MaterialApp(
         title: config.appName,
-        debugShowCheckedModeBanner: false,
+        debugShowCheckedModeBanner: config.isDev,
         theme: AppTheme.darkTheme,
         initialRoute: '/login', // Start at Login
         routes: {
