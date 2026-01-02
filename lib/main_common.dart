@@ -22,7 +22,6 @@ Future<void> mainCommon(AppConfig config) async {
   await Firebase.initializeApp();
 
   // Activate App Check
-  // Activate App Check
   await FirebaseAppCheck.instance.activate(
     providerAndroid: config.environment == Environment.dev
         ? const AndroidDebugProvider()
