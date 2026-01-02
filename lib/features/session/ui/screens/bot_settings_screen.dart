@@ -6,6 +6,7 @@ import '../../../../core/utils/responsive.dart';
 import '../../../../shared/components/primary_button.dart';
 import '../../../../shared/components/glass_container.dart';
 import '../../state/session_provider.dart';
+import '../../logic/local_bot_session_handler.dart'; // Import Logic
 
 class BotSettingsScreen extends StatefulWidget {
   const BotSettingsScreen({super.key});
@@ -112,7 +113,14 @@ class _BotSettingsScreenState extends State<BotSettingsScreen> {
                   label: 'START BATTLE',
                   icon: Icons.play_arrow,
                   onPressed: () {
-                    context.read<SessionProvider>().startSession(
+                    final handler = LocalBotSessionHandler(); // Create Logic
+                    // We can configure it before or after starting?
+                    // Handler has startGame method.
+
+                    final provider = context.read<SessionProvider>();
+                    provider.setHandler(handler); // Inject Logic
+                    provider.startSession(
+                      // Start Game
                       playerCount: _playerCount.toInt(),
                       thinkingTimeS: _botThinkingTime.toInt(),
                     );

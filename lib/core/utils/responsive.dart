@@ -1,4 +1,3 @@
-
 import 'package:flutter/material.dart';
 
 class Responsive {
@@ -16,7 +15,7 @@ class Responsive {
     _mediaQueryData = MediaQuery.of(context);
     screenWidth = _mediaQueryData.size.width;
     screenHeight = _mediaQueryData.size.height;
-    
+
     _horizontalScale = screenWidth / _designWidth;
     _verticalScale = screenHeight / _designHeight;
   }
@@ -31,18 +30,20 @@ class Responsive {
     return px * _verticalScale;
   }
 
-  // Sp (Font size) - scale based on width but clamped or limited? 
+  // Sp (Font size) - scale based on width but clamped or limited?
   // Usually scale by width is safer for reading.
   static double sp(double px) {
     return px * _horizontalScale; // Simplified scaling
   }
-  
+
   // Radius/Padding - usually width based
   static double r(double px) => w(px);
-  
+
   // Percent width
   static double wp(double percent) => screenWidth * (percent / 100);
-  
+
   // Percent height
   static double hp(double percent) => screenHeight * (percent / 100);
+
+  static bool get isMobile => screenWidth < 600;
 }

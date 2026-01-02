@@ -1,14 +1,17 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'dart:math' as dart_math;
-import '../../../../core/animations/anim_utils.dart';
 import '../../../../core/utils/responsive.dart';
-import '../../models/unit.dart';
-import '../../models/session_state.dart';
 import '../../state/session_provider.dart';
+import '../../models/unit.dart';
 import '../../widgets/unit_card.dart';
 import '../../widgets/participant_avatar.dart';
 import '../../widgets/doc_viewer.dart';
+import '../../widgets/claim_badge.dart';
+import '../../widgets/bluff_reveal_overlay.dart';
+import '../../widgets/flying_cards_layer.dart';
+
+import '../../models/session_state.dart';
 
 class SessionScreen extends StatefulWidget {
   const SessionScreen({super.key});
@@ -22,20 +25,32 @@ class _SessionScreenState extends State<SessionScreen>
   late AnimationController _entryController;
   late ScrollController _carouselController;
 
+  final Map<String, GlobalKey> _avatarKeys = {
+    'me': GlobalKey(),
+    'p1': GlobalKey(),
+    'p2': GlobalKey(),
+    'p3': GlobalKey(),
+    'p4': GlobalKey(),
+    'p5': GlobalKey(),
+    'p6': GlobalKey(),
+    'p7': GlobalKey(),
+    'p8': GlobalKey(),
+    'p9': GlobalKey(),
+  };
+  final GlobalKey _pileKey = GlobalKey();
+  final List<FlyingCard> _flyingCards = [];
+  Color? _flashColor;
+
   @override
   void initState() {
     super.initState();
     _carouselController = ScrollController();
     _entryController = AnimationController(
       vsync: this,
-      duration: AnimUtils.visual,
-    )..forward();
-  }
+      duration: const Duration(milliseconds: 1200),
+    );
 
-  @override
-  void didChangeDependencies() {
-    super.didChangeDependencies();
-    Responsive.init(context);
+    _entryController.forward();
   }
 
   @override
@@ -49,7 +64,6 @@ class _SessionScreenState extends State<SessionScreen>
   final List<Widget> _particles = []; // Overlay particles for discard effect
 
   void _triggerPileDiscardEffect() {
-    // Add particle explosion
     if (mounted) {
       setState(() {
         _particles.add(
@@ -95,8 +109,7 @@ class _SessionScreenState extends State<SessionScreen>
         );
       });
 
-      // Clear after animation
-      Future.delayed(const Duration(milliseconds: 1500), () {
+      Future.delayed(const Duration(seconds: 2), () {
         if (mounted) {
           setState(() {
             _particles.clear();
@@ -106,30 +119,82 @@ class _SessionScreenState extends State<SessionScreen>
     }
   }
 
+  void _handleGameEvents(SessionEventType event) {
+    final provider = context.read<SessionProvider>();
+    if (event == SessionEventType.pileDiscarded) {
+      _triggerPileDiscardEffect();
+    } else if (event == SessionEventType.cardsPlayed) {
+      _triggerFlyingCards(
+        provider.lastEventActorId ?? 'me',
+        provider.lastCountClaimed,
+      );
+    } else if (event == SessionEventType.bluffResolved) {
+      _triggerFlash(
+        provider.isBluffSuccessful == true
+            ? Colors.green.withValues(alpha: 0.4)
+            : Colors.red.withValues(alpha: 0.4),
+      );
+    }
+  }
+
+  void _triggerFlash(Color color) {
+    if (!mounted) return;
+    setState(() {
+      _flashColor = color;
+    });
+    Future.delayed(const Duration(milliseconds: 600), () {
+      if (mounted) {
+        setState(() {
+          _flashColor = null;
+        });
+      }
+    });
+  }
+
+  void _triggerFlyingCards(String playerId, int count) {
+    if (!mounted) return;
+
+    // 1. Get Start Position
+    final key = _avatarKeys[playerId];
+    if (key == null || key.currentContext == null) return;
+    final RenderBox renderBox =
+        key.currentContext!.findRenderObject() as RenderBox;
+    final startPos =
+        renderBox.localToGlobal(Offset.zero) +
+        Offset(renderBox.size.width / 2, renderBox.size.height / 2);
+
+    // 2. Get End Position (Pile)
+    if (_pileKey.currentContext == null) return;
+    final RenderBox pileBox =
+        _pileKey.currentContext!.findRenderObject() as RenderBox;
+    final endPos =
+        pileBox.localToGlobal(Offset.zero) +
+        Offset(pileBox.size.width / 2, pileBox.size.height / 2);
+
+    setState(() {
+      _flyingCards.add(FlyingCard(start: startPos, end: endPos, count: count));
+    });
+
+    // Cleanup after animation duration
+    Future.delayed(const Duration(milliseconds: 800), () {
+      if (mounted) {
+        setState(() {
+          if (_flyingCards.isNotEmpty) _flyingCards.removeAt(0);
+        });
+      }
+    });
+  }
+
   @override
   Widget build(BuildContext context) {
     Responsive.init(context);
-
-    // Listen for One-Shot Events
-    context.select<SessionProvider, void>((p) {
-      if (p.lastEvent == SessionEventType.pileDiscarded) {
-        // We need to trigger this only ONCE per event.
-        // Since build runs often, we might need a better trigger mechanic or check ID.
-        // A simple way is to trust the provider resets event to 'none' or we track last handled event ID.
-        // For V1, we'll trigger and let the provider logic handle state.
-        // Ideally: add a listener in initState/didChangeDependencies.
-      }
-    });
-
     final provider = context.watch<SessionProvider>();
-
-    // Hacky trigger for V1: check if event is 'pileDiscarded' and local state hasn't fired recently?
-    // Better: use a listener.
 
     return Scaffold(
       backgroundColor: const Color(0xFF121212),
       body: Stack(
         children: [
+          _EventListenerWrapper(provider: provider, onEvent: _handleGameEvents),
           Positioned.fill(
             child: Container(
               decoration: const BoxDecoration(
@@ -141,7 +206,13 @@ class _SessionScreenState extends State<SessionScreen>
               ),
             ),
           ),
-
+          if (_flashColor != null)
+            Positioned.fill(
+              child: AnimatedContainer(
+                duration: const Duration(milliseconds: 300),
+                color: _flashColor,
+              ),
+            ),
           SafeArea(
             child: Column(
               children: [
@@ -196,25 +267,31 @@ class _SessionScreenState extends State<SessionScreen>
                 ),
                 const SizedBox(height: 10),
 
-                // Center Pile (0.2 - 0.7)
+                // Center Pile + Claim Badge
                 Expanded(
                   child: Center(
                     child: SingleChildScrollView(
-                      child: ScaleTransition(
-                        scale: CurvedAnimation(
-                          parent: _entryController,
-                          curve: const Interval(
-                            0.2,
-                            0.7,
-                            curve: Curves.elasticOut,
+                      child: Stack(
+                        clipBehavior: Clip.none,
+                        alignment: Alignment.center,
+                        children: [
+                          ScaleTransition(
+                            scale: CurvedAnimation(
+                              parent: _entryController,
+                              curve: const Interval(
+                                0.2,
+                                0.7,
+                                curve: Curves.elasticOut,
+                              ),
+                            ),
+                            child: AnimatedSwitcher(
+                              duration: const Duration(milliseconds: 400),
+                              child: provider.shouldShowRankSelector
+                                  ? _buildRankSelector(provider)
+                                  : _buildCenterPile(provider),
+                            ),
                           ),
-                        ),
-                        child: AnimatedSwitcher(
-                          duration: const Duration(milliseconds: 400),
-                          child: provider.shouldShowRankSelector
-                              ? _buildRankSelector(provider)
-                              : _buildCenterPile(provider),
-                        ),
+                        ],
                       ),
                     ),
                   ),
@@ -277,18 +354,20 @@ class _SessionScreenState extends State<SessionScreen>
           if (provider.state.currentPhase == SessionPhase.finished)
             _buildWinOverlay(context, provider),
 
+          // Action Overlays (Flying Cards, Badges)
+          FlyingCardsLayer(activeAnimations: _flyingCards, onComplete: () {}),
+
+          if (provider.isRoundSet && provider.lastRankClaimed != null)
+            _buildClaimBadgeOverlay(provider),
+
           // Particle Layer
           ..._particles,
 
-          // Invisible Event Listener Wrapper
-          _EventListenerWrapper(
-            provider: provider,
-            onEvent: (event) {
-              if (event == SessionEventType.pileDiscarded) {
-                _triggerPileDiscardEffect();
-              }
-            },
-          ),
+          if (provider.isRevealingBluff && provider.lastMove != null)
+            BluffRevealOverlay(
+              cards: provider.lastMove!.actualUnits,
+              declaredRank: provider.lastMove!.declaredRank,
+            ),
         ],
       ),
     );
@@ -408,8 +487,6 @@ class _SessionScreenState extends State<SessionScreen>
     SessionProvider provider,
   ) {
     final participants = provider.state.participants;
-
-    // Center logic
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (_carouselController.hasClients) {
         final activeIdx = participants.indexWhere((p) => p.isActive);
@@ -438,7 +515,11 @@ class _SessionScreenState extends State<SessionScreen>
           final p = participants[index];
           return Padding(
             padding: const EdgeInsets.symmetric(horizontal: 8),
-            child: ParticipantAvatar(participant: p, size: 65),
+            child: ParticipantAvatar(
+              key: _avatarKeys[p.id],
+              participant: p,
+              size: 65,
+            ),
           );
         },
       ),
@@ -447,11 +528,8 @@ class _SessionScreenState extends State<SessionScreen>
 
   Widget _buildCenterPile(SessionProvider provider) {
     return AnimatedPileView(
+      key: _pileKey,
       pileCount: provider.pileCount,
-      isRoundSet: provider.isRoundSet,
-      currentRank: provider.currentRank,
-      stagedRank: provider.stagedRank,
-      isMyTurn: provider.isMyTurn,
       onTap: () {
         if (!provider.isRoundSet && provider.isMyTurn) {
           provider.toggleRankSelectionMode();
@@ -462,100 +540,116 @@ class _SessionScreenState extends State<SessionScreen>
 
   Widget _buildRankSelector(SessionProvider provider) {
     final ranks = UnitRank.values.toList();
-
     String getRankSymbol(UnitRank rank) {
       switch (rank) {
         case UnitRank.ace:
           return "A";
-        case UnitRank.two:
-          return "2";
-        case UnitRank.three:
-          return "3";
-        case UnitRank.four:
-          return "4";
-        case UnitRank.five:
-          return "5";
-        case UnitRank.six:
-          return "6";
-        case UnitRank.seven:
-          return "7";
-        case UnitRank.eight:
-          return "8";
-        case UnitRank.nine:
-          return "9";
-        case UnitRank.ten:
-          return "10";
         case UnitRank.jack:
           return "J";
         case UnitRank.queen:
           return "Q";
         case UnitRank.king:
           return "K";
+        default:
+          return (rank.index + 1).toString();
       }
     }
 
-    return Column(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        const Text(
-          "SELECT ROUND RANK",
-          style: TextStyle(
-            color: Color(0xFFFFD700),
-            fontSize: 14,
-            fontWeight: FontWeight.w900,
-            letterSpacing: 2,
+    return Container(
+      padding: const EdgeInsets.symmetric(vertical: 20, horizontal: 16),
+      margin: const EdgeInsets.symmetric(horizontal: 24),
+      decoration: BoxDecoration(
+        color: Colors.black.withValues(alpha: 0.9),
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: Colors.white12),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.5),
+            blurRadius: 16,
+            spreadRadius: 4,
           ),
-        ),
-        const SizedBox(height: 12),
-        Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 16),
-          child: Wrap(
-            spacing: 8,
-            runSpacing: 8,
-            alignment: WrapAlignment.center,
-            children: ranks.map((rank) {
-              final isStaged = provider.stagedRank == rank;
-              return GestureDetector(
-                onTap: () => provider.stageRank(rank),
-                child: AnimatedContainer(
-                  duration: const Duration(milliseconds: 200),
-                  width: 36,
-                  height: 36,
-                  decoration: BoxDecoration(
-                    color: isStaged
-                        ? const Color(0xFFFFD700)
-                        : const Color(0xFF1E1E1E),
-                    shape: BoxShape.circle,
-                    border: Border.all(
-                      color: isStaged ? Colors.white : Colors.white10,
-                      width: 1.0,
+        ],
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          const Text(
+            "SELECT ROUND RANK",
+            style: TextStyle(
+              color: Color(0xFFFFD700),
+              fontSize: 14,
+              fontWeight: FontWeight.w900,
+              letterSpacing: 2,
+            ),
+          ),
+          const SizedBox(height: 12),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 8),
+            child: Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              alignment: WrapAlignment.center,
+              children: ranks.map((rank) {
+                final isStaged = provider.stagedRank == rank;
+                return GestureDetector(
+                  onTap: () => provider.stageRank(rank),
+                  child: AnimatedContainer(
+                    duration: const Duration(milliseconds: 200),
+                    width: 36,
+                    height: 36,
+                    decoration: BoxDecoration(
+                      color: isStaged
+                          ? const Color(0xFFFFD700)
+                          : const Color(0xFF1E1E1E),
+                      shape: BoxShape.circle,
+                      border: Border.all(
+                        color: isStaged ? Colors.white : Colors.white10,
+                        width: 1.0,
+                      ),
                     ),
-                  ),
-                  child: Center(
-                    child: Text(
-                      getRankSymbol(rank),
-                      style: TextStyle(
-                        color: isStaged ? Colors.black : Colors.white70,
-                        fontSize: 14,
-                        fontWeight: FontWeight.w900,
+                    child: Center(
+                      child: Text(
+                        getRankSymbol(rank),
+                        style: TextStyle(
+                          color: isStaged ? Colors.black : Colors.white70,
+                          fontSize: 14,
+                          fontWeight: FontWeight.w900,
+                        ),
                       ),
                     ),
                   ),
-                ),
-              );
-            }).toList(),
+                );
+              }).toList(),
+            ),
           ),
-        ),
-        const SizedBox(height: 12),
-        if (provider.stagedRank != null)
+          const SizedBox(height: 12),
           TextButton(
             onPressed: () => provider.toggleRankSelectionMode(),
             child: const Text(
               "CANCEL",
-              style: TextStyle(color: Colors.white54),
+              style: TextStyle(color: Colors.white54, fontSize: 12),
             ),
           ),
-      ],
+        ],
+      ),
+    );
+  }
+
+  Widget _buildClaimBadgeOverlay(SessionProvider provider) {
+    // We want the badge to be positioned relative to the pile
+    // But since it's an overlay in the Stack, we can use a simpler approach
+    // or keep it in the Center Pile Stack (which I removed in previous chunk, let's put it back better)
+    return Positioned(
+      top: MediaQuery.of(context).size.height / 2 - 160,
+      left: 0,
+      right: 0,
+      child: Center(
+        child: ClaimBadge(
+          rank: provider.lastRankClaimed!,
+          count: provider.lastCountClaimed,
+          isTransferring: provider.lastEvent == SessionEventType.passed,
+        ),
+      ),
     );
   }
 
@@ -584,7 +678,7 @@ class _SessionScreenState extends State<SessionScreen>
         mainAxisSize: MainAxisSize.min,
         children: [
           SizedBox(
-            height: 130, // Reduced from 140
+            height: 130,
             child: _buildHandArea(
               context,
               provider.state.myHand
@@ -694,10 +788,7 @@ class _SessionScreenState extends State<SessionScreen>
     final selectedUnits = provider.state.myHand
         .where((u) => provider.selectedUnitIds.contains(u.id))
         .toList();
-
-    if (selectedUnits.isEmpty) {
-      return const SizedBox(height: 75);
-    }
+    if (selectedUnits.isEmpty) return const SizedBox(height: 75);
 
     return SizedBox(
       height: 75,
@@ -706,7 +797,7 @@ class _SessionScreenState extends State<SessionScreen>
           alignment: Alignment.center,
           children: List.generate(selectedUnits.length, (index) {
             final unit = selectedUnits[index];
-            final double overlap = 30.0;
+            const double overlap = 30.0;
             final double totalWidth = 70 + (selectedUnits.length - 1) * overlap;
             final double startX = -(totalWidth / 2) + 35;
 
@@ -744,21 +835,18 @@ class _SessionScreenState extends State<SessionScreen>
     return LayoutBuilder(
       builder: (context, constraints) {
         final double width = constraints.maxWidth;
-        final double cardWidth = 70;
-        final double overlap = 25;
+        const double cardWidth = 70;
+        const double overlap = 25;
 
         if (hand.length <= 10) {
-          return _buildSingleRow(hand, provider, width, cardWidth, overlap);
+          return _buildRowContent(hand, provider, width, cardWidth, overlap);
         } else {
-          // Split hand into two rows
           final int mid = (hand.length / 2).ceil();
           final backRow = hand.sublist(0, mid);
           final frontRow = hand.sublist(mid);
-
           return Stack(
             alignment: Alignment.bottomCenter,
             children: [
-              // Back Row
               Positioned(
                 bottom: 30,
                 child: _buildRowContent(
@@ -769,7 +857,6 @@ class _SessionScreenState extends State<SessionScreen>
                   overlap,
                 ),
               ),
-              // Front Row
               Positioned(
                 bottom: 0,
                 child: _buildRowContent(
@@ -787,16 +874,6 @@ class _SessionScreenState extends State<SessionScreen>
     );
   }
 
-  Widget _buildSingleRow(
-    List<Unit> hand,
-    SessionProvider provider,
-    double maxWidth,
-    double cardWidth,
-    double overlap,
-  ) {
-    return _buildRowContent(hand, provider, maxWidth, cardWidth, overlap);
-  }
-
   Widget _buildRowContent(
     List<Unit> handSlice,
     SessionProvider provider,
@@ -806,14 +883,12 @@ class _SessionScreenState extends State<SessionScreen>
   ) {
     final int count = handSlice.length;
     final double totalWidth = cardWidth + (count - 1) * overlap;
-
     return SizedBox(
       width: totalWidth,
       height: 100,
       child: Stack(
         children: List.generate(count, (index) {
           final unit = handSlice[index];
-
           return Positioned(
             left: index * overlap,
             bottom: 0,
@@ -847,6 +922,128 @@ class _SessionScreenState extends State<SessionScreen>
     showModalBottomSheet(
       context: context,
       backgroundColor: const Color(0xFF1A1A1A),
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (context) => Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          const SizedBox(height: 12),
+          Container(
+            width: 40,
+            height: 4,
+            decoration: BoxDecoration(
+              color: Colors.white24,
+              borderRadius: BorderRadius.circular(2),
+            ),
+          ),
+          const SizedBox(height: 24),
+          ListTile(
+            leading: const Icon(Icons.history, color: Color(0xFFFFD700)),
+            title: const Text(
+              "MATCH HISTORY",
+              style: TextStyle(
+                color: Colors.white,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+            onTap: () {
+              Navigator.pop(context);
+              _showHistory(context);
+            },
+          ),
+          const Divider(color: Colors.white12),
+          ListTile(
+            leading: const Icon(Icons.menu_book, color: Colors.white70),
+            title: const Text(
+              "GAME RULES",
+              style: TextStyle(
+                color: Colors.white,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+            onTap: () {
+              Navigator.pop(context);
+              _showRules(context);
+            },
+          ),
+          const Divider(color: Colors.white12),
+          ListTile(
+            leading: const Icon(Icons.exit_to_app, color: Colors.redAccent),
+            title: const Text(
+              "EXIT GAME",
+              style: TextStyle(
+                color: Colors.redAccent,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+            onTap: () {
+              Navigator.of(
+                context,
+              ).pushNamedAndRemoveUntil('/home', (r) => false);
+            },
+          ),
+          const SizedBox(height: 40),
+        ],
+      ),
+    );
+  }
+
+  void _showHistory(BuildContext context) {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: const Color(0xFF1A1A1A),
+      isScrollControlled: true,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (context) => DraggableScrollableSheet(
+        initialChildSize: 0.6,
+        minChildSize: 0.4,
+        maxChildSize: 0.9,
+        expand: false,
+        builder: (_, controller) => Column(
+          children: [
+            const SizedBox(height: 12),
+            const Text(
+              "MATCH LOG",
+              style: TextStyle(
+                color: Colors.white54,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+            const SizedBox(height: 12),
+            Expanded(
+              child: SingleChildScrollView(
+                controller: controller,
+                child: const Padding(
+                  padding: EdgeInsets.all(16.0),
+                  child: Center(
+                    // Re-use HistoryFeed here but unrestricted?
+                    // HistoryFeed is designed to be small and dim.
+                    // We can stick to using HistoryFeed or wrap it.
+                    // Actually, HistoryFeed has fixed height/width.
+                    // We should modify HistoryFeed to be flexible or create a new view.
+                    // For speed, let's just use HistoryFeed but maybe allow it to expand?
+                    // The existing HistoryFeed has fixed size. I'll modify HistoryFeed to be better suited for full view
+                    // OR just let it act as a list source.
+                    // Let's assume for now I will fix HistoryFeed to be responsive or use a custom list here.
+                    // Actually, let's just use a simple list builder here for the log since we have access to provider.
+                    child: _FullHistoryList(),
+                  ),
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  void _showRules(BuildContext context) {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: const Color(0xFF1A1A1A),
       isScrollControlled: true,
       builder: (context) => DocViewer(
         title: "GAME RULES",
@@ -875,158 +1072,6 @@ class _SessionScreenState extends State<SessionScreen>
   }
 }
 
-class AnimatedPileView extends StatefulWidget {
-  final int pileCount;
-  final bool isRoundSet;
-  final UnitRank? currentRank;
-  final UnitRank? stagedRank;
-  final bool isMyTurn;
-  final VoidCallback onTap;
-
-  const AnimatedPileView({
-    super.key,
-    required this.pileCount,
-    required this.isRoundSet,
-    required this.currentRank,
-    required this.stagedRank,
-    required this.isMyTurn,
-    required this.onTap,
-  });
-
-  @override
-  State<AnimatedPileView> createState() => _AnimatedPileViewState();
-}
-
-class _AnimatedPileViewState extends State<AnimatedPileView>
-    with SingleTickerProviderStateMixin {
-  late AnimationController _bounceController;
-  late Animation<double> _scaleAnimation;
-
-  @override
-  void initState() {
-    super.initState();
-    _bounceController = AnimationController(
-      vsync: this,
-      duration: const Duration(milliseconds: 300),
-    );
-    _scaleAnimation =
-        TweenSequence<double>([
-          TweenSequenceItem(tween: Tween(begin: 1.0, end: 1.15), weight: 50),
-          TweenSequenceItem(tween: Tween(begin: 1.15, end: 1.0), weight: 50),
-        ]).animate(
-          CurvedAnimation(parent: _bounceController, curve: Curves.easeInOut),
-        );
-  }
-
-  @override
-  void didUpdateWidget(AnimatedPileView oldWidget) {
-    super.didUpdateWidget(oldWidget);
-    if (widget.pileCount > oldWidget.pileCount) {
-      _bounceController.forward(from: 0.0);
-    }
-  }
-
-  @override
-  void dispose() {
-    _bounceController.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: widget.onTap,
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          if (widget.isRoundSet || widget.stagedRank != null)
-            Padding(
-              padding: const EdgeInsets.only(bottom: 12),
-              child: ShaderMask(
-                shaderCallback: (bounds) => const LinearGradient(
-                  colors: [
-                    Color(0xFFFFD700),
-                    Color(0xFFFFECB3),
-                    Color(0xFFB8860B),
-                  ],
-                ).createShader(bounds),
-                child: Text(
-                  (widget.isRoundSet ? widget.currentRank! : widget.stagedRank!)
-                      .name
-                      .toUpperCase(),
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontSize: 18,
-                    fontWeight: FontWeight.w900,
-                    letterSpacing: 2.0,
-                  ),
-                ),
-              ),
-            ),
-          ScaleTransition(
-            scale: _scaleAnimation,
-            child: Container(
-              width: 140,
-              height: 140,
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                color: const Color(0xFF1A1A1A),
-                border: Border.all(
-                  color: widget.isRoundSet
-                      ? const Color(0xFFFFD700)
-                      : const Color(0xFF3E3E3E),
-                  width: 3,
-                ),
-                boxShadow: [
-                  BoxShadow(
-                    color:
-                        (widget.isRoundSet
-                                ? const Color(0xFFFFD700)
-                                : Colors.black)
-                            .withValues(alpha: 0.2),
-                    blurRadius: 30,
-                    spreadRadius: 5,
-                  ),
-                ],
-              ),
-              child: Center(
-                child: Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    AnimatedSwitcher(
-                      duration: const Duration(milliseconds: 200),
-                      transitionBuilder: (child, animation) =>
-                          ScaleTransition(scale: animation, child: child),
-                      child: Text(
-                        "${widget.pileCount}",
-                        key: ValueKey(widget.pileCount),
-                        style: const TextStyle(
-                          color: Colors.white,
-                          fontSize: 48,
-                          fontWeight: FontWeight.w900,
-                        ),
-                      ),
-                    ),
-                    const Text(
-                      "CARDS",
-                      style: TextStyle(
-                        color: Colors.white38,
-                        fontSize: 10,
-                        fontWeight: FontWeight.bold,
-                        letterSpacing: 2,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
 class _EventListenerWrapper extends StatefulWidget {
   final SessionProvider provider;
   final Function(SessionEventType) onEvent;
@@ -1043,24 +1088,17 @@ class _EventListenerWrapperState extends State<_EventListenerWrapper> {
 
   @override
   Widget build(BuildContext context) {
-    // Check if event changed
     final currentEvent = widget.provider.lastEvent;
     final currentActor = widget.provider.lastEventActorId;
 
     if (currentEvent != SessionEventType.none &&
         (currentEvent != _lastHandled || currentActor != _lastActor)) {
-      // Fire callback on next frame to avoid build conflicts
       WidgetsBinding.instance.addPostFrameCallback((_) {
-        // Prevent re-firing
-        if (mounted) {
-          widget.onEvent(currentEvent);
-        }
+        if (mounted) widget.onEvent(currentEvent);
       });
-
       _lastHandled = currentEvent;
       _lastActor = currentActor;
     }
-
     return const SizedBox.shrink();
   }
 }
@@ -1086,12 +1124,9 @@ class _ParticleExplosionOverlayState extends State<ParticleExplosionOverlay>
       vsync: this,
       duration: const Duration(seconds: 1),
     );
-
-    // Generate particles
     for (int i = 0; i < 30; i++) {
       _particles.add(_Particle());
     }
-
     _controller.forward();
   }
 
@@ -1111,12 +1146,12 @@ class _ParticleExplosionOverlayState extends State<ParticleExplosionOverlay>
             final progress = _controller.value;
             final double x =
                 (MediaQuery.of(context).size.width / 2) +
-                (p.dx * progress * 300); // Spread width
+                (p.dx * progress * 300);
             final double y =
                 (MediaQuery.of(context).size.height / 2) -
-                50 + // Start slightly higher
+                50 +
                 (p.dy * progress * 300) +
-                (progress * progress * 150); // Gravity
+                (progress * progress * 150);
 
             return Positioned(
               left: x,
@@ -1150,14 +1185,273 @@ class _ParticleExplosionOverlayState extends State<ParticleExplosionOverlay>
 class _Particle {
   late double dx;
   late double dy;
-
   _Particle() {
     final rnd = dart_math.Random();
-    // Explosion pattern: full circle
     final angle = rnd.nextDouble() * 2 * dart_math.pi;
-    // Speed variaiton
     final speed = 0.3 + rnd.nextDouble() * 0.7;
     dx = dart_math.cos(angle) * speed;
     dy = dart_math.sin(angle) * speed;
+  }
+}
+
+class AnimatedPileView extends StatefulWidget {
+  final int pileCount;
+  final VoidCallback onTap;
+  const AnimatedPileView({
+    super.key,
+    required this.pileCount,
+    required this.onTap,
+  });
+
+  @override
+  State<AnimatedPileView> createState() => _AnimatedPileViewState();
+}
+
+class _AnimatedPileViewState extends State<AnimatedPileView>
+    with TickerProviderStateMixin {
+  late AnimationController _controller;
+  late AnimationController _pressureController;
+  late Animation<double> _scaleAnimation;
+  late Animation<double> _pressureAnimation;
+  int _prevCount = 0;
+
+  @override
+  void initState() {
+    super.initState();
+    _prevCount = widget.pileCount;
+    _controller = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 300),
+    );
+    _scaleAnimation = TweenSequence<double>([
+      TweenSequenceItem(tween: Tween(begin: 1.0, end: 1.2), weight: 50),
+      TweenSequenceItem(tween: Tween(begin: 1.2, end: 1.0), weight: 50),
+    ]).animate(CurvedAnimation(parent: _controller, curve: Curves.easeInOut));
+
+    _pressureController = AnimationController(
+      vsync: this,
+      duration: const Duration(seconds: 2),
+    );
+    _pressureAnimation = Tween<double>(
+      begin: 0.0,
+      end: 1.0,
+    ).animate(_pressureController);
+    _pressureController.repeat();
+    _updatePressureSpeed();
+  }
+
+  void _updatePressureSpeed() {
+    // Intensity based on pileCount
+    final speedMultiplier = 1.0 + (widget.pileCount / 10).clamp(0.0, 4.0);
+    _pressureController.duration = Duration(
+      milliseconds: (2000 / speedMultiplier).toInt(),
+    );
+    _pressureController.repeat();
+  }
+
+  @override
+  void didUpdateWidget(AnimatedPileView oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.pileCount > _prevCount) {
+      _controller.forward(from: 0.0);
+      _updatePressureSpeed();
+    }
+    _prevCount = widget.pileCount;
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    _pressureController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final pressureColor = Color.lerp(
+      const Color(0xFFFFD700),
+      const Color(0xFFD32F2F),
+      (widget.pileCount / 30).clamp(0.0, 1.0),
+    )!;
+
+    return GestureDetector(
+      onTap: widget.onTap,
+      child: Stack(
+        alignment: Alignment.center,
+        children: [
+          // Pressure Ring (Static or Pulsing)
+          if (widget.pileCount > 0)
+            AnimatedBuilder(
+              animation: _pressureAnimation,
+              builder: (context, child) {
+                return Container(
+                  width: 190 + (20 * _pressureAnimation.value),
+                  height: 190 + (20 * _pressureAnimation.value),
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    border: Border.all(
+                      color: pressureColor.withValues(
+                        alpha: 0.3 * (1 - _pressureAnimation.value),
+                      ),
+                      width: 4,
+                    ),
+                  ),
+                );
+              },
+            ),
+          ScaleTransition(
+            scale: _scaleAnimation,
+            child: Stack(
+              alignment: Alignment.center,
+              children: [
+                Container(
+                  width: 140,
+                  height: 180,
+                  decoration: BoxDecoration(
+                    color: Colors.white10,
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(
+                      color: widget.pileCount > 0
+                          ? pressureColor
+                          : Colors.white24,
+                      width: 2,
+                    ),
+                    boxShadow: [
+                      BoxShadow(
+                        color: pressureColor.withValues(alpha: 0.2),
+                        blurRadius: 15,
+                        spreadRadius: 2,
+                      ),
+                    ],
+                  ),
+                  child: Center(
+                    child: Icon(
+                      Icons.style,
+                      size: 60,
+                      color: Colors.white.withValues(alpha: 0.1),
+                    ),
+                  ),
+                ),
+                if (widget.pileCount > 1)
+                  ...List.generate(
+                    dart_math.min(widget.pileCount, 5),
+                    (i) => Positioned(
+                      top: i * 2.0,
+                      left: i * 2.0,
+                      child: Container(
+                        width: 140,
+                        height: 180,
+                        decoration: BoxDecoration(
+                          color: Colors.white.withValues(alpha: 0.05),
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(color: Colors.white10, width: 1),
+                        ),
+                      ),
+                    ),
+                  ),
+                Positioned(
+                  bottom: 20,
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 12,
+                      vertical: 4,
+                    ),
+                    decoration: BoxDecoration(
+                      color: Colors.black54,
+                      borderRadius: BorderRadius.circular(20),
+                    ),
+                    child: AnimatedSwitcher(
+                      duration: const Duration(milliseconds: 300),
+                      transitionBuilder: (child, anim) =>
+                          ScaleTransition(scale: anim, child: child),
+                      child: Text(
+                        '${widget.pileCount}',
+                        key: ValueKey(widget.pileCount),
+                        style: TextStyle(
+                          color: pressureColor,
+                          fontSize: 24,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+                Positioned(
+                  top: 20,
+                  child: Text(
+                    'PILE',
+                    style: TextStyle(
+                      color: pressureColor.withValues(alpha: 0.5),
+                      fontSize: 10,
+                      fontWeight: FontWeight.bold,
+                      letterSpacing: 2,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _FullHistoryList extends StatelessWidget {
+  const _FullHistoryList();
+
+  @override
+  Widget build(BuildContext context) {
+    return Consumer<SessionProvider>(
+      builder: (context, provider, child) {
+        final logs = provider.gameLog;
+        if (logs.isEmpty) {
+          return const Center(
+            child: Text(
+              "NO RECORDS YET",
+              style: TextStyle(color: Colors.white24, fontSize: 12),
+            ),
+          );
+        }
+
+        return ListView.builder(
+          shrinkWrap: true,
+          physics: const NeverScrollableScrollPhysics(),
+          itemCount: logs.length,
+          itemBuilder: (context, index) {
+            return Padding(
+              padding: const EdgeInsets.only(bottom: 12),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Container(
+                    margin: const EdgeInsets.only(top: 6),
+                    width: 6,
+                    height: 6,
+                    decoration: const BoxDecoration(
+                      color: Color(0xFFFFD700),
+                      shape: BoxShape.circle,
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Text(
+                      logs[index],
+                      style: TextStyle(
+                        color: index == 0 ? Colors.white : Colors.white70,
+                        fontSize: 14,
+                        fontWeight: index == 0
+                            ? FontWeight.bold
+                            : FontWeight.normal,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            );
+          },
+        );
+      },
+    );
   }
 }

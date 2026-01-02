@@ -175,7 +175,12 @@ class _ParticipantAvatarState extends State<ParticipantAvatar>
                       ],
                     ),
                     child: Text(
-                      widget.statusText ?? (isActive ? 'PLAYING' : 'WAITING'),
+                      widget.statusText ??
+                          (isActive
+                              ? (widget.participant.isMe
+                                    ? 'YOUR TURN'
+                                    : 'THINKING...')
+                              : 'WAITING'),
                       style: const TextStyle(
                         color: Color(0xFF1A1A1A),
                         fontSize: 9,
