@@ -56,7 +56,7 @@ android {
             dimension = "env"
             applicationIdSuffix = ".dev"
             versionNameSuffix = "-dev"
-            resValue("string", "app_name", "Veil Dev")
+            resValue("string", "app_name", "BluffDev")
         }
         create("prod") {
             dimension = "env"

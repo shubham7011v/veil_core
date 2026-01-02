@@ -43,3 +43,15 @@ app.*.map.json
 /android/app/debug
 /android/app/profile
 /android/app/release
+ 
+ # Android Signing
+ **/android/*.jks
+ **/android/*.keystore
+ **/android/key.properties
+ 
+ # Temporary CI/CD helper files
+ *_base64.txt
+ service-account.json
+ 
+ # Firebase (optional but recommended to keep projects isolated)
+ # google-services.json

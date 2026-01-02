@@ -58,11 +58,11 @@ jobs:
 
       - name: Setup Keystore
         run: |
-          echo "${{ secrets.KEYSTORE_BASE64 }}" | base64 --decode > android/app/upload-keystore.jks
+          echo "${{ secrets.ANDROID_KEYSTORE_BASE64 }}" | base64 --decode > android/app/upload-keystore.jks
           echo "storeFile=upload-keystore.jks" > android/key.properties
-          echo "storePassword=${{ secrets.KEYSTORE_PASSWORD }}" >> android/key.properties
-          echo "keyPassword=${{ secrets.KEY_PASSWORD }}" >> android/key.properties
-          echo "keyAlias=${{ secrets.KEY_ALIAS }}" >> android/key.properties
+          echo "storePassword=${{ secrets.ANDROID_KEYSTORE_PASSWORD }}" >> android/key.properties
+          echo "keyPassword=${{ secrets.ANDROID_KEY_PASSWORD }}" >> android/key.properties
+          echo "keyAlias=${{ secrets.ANDROID_KEY_ALIAS }}" >> android/key.properties
 
       - name: Build APK (Dev)
         run: flutter build apk --flavor dev -t lib/main_dev.dart --release
@@ -96,7 +96,7 @@ jobs:
             echo "status=completed" >> $GITHUB_OUTPUT
           elif [[ $TAG == *"prod"* ]]; then
             echo "track=production" >> $GITHUB_OUTPUT
-            echo "status=draft" >> $GITHUB_OUTPUT
+            echo "status=completed" >> $GITHUB_OUTPUT
           else
             echo "Unknown tag format"
             exit 1
@@ -117,11 +117,11 @@ jobs:
 
       - name: Setup Keystore
         run: |
-          echo "${{ secrets.KEYSTORE_BASE64 }}" | base64 --decode > android/app/upload-keystore.jks
+          echo "${{ secrets.ANDROID_KEYSTORE_BASE64 }}" | base64 --decode > android/app/upload-keystore.jks
           echo "storeFile=upload-keystore.jks" > android/key.properties
-          echo "storePassword=${{ secrets.KEYSTORE_PASSWORD }}" >> android/key.properties
-          echo "keyPassword=${{ secrets.KEY_PASSWORD }}" >> android/key.properties
-          echo "keyAlias=${{ secrets.KEY_ALIAS }}" >> android/key.properties
+          echo "storePassword=${{ secrets.ANDROID_KEYSTORE_PASSWORD }}" >> android/key.properties
+          echo "keyPassword=${{ secrets.ANDROID_KEY_PASSWORD }}" >> android/key.properties
+          echo "keyAlias=${{ secrets.ANDROID_KEY_ALIAS }}" >> android/key.properties
 
       - name: Build App Bundle (Prod)
         run: flutter build appbundle --flavor prod -t lib/main_prod.dart --release
@@ -137,3 +137,4 @@ jobs:
           releaseFiles: build/app/outputs/bundle/prodRelease/app-prod-release.aab
           track: ${{ steps.vars.outputs.track }}
           status: ${{ steps.vars.outputs.status }}
+          whatsNewDir: distribution/whatsnew
