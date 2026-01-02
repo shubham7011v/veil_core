@@ -1,0 +1,136 @@
+name: Veil CI/CD
+
+on:
+  push:
+    branches: [ "main" ]
+    tags: [ "v*-internal", "v*-alpha", "v*-beta", "v*-prod" ]
+  pull_request:
+    branches: [ "main" ]
+
+env:
+  FLUTTER_VERSION: "3.24.0"
+  JAVA_VERSION: "17"
+
+jobs:
+  test:
+    name: Run Tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: ${{ env.JAVA_VERSION }}
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          channel: 'stable'
+          cache: true
+      
+      - name: Install dependencies
+        run: flutter pub get
+
+      - name: Analyze
+        run: flutter analyze
+
+      - name: Run Tests
+        run: flutter test
+
+  deploy:
+    name: Build & Deploy
+    needs: test
+    if: github.event_name == 'push'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Set Variables
+        id: vars
+        run: |
+          # Default values for main branch push
+          echo "track=internal" >> $GITHUB_OUTPUT
+          echo "status=completed" >> $GITHUB_OUTPUT
+          echo "flavor=dev" >> $GITHUB_OUTPUT
+          echo "entry=lib/main_dev.dart" >> $GITHUB_OUTPUT
+          echo "build_type=apk" >> $GITHUB_OUTPUT
+          echo "version_name=1.0.0" >> $GITHUB_OUTPUT
+          
+          if [[ $GITHUB_REF == refs/tags/v* ]]; then
+            TAG=${GITHUB_REF#refs/tags/v}
+            # Extract version name (e.g. 1.2.3 from 1.2.3-prod)
+            VERSION_NAME=$(echo $TAG | cut -d'-' -f1)
+            echo "version_name=$VERSION_NAME" >> $GITHUB_OUTPUT
+            echo "flavor=prod" >> $GITHUB_OUTPUT
+            echo "entry=lib/main_prod.dart" >> $GITHUB_OUTPUT
+            echo "build_type=appbundle" >> $GITHUB_OUTPUT
+            
+            if [[ $TAG == *"internal"* ]]; then
+              echo "track=internal" >> $GITHUB_OUTPUT
+            elif [[ $TAG == *"alpha"* ]]; then
+              echo "track=alpha" >> $GITHUB_OUTPUT
+            elif [[ $TAG == *"beta"* ]]; then
+              echo "track=beta" >> $GITHUB_OUTPUT
+            elif [[ $TAG == *"prod"* ]]; then
+              echo "track=production" >> $GITHUB_OUTPUT
+            fi
+          fi
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: ${{ env.JAVA_VERSION }}
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          channel: 'stable'
+          cache: true
+
+      - name: Install dependencies
+        run: flutter pub get
+
+      - name: Setup Keystore
+        run: |
+          echo "${{ secrets.ANDROID_KEYSTORE_BASE64 }}" | base64 --decode > android/app/upload-keystore.jks
+          echo "storeFile=upload-keystore.jks" > android/key.properties
+          echo "storePassword=${{ secrets.ANDROID_KEYSTORE_PASSWORD }}" >> android/key.properties
+          echo "keyPassword=${{ secrets.ANDROID_KEY_PASSWORD }}" >> android/key.properties
+          echo "keyAlias=${{ secrets.ANDROID_KEY_ALIAS }}" >> android/key.properties
+
+      - name: Build App
+        run: |
+          flutter build ${{ steps.vars.outputs.build_type }} \
+            --flavor ${{ steps.vars.outputs.flavor }} \
+            -t ${{ steps.vars.outputs.entry }} \
+            --build-name=${{ steps.vars.outputs.version_name }} \
+            --build-number=${{ github.run_number }} \
+            --release
+
+      - name: Upload APK (Dev only)
+        if: steps.vars.outputs.flavor == 'dev'
+        uses: actions/upload-artifact@v4
+        with:
+          name: dev-release-apk
+          path: build/app/outputs/flutter-apk/app-dev-release.apk
+
+      - name: Deploy Firebase Rules
+        if: steps.vars.outputs.flavor == 'prod'
+        uses: FirebaseExtended/action-hosting-deploy@v0
+        with:
+          repoToken: "${{ secrets.GITHUB_TOKEN }}"
+          firebaseServiceAccount: "${{ secrets.GOOGLE_SERVICES_JSON }}"
+          projectId: veil-prod-shubham
+
+      - name: Create Service Account File
+        if: steps.vars.outputs.flavor == 'prod'
+        run: echo "${{ secrets.GOOGLE_SERVICES_JSON }}" | base64 --decode > service-account.json
+
+      - name: Deploy to Play Store
+        if: steps.vars.outputs.flavor == 'prod'
+        uses: r0adkll/upload-google-play@v1
+        with:
+          serviceAccountJson: service-account.json
+          packageName: com.veil.bluff
+          releaseFiles: build/app/outputs/bundle/prodRelease/app-prod-release.aab
+          track: ${{ steps.vars.outputs.track }}
+          status: ${{ steps.vars.outputs.status }}
+          whatsNewDir: distribution/whatsnew
