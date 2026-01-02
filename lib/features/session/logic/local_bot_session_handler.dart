@@ -295,7 +295,10 @@ class LocalBotSessionHandler implements GameSessionHandler {
       return;
     }
 
-    _advanceTurn();
+    // Delay turn advancement slightly to allow UI/animations to react to the card move
+    Future.delayed(const Duration(milliseconds: 300), () {
+      _advanceTurn();
+    });
   }
 
   void _advanceTurn() {

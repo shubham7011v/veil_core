@@ -122,30 +122,34 @@ class _FlyingCardAnimationState extends State<_FlyingCardAnimation>
   }
 
   Widget _buildCardStack(int count) {
-    return Stack(
-      clipBehavior: Clip.none,
-      children: List.generate(
-        math.min(count, 3),
-        (i) => Positioned(
-          top: i * 2.0,
-          left: i * 2.0,
-          child: Container(
-            width: 50,
-            height: 70,
-            decoration: BoxDecoration(
-              color: const Color(0xFF1E1E1E),
-              borderRadius: BorderRadius.circular(6),
-              border: Border.all(color: Colors.white38, width: 1.5),
-              boxShadow: const [
-                BoxShadow(
-                  color: Colors.black45,
-                  blurRadius: 4,
-                  offset: Offset(2, 2),
-                ),
-              ],
-            ),
-            child: const Center(
-              child: Icon(Icons.style, color: Colors.white10, size: 30),
+    return SizedBox(
+      width: 54, // Slight buffer for overlap
+      height: 74,
+      child: Stack(
+        clipBehavior: Clip.none,
+        children: List.generate(
+          math.min(count, 3),
+          (i) => Positioned(
+            top: i * 2.0,
+            left: i * 2.0,
+            child: Container(
+              width: 50,
+              height: 70,
+              decoration: BoxDecoration(
+                color: const Color(0xFF1E1E1E),
+                borderRadius: BorderRadius.circular(6),
+                border: Border.all(color: Colors.white38, width: 1.5),
+                boxShadow: const [
+                  BoxShadow(
+                    color: Colors.black45,
+                    blurRadius: 4,
+                    offset: Offset(2, 2),
+                  ),
+                ],
+              ),
+              child: const Center(
+                child: Icon(Icons.style, color: Colors.white10, size: 30),
+              ),
             ),
           ),
         ),

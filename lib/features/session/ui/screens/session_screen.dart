@@ -7,7 +7,6 @@ import '../../models/unit.dart';
 import '../../widgets/unit_card.dart';
 import '../../widgets/participant_avatar.dart';
 import '../../widgets/doc_viewer.dart';
-import '../../widgets/claim_badge.dart';
 import '../../widgets/bluff_reveal_overlay.dart';
 import '../../widgets/flying_cards_layer.dart';
 
@@ -120,14 +119,23 @@ class _SessionScreenState extends State<SessionScreen>
   }
 
   void _handleGameEvents(SessionEventType event) {
+    debugPrint("===== EVENT RECEIVED: $event =====");
     final provider = context.read<SessionProvider>();
     if (event == SessionEventType.pileDiscarded) {
       _triggerPileDiscardEffect();
     } else if (event == SessionEventType.cardsPlayed) {
-      _triggerFlyingCards(
-        provider.lastEventActorId ?? 'me',
-        provider.lastCountClaimed,
+      debugPrint(
+        "Cards played by: ${provider.lastEventActorId}, count: ${provider.lastCountClaimed}",
       );
+      // Add a small delay to ensure widgets are fully rendered
+      Future.delayed(const Duration(milliseconds: 100), () {
+        if (mounted) {
+          _triggerFlyingCards(
+            provider.lastEventActorId ?? 'me',
+            provider.lastCountClaimed,
+          );
+        }
+      });
     } else if (event == SessionEventType.bluffResolved) {
       _triggerFlash(
         provider.isBluffSuccessful == true
@@ -156,7 +164,12 @@ class _SessionScreenState extends State<SessionScreen>
 
     // 1. Get Start Position
     final key = _avatarKeys[playerId];
-    if (key == null || key.currentContext == null) return;
+    if (key == null || key.currentContext == null) {
+      debugPrint(
+        "Animation failed: Key for $playerId is null or not in context",
+      );
+      return;
+    }
     final RenderBox renderBox =
         key.currentContext!.findRenderObject() as RenderBox;
     final startPos =
@@ -164,12 +177,19 @@ class _SessionScreenState extends State<SessionScreen>
         Offset(renderBox.size.width / 2, renderBox.size.height / 2);
 
     // 2. Get End Position (Pile)
-    if (_pileKey.currentContext == null) return;
+    if (_pileKey.currentContext == null) {
+      debugPrint("Animation failed: Pile key not in context");
+      return;
+    }
     final RenderBox pileBox =
         _pileKey.currentContext!.findRenderObject() as RenderBox;
     final endPos =
         pileBox.localToGlobal(Offset.zero) +
         Offset(pileBox.size.width / 2, pileBox.size.height / 2);
+
+    debugPrint(
+      "Flying $count cards from $playerId ($startPos) to pile ($endPos)",
+    );
 
     setState(() {
       _flyingCards.add(FlyingCard(start: startPos, end: endPos, count: count));
@@ -355,10 +375,14 @@ class _SessionScreenState extends State<SessionScreen>
             _buildWinOverlay(context, provider),
 
           // Action Overlays (Flying Cards, Badges)
-          FlyingCardsLayer(activeAnimations: _flyingCards, onComplete: () {}),
-
-          if (provider.isRoundSet && provider.lastRankClaimed != null)
-            _buildClaimBadgeOverlay(provider),
+          Positioned.fill(
+            child: IgnorePointer(
+              child: FlyingCardsLayer(
+                activeAnimations: _flyingCards,
+                onComplete: () {},
+              ),
+            ),
+          ),
 
           // Particle Layer
           ..._particles,
@@ -486,7 +510,9 @@ class _SessionScreenState extends State<SessionScreen>
     BuildContext context,
     SessionProvider provider,
   ) {
-    final participants = provider.state.participants;
+    final participants = provider.state.participants
+        .where((p) => p.id != 'me')
+        .toList();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (_carouselController.hasClients) {
         final activeIdx = participants.indexWhere((p) => p.isActive);
@@ -635,24 +661,6 @@ class _SessionScreenState extends State<SessionScreen>
     );
   }
 
-  Widget _buildClaimBadgeOverlay(SessionProvider provider) {
-    // We want the badge to be positioned relative to the pile
-    // But since it's an overlay in the Stack, we can use a simpler approach
-    // or keep it in the Center Pile Stack (which I removed in previous chunk, let's put it back better)
-    return Positioned(
-      top: MediaQuery.of(context).size.height / 2 - 160,
-      left: 0,
-      right: 0,
-      child: Center(
-        child: ClaimBadge(
-          rank: provider.lastRankClaimed!,
-          count: provider.lastCountClaimed,
-          isTransferring: provider.lastEvent == SessionEventType.passed,
-        ),
-      ),
-    );
-  }
-
   Widget _buildBottomControls(BuildContext context, SessionProvider provider) {
     final selectionCount = provider.selectedUnitIds.length;
     final hasSelection = selectionCount > 0;
@@ -677,7 +685,9 @@ class _SessionScreenState extends State<SessionScreen>
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
+          // Anchor for flying cards animation
           SizedBox(
+            key: _avatarKeys['me'],
             height: 130,
             child: _buildHandArea(
               context,
