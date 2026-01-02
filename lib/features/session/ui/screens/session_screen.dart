@@ -687,7 +687,6 @@ class _SessionScreenState extends State<SessionScreen>
         children: [
           // Anchor for flying cards animation
           SizedBox(
-            key: _avatarKeys['me'],
             height: 130,
             child: _buildHandArea(
               context,
@@ -798,36 +797,39 @@ class _SessionScreenState extends State<SessionScreen>
     final selectedUnits = provider.state.myHand
         .where((u) => provider.selectedUnitIds.contains(u.id))
         .toList();
-    if (selectedUnits.isEmpty) return const SizedBox(height: 75);
 
     return SizedBox(
+      key: _avatarKeys['me'],
       height: 75,
-      child: Center(
-        child: Stack(
-          alignment: Alignment.center,
-          children: List.generate(selectedUnits.length, (index) {
-            final unit = selectedUnits[index];
-            const double overlap = 30.0;
-            final double totalWidth = 70 + (selectedUnits.length - 1) * overlap;
-            final double startX = -(totalWidth / 2) + 35;
+      child: selectedUnits.isEmpty
+          ? const SizedBox.shrink()
+          : Center(
+              child: Stack(
+                alignment: Alignment.center,
+                children: List.generate(selectedUnits.length, (index) {
+                  final unit = selectedUnits[index];
+                  const double overlap = 30.0;
+                  final double totalWidth =
+                      70 + (selectedUnits.length - 1) * overlap;
+                  final double startX = -(totalWidth / 2) + 35;
 
-            return Positioned(
-              left:
-                  (MediaQuery.of(context).size.width / 2) +
-                  startX +
-                  (index * overlap) -
-                  35,
-              child: UnitCard(
-                unit: unit,
-                onTap: () => provider.toggleUnitSelection(unit.id),
-                isSelected: true,
-                width: 50,
-                height: 70,
+                  return Positioned(
+                    left:
+                        (MediaQuery.of(context).size.width / 2) +
+                        startX +
+                        (index * overlap) -
+                        35,
+                    child: UnitCard(
+                      unit: unit,
+                      onTap: () => provider.toggleUnitSelection(unit.id),
+                      isSelected: true,
+                      width: 50,
+                      height: 70,
+                    ),
+                  );
+                }),
               ),
-            );
-          }),
-        ),
-      ),
+            ),
     );
   }
 

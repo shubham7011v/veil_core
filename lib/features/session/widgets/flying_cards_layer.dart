@@ -123,15 +123,15 @@ class _FlyingCardAnimationState extends State<_FlyingCardAnimation>
 
   Widget _buildCardStack(int count) {
     return SizedBox(
-      width: 54, // Slight buffer for overlap
-      height: 74,
+      width: 74, // Increased width for larger offset
+      height: 94, // Increased height for larger offset
       child: Stack(
         clipBehavior: Clip.none,
         children: List.generate(
-          math.min(count, 3),
+          math.min(count, 4),
           (i) => Positioned(
-            top: i * 2.0,
-            left: i * 2.0,
+            top: i * 6.0,
+            left: i * 6.0,
             child: Container(
               width: 50,
               height: 70,

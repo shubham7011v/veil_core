@@ -244,6 +244,7 @@ class LocalBotSessionHandler implements GameSessionHandler {
   }
 
   void _executeMove(String playerId, List<Unit> units, UnitRank declaredRank) {
+    final oldPileCount = _currentState.pileCount;
     _pile.addAll(units);
     _lastPlayedById = playerId;
     _passCount = 0;
@@ -257,7 +258,7 @@ class LocalBotSessionHandler implements GameSessionHandler {
 
     _hands[playerId]!.removeWhere((u) => units.contains(u));
 
-    // Update State
+    // Phase 1: Update UI immediately (remove cards from hand, keep old pile count)
     List<Participant> updatedParticipants = _currentState.participants.map((p) {
       if (p.id == playerId) {
         return p.copyWith(
@@ -271,7 +272,7 @@ class LocalBotSessionHandler implements GameSessionHandler {
     _currentState = _currentState.copyWith(
       participants: updatedParticipants,
       myHand: playerId == 'me' ? _hands['me']! : _currentState.myHand,
-      pileCount: _pile.length,
+      pileCount: oldPileCount, // Keep old count for now
       lastActionText: "${pNames[playerId]} played ${units.length} cards",
     );
 
@@ -284,20 +285,29 @@ class LocalBotSessionHandler implements GameSessionHandler {
     );
     _emitState();
 
-    final winner = updatedParticipants.firstWhere((p) => p.id == playerId);
-    if (winner.unitCount <= 0) {
-      _currentState = _currentState.copyWith(
-        lastActionText: "${pNames[playerId]} WINS!",
-        currentPhase: SessionPhase.finished,
-        winnerId: playerId,
-      );
-      _emitState();
-      return;
-    }
+    // Phase 2: Deferred update once cards reach the pile (approx 700ms)
+    // We wait for the animation to finish before updating total and advancing turn
+    Future.delayed(const Duration(milliseconds: 700), () {
+      if (_currentState.currentPhase == SessionPhase.finished) return;
 
-    // Delay turn advancement slightly to allow UI/animations to react to the card move
-    Future.delayed(const Duration(milliseconds: 300), () {
-      _advanceTurn();
+      _currentState = _currentState.copyWith(pileCount: _pile.length);
+      _emitState();
+
+      final winner = updatedParticipants.firstWhere((p) => p.id == playerId);
+      if (winner.unitCount <= 0) {
+        _currentState = _currentState.copyWith(
+          lastActionText: "${pNames[playerId]} WINS!",
+          currentPhase: SessionPhase.finished,
+          winnerId: playerId,
+        );
+        _emitState();
+        return;
+      }
+
+      // Final short delay before moving turn indicator, feels more natural
+      Future.delayed(const Duration(milliseconds: 200), () {
+        _advanceTurn();
+      });
     });
   }
 
