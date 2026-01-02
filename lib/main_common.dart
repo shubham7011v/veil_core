@@ -14,7 +14,22 @@ import 'features/rules/ui/rules_screen.dart';
 import 'features/collection/ui/deck_collection_screen.dart';
 import 'features/session/ui/screens/bot_settings_screen.dart';
 
-void mainCommon(AppConfig config) {
+import 'package:firebase_core/firebase_core.dart';
+import 'package:firebase_app_check/firebase_app_check.dart';
+
+Future<void> mainCommon(AppConfig config) async {
+  WidgetsFlutterBinding.ensureInitialized();
+  await Firebase.initializeApp();
+
+  // Activate App Check
+  // Activate App Check
+  await FirebaseAppCheck.instance.activate(
+    providerAndroid: config.environment == Environment.dev
+        ? const AndroidDebugProvider()
+        : const AndroidPlayIntegrityProvider(),
+    providerApple: const AppleDeviceCheckProvider(),
+  );
+
   runApp(VeilApp(config: config));
 }
 
