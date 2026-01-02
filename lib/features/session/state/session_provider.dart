@@ -52,17 +52,10 @@ class SessionProvider extends ChangeNotifier {
   // Or purely rely on events.
   // However, SessionScreen checks `provider.isRevealingBluff`.
   // Let's assume the handler handles the delay, but if we need UI feedback:
-  bool get isRevealingBluff => (_handler is LocalBotSessionHandler)
-      ? (_handler as LocalBotSessionHandler).isRevealingBluff
-      : false; // Temporary cast until interface update
+  bool get isRevealingBluff => _handler.isRevealingBluff;
 
   // Helper for names.
-  Map<String, String> get pNames {
-    if (_handler is LocalBotSessionHandler) {
-      return (_handler as LocalBotSessionHandler).pNames;
-    }
-    return {for (var p in state.participants) p.id: p.name};
-  }
+  Map<String, String> get pNames => _handler.pNames;
 
   String getPlayerName(String id) {
     return pNames[id] ?? id;

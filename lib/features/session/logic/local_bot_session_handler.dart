@@ -78,9 +78,11 @@ class LocalBotSessionHandler implements GameSessionHandler {
     'p9': 'Rohan',
   };
 
+  @override
   Map<String, String> get pNames => Map.unmodifiable(_pNames);
 
   // Getter for UI state
+  @override
   bool get isRevealingBluff => _isRevealingBluff;
 
   @override
@@ -158,16 +160,27 @@ class LocalBotSessionHandler implements GameSessionHandler {
       }
     }
 
+    // Phase 1: Initial State with 0 cards (triggers shuffle/deal visual state)
     _currentState = SessionState(
       roomId: '101',
-      participants: participants,
-      myHand: _hands['me']!,
+      participants: participants.map((p) => p.copyWith(unitCount: 0)).toList(),
+      myHand: [],
       currentPhase: SessionPhase.thinking,
       activeParticipantId: 'me',
       pileCount: 0,
-      lastActionText: 'Game Started! Select cards and choose a rank.',
+      lastActionText: 'Shuffling deck...',
     );
     _emitState();
+
+    // Phase 2: Deferred "Deal" (triggers flycard animation from pile)
+    Future.delayed(const Duration(milliseconds: 800), () {
+      _currentState = _currentState.copyWith(
+        participants: participants,
+        myHand: _hands['me']!,
+        lastActionText: 'Game Started! Select cards and choose a rank.',
+      );
+      _emitState();
+    });
   }
 
   @override
@@ -407,9 +420,6 @@ class LocalBotSessionHandler implements GameSessionHandler {
     final wasBluff = _checkIfBluff(_lastMove!);
     _isBluffSuccessful = wasBluff;
 
-    // Emit resolved event
-    _eventController.add(SessionEventType.bluffResolved);
-
     String resultText;
     String loserId;
 
@@ -423,11 +433,8 @@ class LocalBotSessionHandler implements GameSessionHandler {
       loserId = challengerId;
     }
 
-    _distributePileTo(loserId);
-
     final winnerId = wasBluff ? challengerId : blufferId;
     final nextId = winnerId;
-
     _lastBluffWinnerId = winnerId;
     _lastBluffLoserId = loserId;
 
@@ -437,14 +444,21 @@ class LocalBotSessionHandler implements GameSessionHandler {
           : "Truth told! ${pNames[loserId]} takes the pile.",
     );
 
-    _resetRoundState(nextId, wasDiscarded: false, winnerId: winnerId);
+    // Emit resolved event after state is set so UI can read loserId
+    _eventController.add(SessionEventType.bluffResolved);
 
-    _currentState = _currentState.copyWith(lastActionText: resultText);
-    _emitState();
+    // DEFERRED Phase: Distribute cards after animation delay
+    Future.delayed(const Duration(milliseconds: 1000), () {
+      _distributePileTo(loserId);
+      _resetRoundState(nextId, wasDiscarded: false, winnerId: winnerId);
 
-    if (nextId != 'me') {
-      _scheduleBotTurn(nextId);
-    }
+      _currentState = _currentState.copyWith(lastActionText: resultText);
+      _emitState();
+
+      if (nextId != 'me') {
+        _scheduleBotTurn(nextId);
+      }
+    });
   }
 
   void _distributePileTo(String playerId) {

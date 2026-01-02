@@ -39,6 +39,7 @@ class _SessionScreenState extends State<SessionScreen>
   final GlobalKey _pileKey = GlobalKey();
   final List<FlyingCard> _flyingCards = [];
   Color? _flashColor;
+  final Map<String, int> _lastKnownCounts = {};
 
   @override
   void initState() {
@@ -130,9 +131,10 @@ class _SessionScreenState extends State<SessionScreen>
       // Add a small delay to ensure widgets are fully rendered
       Future.delayed(const Duration(milliseconds: 100), () {
         if (mounted) {
-          _triggerFlyingCards(
-            provider.lastEventActorId ?? 'me',
-            provider.lastCountClaimed,
+          _triggerCardAnimation(
+            sourceId: provider.lastEventActorId ?? 'me',
+            targetId: 'pile',
+            count: provider.lastCountClaimed,
           );
         }
       });
@@ -159,37 +161,48 @@ class _SessionScreenState extends State<SessionScreen>
     });
   }
 
-  void _triggerFlyingCards(String playerId, int count) {
+  void _triggerCardAnimation({
+    required String sourceId,
+    required String targetId,
+    required int count,
+  }) {
     if (!mounted) return;
 
     // 1. Get Start Position
-    final key = _avatarKeys[playerId];
-    if (key == null || key.currentContext == null) {
-      debugPrint(
-        "Animation failed: Key for $playerId is null or not in context",
-      );
-      return;
+    Offset startPos;
+    if (sourceId == 'pile') {
+      if (_pileKey.currentContext == null) return;
+      final box = _pileKey.currentContext!.findRenderObject() as RenderBox;
+      startPos =
+          box.localToGlobal(Offset.zero) +
+          Offset(box.size.width / 2, box.size.height / 2);
+    } else {
+      final key = _avatarKeys[sourceId];
+      if (key == null || key.currentContext == null) return;
+      final box = key.currentContext!.findRenderObject() as RenderBox;
+      startPos =
+          box.localToGlobal(Offset.zero) +
+          Offset(box.size.width / 2, box.size.height / 2);
     }
-    final RenderBox renderBox =
-        key.currentContext!.findRenderObject() as RenderBox;
-    final startPos =
-        renderBox.localToGlobal(Offset.zero) +
-        Offset(renderBox.size.width / 2, renderBox.size.height / 2);
 
-    // 2. Get End Position (Pile)
-    if (_pileKey.currentContext == null) {
-      debugPrint("Animation failed: Pile key not in context");
-      return;
+    // 2. Get End Position
+    Offset endPos;
+    if (targetId == 'pile') {
+      if (_pileKey.currentContext == null) return;
+      final box = _pileKey.currentContext!.findRenderObject() as RenderBox;
+      endPos =
+          box.localToGlobal(Offset.zero) +
+          Offset(box.size.width / 2, box.size.height / 2);
+    } else {
+      final key = _avatarKeys[targetId];
+      if (key == null || key.currentContext == null) return;
+      final box = key.currentContext!.findRenderObject() as RenderBox;
+      endPos =
+          box.localToGlobal(Offset.zero) +
+          Offset(box.size.width / 2, box.size.height / 2);
     }
-    final RenderBox pileBox =
-        _pileKey.currentContext!.findRenderObject() as RenderBox;
-    final endPos =
-        pileBox.localToGlobal(Offset.zero) +
-        Offset(pileBox.size.width / 2, pileBox.size.height / 2);
 
-    debugPrint(
-      "Flying $count cards from $playerId ($startPos) to pile ($endPos)",
-    );
+    debugPrint("Flying $count cards from $sourceId to $targetId");
 
     setState(() {
       _flyingCards.add(FlyingCard(start: startPos, end: endPos, count: count));
@@ -209,6 +222,43 @@ class _SessionScreenState extends State<SessionScreen>
   Widget build(BuildContext context) {
     Responsive.init(context);
     final provider = context.watch<SessionProvider>();
+
+    // --- Card Pickup Detection (State Diffing) ---
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+
+      final totalCards = provider.state.participants.fold<int>(
+        0,
+        (sum, p) => sum + p.unitCount,
+      );
+
+      // If everyone has 0 cards, we are likely in the "shuffle" phase of a new game.
+      // Reset trackers so the subsequent "deal" triggers an increase animation.
+      if (totalCards == 0 && provider.state.participants.isNotEmpty) {
+        if (_lastKnownCounts.isNotEmpty) {
+          debugPrint("RESETTING card count trackers for new game.");
+          _lastKnownCounts.clear();
+        }
+        return;
+      }
+
+      for (var p in provider.state.participants) {
+        final oldCount = _lastKnownCounts[p.id] ?? 0;
+        final newCount = p.unitCount;
+
+        if (newCount > oldCount) {
+          final diff = newCount - oldCount;
+          debugPrint(
+            "DETECTED INCREASE for ${p.id}: $oldCount -> $newCount. Flying $diff cards.",
+          );
+          _triggerCardAnimation(sourceId: 'pile', targetId: p.id, count: diff);
+        }
+
+        if (newCount != oldCount) {
+          _lastKnownCounts[p.id] = newCount;
+        }
+      }
+    });
 
     return Scaffold(
       backgroundColor: const Color(0xFF121212),
