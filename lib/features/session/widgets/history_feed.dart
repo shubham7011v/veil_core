@@ -1,15 +1,16 @@
 import 'package:flutter/material.dart';
-import 'package:provider/provider.dart';
-import '../state/session_provider.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
+import '../bloc/session_bloc.dart';
+import '../bloc/session_state.dart';
 
 class HistoryFeed extends StatelessWidget {
   const HistoryFeed({super.key});
 
   @override
   Widget build(BuildContext context) {
-    return Consumer<SessionProvider>(
-      builder: (context, provider, child) {
-        final logs = provider.gameLog;
+    return BlocBuilder<SessionBloc, SessionBlocState>(
+      builder: (context, state) {
+        final logs = context.read<SessionBloc>().handler.gameLog;
         if (logs.isEmpty) return const SizedBox.shrink();
 
         return Container(

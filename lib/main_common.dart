@@ -1,9 +1,13 @@
 import 'package:flutter/material.dart';
-import 'package:provider/provider.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
 import 'config/app_config.dart';
 import 'core/theme/app_theme.dart';
+import 'core/theme/bloc/theme_bloc.dart';
+import 'core/theme/bloc/theme_state.dart';
 
-import 'features/session/state/session_provider.dart';
+import 'features/session/bloc/session_bloc.dart';
+import 'features/session/bloc/session_event.dart';
+import 'features/session/bloc/session_state.dart';
 import 'features/session/ui/screens/session_screen.dart';
 import 'features/session/ui/screens/lobby_screen.dart';
 import 'features/auth/ui/login_screen.dart';
@@ -38,27 +42,35 @@ class VeilApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return MultiProvider(
+    return MultiBlocProvider(
       providers: [
-        ChangeNotifierProvider(create: (_) => SessionProvider()),
-        Provider.value(value: config), // Provide config to the tree
+        BlocProvider(create: (_) => ThemeBloc()),
+        BlocProvider(create: (_) => SessionBloc()),
+        RepositoryProvider.value(value: config), // Provide config to the tree
       ],
-      child: MaterialApp(
-        title: config.appName,
-        debugShowCheckedModeBanner: config.isDev,
-        theme: AppTheme.darkTheme,
-        initialRoute: '/login', // Start at Login
-        routes: {
-          '/login': (context) => const LoginScreen(),
-          '/home': (context) => const HomeScreen(),
-          '/create_room': (context) => const CreateRoomScreen(),
-          '/settings': (context) => const SettingsScreen(),
-          '/rules': (context) => const RulesScreen(),
-          '/deck': (context) => const DeckCollectionScreen(),
-          '/lobby': (context) =>
-              const LobbyWrapper(), // Wrapped to inject real data if needed
-          '/session': (context) => const SessionScreen(),
-          '/bot_settings': (context) => const BotSettingsScreen(),
+      child: BlocBuilder<ThemeBloc, ThemeState>(
+        builder: (context, themeState) {
+          final themeProvider = AppTheme.getTheme(
+            themeState.mode,
+          ); // Helper logic if needed
+          return MaterialApp(
+            title: config.appName,
+            debugShowCheckedModeBanner: config.isDev,
+            theme: themeProvider,
+            initialRoute: '/login', // Start at Login
+            routes: {
+              '/login': (context) => const LoginScreen(),
+              '/home': (context) => const HomeScreen(),
+              '/create_room': (context) => const CreateRoomScreen(),
+              '/settings': (context) => const SettingsScreen(),
+              '/rules': (context) => const RulesScreen(),
+              '/deck': (context) => const DeckCollectionScreen(),
+              '/lobby': (context) =>
+                  const LobbyWrapper(), // Wrapped to inject real data if needed
+              '/session': (context) => const SessionScreen(),
+              '/bot_settings': (context) => const BotSettingsScreen(),
+            },
+          );
         },
       ),
     );
@@ -72,15 +84,17 @@ class LobbyWrapper extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     // In a real app, arguments would be passed here.
-    // For now, we read from provider or static mocks.
-    final provider = context.watch<SessionProvider>();
-
-    return LobbyScreen(
-      roomId: provider.state.roomId,
-      participants: provider.state.participants,
-      onStart: () {
-        provider.startSession();
-        Navigator.pushReplacementNamed(context, '/session');
+    // For now, we read from bloc.
+    return BlocBuilder<SessionBloc, SessionBlocState>(
+      builder: (context, state) {
+        return LobbyScreen(
+          roomId: state.engineState.roomId,
+          participants: state.engineState.participants,
+          onStart: () {
+            context.read<SessionBloc>().add(const SessionStartRequested());
+            Navigator.pushReplacementNamed(context, '/session');
+          },
+        );
       },
     );
   }

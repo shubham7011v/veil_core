@@ -1,56 +1,51 @@
-
 import 'package:flutter/material.dart';
 import 'colors.dart';
 import '../constants/dimens.dart';
 
 class AppTheme {
-  static ThemeData get darkTheme {
+  static ThemeData getTheme(AppThemeMode mode) {
+    final palette = AppColors.getPalette(mode);
+
     return ThemeData(
       useMaterial3: true,
       brightness: Brightness.dark,
-      scaffoldBackgroundColor: AppColors.background,
-      primaryColor: AppColors.primary,
-      fontFamily: 'Inter', // Assumption: Using generic san-serif if font not loaded
-      
-      colorScheme: const ColorScheme.dark(
-        primary: AppColors.primary,
-        secondary: AppColors.primaryDim,
-        surface: AppColors.surface,
-        error: AppColors.danger,
+      scaffoldBackgroundColor: palette.background,
+      primaryColor: palette.primary,
+      fontFamily: 'Inter',
+
+      colorScheme: ColorScheme.dark(
+        primary: palette.primary,
+        secondary: palette.primaryDim,
+        surface: palette.surface,
+        error: palette.danger,
         onPrimary: Colors.black,
-        onSurface: AppColors.textPrimary,
+        onSurface: palette.textPrimary,
       ),
-      
-      textTheme: const TextTheme(
+
+      textTheme: TextTheme(
         headlineLarge: TextStyle(
-          color: AppColors.textPrimary,
+          color: palette.textPrimary,
           fontSize: 32,
           fontWeight: FontWeight.bold,
           letterSpacing: -1.0,
         ),
         headlineMedium: TextStyle(
-          color: AppColors.textPrimary,
+          color: palette.textPrimary,
           fontSize: 24,
           fontWeight: FontWeight.w600,
         ),
-        bodyLarge: TextStyle(
-          color: AppColors.textPrimary,
-          fontSize: 16,
-        ),
-        bodyMedium: TextStyle(
-          color: AppColors.textSecondary,
-          fontSize: 14,
-        ),
+        bodyLarge: TextStyle(color: palette.textPrimary, fontSize: 16),
+        bodyMedium: TextStyle(color: palette.textSecondary, fontSize: 14),
         labelLarge: TextStyle(
-            color: AppColors.textPrimary,
-            fontSize: 16, 
-            fontWeight: FontWeight.w600
+          color: palette.textPrimary,
+          fontSize: 16,
+          fontWeight: FontWeight.w600,
         ),
       ),
-      
+
       elevatedButtonTheme: ElevatedButtonThemeData(
         style: ElevatedButton.styleFrom(
-          backgroundColor: AppColors.primary,
+          backgroundColor: palette.primary,
           foregroundColor: Colors.black,
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(AppDimens.radiusM),
@@ -63,4 +58,7 @@ class AppTheme {
       ),
     );
   }
+
+  // Legacy static access
+  static ThemeData get darkTheme => getTheme(AppThemeMode.classic);
 }

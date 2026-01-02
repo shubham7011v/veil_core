@@ -1,8 +1,9 @@
 import 'package:flutter/material.dart';
-import 'package:provider/provider.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
 import 'dart:math' as dart_math;
-import '../../../../core/utils/responsive.dart';
-import '../../state/session_provider.dart';
+import '../../bloc/session_bloc.dart';
+import '../../bloc/session_event.dart';
+import '../../bloc/session_state.dart';
 import '../../models/unit.dart';
 import '../../widgets/unit_card.dart';
 import '../../widgets/participant_avatar.dart';
@@ -11,6 +12,7 @@ import '../../widgets/bluff_reveal_overlay.dart';
 import '../../widgets/flying_cards_layer.dart';
 
 import '../../models/session_state.dart';
+import '../../models/session_enums.dart';
 
 class SessionScreen extends StatefulWidget {
   const SessionScreen({super.key});
@@ -119,28 +121,30 @@ class _SessionScreenState extends State<SessionScreen>
     }
   }
 
-  void _handleGameEvents(SessionEventType event) {
+  void _handleGameEvents(SessionEventType event, SessionBlocState state) {
     debugPrint("===== EVENT RECEIVED: $event =====");
-    final provider = context.read<SessionProvider>();
     if (event == SessionEventType.pileDiscarded) {
       _triggerPileDiscardEffect();
     } else if (event == SessionEventType.cardsPlayed) {
       debugPrint(
-        "Cards played by: ${provider.lastEventActorId}, count: ${provider.lastCountClaimed}",
+        "Cards played by: ${state.lastEventActorId}, count: ${state.engineState.lastActionText}", // Assuming count is in action text or we need a proper field
       );
-      // Add a small delay to ensure widgets are fully rendered
+      // For now, let's assume the handler still has the lastCountClaimed if we need it
+      final count = context.read<SessionBloc>().handler.lastCountClaimed;
+
       Future.delayed(const Duration(milliseconds: 100), () {
         if (mounted) {
           _triggerCardAnimation(
-            sourceId: provider.lastEventActorId ?? 'me',
+            sourceId: state.lastEventActorId ?? 'me',
             targetId: 'pile',
-            count: provider.lastCountClaimed,
+            count: count,
           );
         }
       });
     } else if (event == SessionEventType.bluffResolved) {
+      final isSuccess = context.read<SessionBloc>().handler.isBluffSuccessful;
       _triggerFlash(
-        provider.isBluffSuccessful == true
+        isSuccess == true
             ? Colors.green.withValues(alpha: 0.4)
             : Colors.red.withValues(alpha: 0.4),
       );
@@ -236,240 +240,268 @@ class _SessionScreenState extends State<SessionScreen>
 
   @override
   Widget build(BuildContext context) {
-    Responsive.init(context);
-    final provider = context.watch<SessionProvider>();
-
-    // --- Card Pickup Detection (State Diffing) ---
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!mounted) return;
-
-      final totalCards = provider.state.participants.fold<int>(
-        0,
-        (sum, p) => sum + p.unitCount,
-      );
-
-      // If everyone has 0 cards, we are likely in the "shuffle" phase of a new game.
-      // Reset trackers so the subsequent "deal" triggers an increase animation.
-      if (totalCards == 0 && provider.state.participants.isNotEmpty) {
-        debugPrint(
-          "DIFFING: Total cards 0, participants present. Tracking start.",
-        );
-        if (_lastKnownCounts.isNotEmpty) {
-          debugPrint("RESETTING card count trackers for new game.");
-          _lastKnownCounts.clear();
+    return BlocListener<SessionBloc, SessionBlocState>(
+      listenWhen: (prev, curr) =>
+          prev.lastEvent != curr.lastEvent ||
+          (curr.lastEvent != SessionEventType.none &&
+              prev.lastEventActorId != curr.lastEventActorId),
+      listener: (context, state) {
+        if (state.lastEvent != SessionEventType.none) {
+          _handleGameEvents(state.lastEvent, state);
         }
-        return;
-      }
+      },
+      child: BlocBuilder<SessionBloc, SessionBlocState>(
+        builder: (context, state) {
+          final bloc = context.read<SessionBloc>();
+          final handler = bloc.handler;
+          final engineState = state.engineState;
 
-      for (var p in provider.state.participants) {
-        final oldCount = _lastKnownCounts[p.id] ?? 0;
-        final newCount = p.unitCount;
+          // --- Card Pickup Detection (State Diffing) ---
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            if (!mounted) return;
 
-        if (newCount > oldCount) {
-          final diff = newCount - oldCount;
-          debugPrint(
-            "DETECTED INCREASE for ${p.id}: $oldCount -> $newCount. Flying $diff cards.",
-          );
-          _triggerCardAnimation(sourceId: 'pile', targetId: p.id, count: diff);
-        }
+            final totalCards = engineState.participants.fold<int>(
+              0,
+              (sum, p) => sum + p.unitCount,
+            );
 
-        if (newCount != oldCount) {
-          _lastKnownCounts[p.id] = newCount;
-        }
-      }
-    });
+            if (totalCards == 0 && engineState.participants.isNotEmpty) {
+              if (_lastKnownCounts.isNotEmpty) {
+                _lastKnownCounts.clear();
+              }
+              return;
+            }
 
-    return Scaffold(
-      backgroundColor: const Color(0xFF121212),
-      body: Stack(
-        children: [
-          _EventListenerWrapper(provider: provider, onEvent: _handleGameEvents),
-          Positioned.fill(
-            child: Container(
-              decoration: const BoxDecoration(
-                gradient: RadialGradient(
-                  center: Alignment.center,
-                  radius: 1.5,
-                  colors: [Color(0xFF2A1E17), Color(0xFF0D0D0D)],
-                ),
-              ),
-            ),
-          ),
-          if (_flashColor != null)
-            Positioned.fill(
-              child: AnimatedContainer(
-                duration: const Duration(milliseconds: 300),
-                color: _flashColor,
-              ),
-            ),
-          SafeArea(
-            child: Column(
+            for (var p in engineState.participants) {
+              final oldCount = _lastKnownCounts[p.id] ?? 0;
+              final newCount = p.unitCount;
+
+              if (newCount > oldCount) {
+                final diff = newCount - oldCount;
+                _triggerCardAnimation(
+                  sourceId: 'pile',
+                  targetId: p.id,
+                  count: diff,
+                );
+              }
+
+              if (newCount != oldCount) {
+                _lastKnownCounts[p.id] = newCount;
+              }
+            }
+          });
+
+          return Scaffold(
+            backgroundColor: const Color(0xFF121212),
+            body: Stack(
               children: [
-                // Top Bar (0.0 - 0.4)
-                SlideTransition(
-                  position:
-                      Tween<Offset>(
-                        begin: const Offset(0, -0.5),
-                        end: Offset.zero,
-                      ).animate(
-                        CurvedAnimation(
-                          parent: _entryController,
-                          curve: const Interval(
-                            0.0,
-                            0.4,
-                            curve: Curves.easeOutCubic,
-                          ),
-                        ),
+                Positioned.fill(
+                  child: Container(
+                    decoration: const BoxDecoration(
+                      gradient: RadialGradient(
+                        center: Alignment.center,
+                        radius: 1.5,
+                        colors: [Color(0xFF2A1E17), Color(0xFF0D0D0D)],
                       ),
-                  child: FadeTransition(
-                    opacity: CurvedAnimation(
-                      parent: _entryController,
-                      curve: const Interval(0.0, 0.4, curve: Curves.easeOut),
                     ),
-                    child: _buildTopBar(provider),
                   ),
                 ),
-
-                // Opponents (0.1 - 0.5)
-                SlideTransition(
-                  position:
-                      Tween<Offset>(
-                        begin: const Offset(0, -0.2),
-                        end: Offset.zero,
-                      ).animate(
-                        CurvedAnimation(
-                          parent: _entryController,
-                          curve: const Interval(
-                            0.1,
-                            0.5,
-                            curve: Curves.easeOutCubic,
-                          ),
-                        ),
-                      ),
-                  child: FadeTransition(
-                    opacity: CurvedAnimation(
-                      parent: _entryController,
-                      curve: const Interval(0.1, 0.5, curve: Curves.easeOut),
+                if (_flashColor != null)
+                  Positioned.fill(
+                    child: AnimatedContainer(
+                      duration: const Duration(milliseconds: 300),
+                      color: _flashColor,
                     ),
-                    child: _buildOpponentCarousel(context, provider),
                   ),
-                ),
-                const SizedBox(height: 10),
-
-                // Center Pile + Claim Badge
-                Expanded(
-                  child: Center(
-                    child: SingleChildScrollView(
-                      child: Stack(
-                        key: _pileKey,
-                        clipBehavior: Clip.none,
-                        alignment: Alignment.center,
-                        children: [
-                          ScaleTransition(
-                            scale: CurvedAnimation(
-                              parent: _entryController,
-                              curve: const Interval(
-                                0.2,
-                                0.7,
-                                curve: Curves.elasticOut,
+                SafeArea(
+                  child: Column(
+                    children: [
+                      // Top Bar (0.0 - 0.4)
+                      SlideTransition(
+                        position:
+                            Tween<Offset>(
+                              begin: const Offset(0, -0.5),
+                              end: Offset.zero,
+                            ).animate(
+                              CurvedAnimation(
+                                parent: _entryController,
+                                curve: const Interval(
+                                  0.0,
+                                  0.4,
+                                  curve: Curves.easeOutCubic,
+                                ),
                               ),
                             ),
-                            child: AnimatedSwitcher(
-                              duration: const Duration(milliseconds: 400),
-                              child: provider.shouldShowRankSelector
-                                  ? _buildRankSelector(provider)
-                                  : _buildCenterPile(provider),
+                        child: FadeTransition(
+                          opacity: CurvedAnimation(
+                            parent: _entryController,
+                            curve: const Interval(
+                              0.0,
+                              0.4,
+                              curve: Curves.easeOut,
                             ),
                           ),
-                        ],
+                          child: _buildTopBar(context, state),
+                        ),
                       ),
+
+                      // Opponents (0.1 - 0.5)
+                      SlideTransition(
+                        position:
+                            Tween<Offset>(
+                              begin: const Offset(0, -0.2),
+                              end: Offset.zero,
+                            ).animate(
+                              CurvedAnimation(
+                                parent: _entryController,
+                                curve: const Interval(
+                                  0.1,
+                                  0.5,
+                                  curve: Curves.easeOutCubic,
+                                ),
+                              ),
+                            ),
+                        child: FadeTransition(
+                          opacity: CurvedAnimation(
+                            parent: _entryController,
+                            curve: const Interval(
+                              0.1,
+                              0.5,
+                              curve: Curves.easeOut,
+                            ),
+                          ),
+                          child: _buildOpponentCarousel(context, state),
+                        ),
+                      ),
+                      const SizedBox(height: 10),
+
+                      // Center Pile + Claim Badge
+                      Expanded(
+                        child: Center(
+                          child: SingleChildScrollView(
+                            child: Stack(
+                              key: _pileKey,
+                              clipBehavior: Clip.none,
+                              alignment: Alignment.center,
+                              children: [
+                                ScaleTransition(
+                                  scale: CurvedAnimation(
+                                    parent: _entryController,
+                                    curve: const Interval(
+                                      0.2,
+                                      0.7,
+                                      curve: Curves.elasticOut,
+                                    ),
+                                  ),
+                                  child: AnimatedSwitcher(
+                                    duration: const Duration(milliseconds: 400),
+                                    child: state.shouldShowRankSelector
+                                        ? _buildRankSelector(context, state)
+                                        : _buildCenterPile(context, state),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ),
+
+                      // Staging Area (0.4 - 0.8)
+                      SlideTransition(
+                        position:
+                            Tween<Offset>(
+                              begin: const Offset(0, 0.2),
+                              end: Offset.zero,
+                            ).animate(
+                              CurvedAnimation(
+                                parent: _entryController,
+                                curve: const Interval(
+                                  0.4,
+                                  0.8,
+                                  curve: Curves.easeOutCubic,
+                                ),
+                              ),
+                            ),
+                        child: FadeTransition(
+                          opacity: CurvedAnimation(
+                            parent: _entryController,
+                            curve: const Interval(
+                              0.4,
+                              0.8,
+                              curve: Curves.easeOut,
+                            ),
+                          ),
+                          child: _buildStagingArea(context, state),
+                        ),
+                      ),
+                      const SizedBox(height: 4),
+
+                      // Bottom Controls (0.5 - 1.0)
+                      SlideTransition(
+                        position:
+                            Tween<Offset>(
+                              begin: const Offset(0, 0.5),
+                              end: Offset.zero,
+                            ).animate(
+                              CurvedAnimation(
+                                parent: _entryController,
+                                curve: const Interval(
+                                  0.5,
+                                  1.0,
+                                  curve: Curves.easeOutCubic,
+                                ),
+                              ),
+                            ),
+                        child: FadeTransition(
+                          opacity: CurvedAnimation(
+                            parent: _entryController,
+                            curve: const Interval(
+                              0.5,
+                              1.0,
+                              curve: Curves.easeOut,
+                            ),
+                          ),
+                          child: _buildBottomControls(context, state),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+
+                if (state.engineState.currentPhase == SessionPhase.finished)
+                  _buildWinOverlay(context, state),
+
+                // Action Overlays (Flying Cards, Badges)
+                Positioned.fill(
+                  child: IgnorePointer(
+                    child: FlyingCardsLayer(
+                      activeAnimations: _flyingCards,
+                      onComplete: () {},
                     ),
                   ),
                 ),
 
-                // Staging Area (0.4 - 0.8)
-                SlideTransition(
-                  position:
-                      Tween<Offset>(
-                        begin: const Offset(0, 0.2),
-                        end: Offset.zero,
-                      ).animate(
-                        CurvedAnimation(
-                          parent: _entryController,
-                          curve: const Interval(
-                            0.4,
-                            0.8,
-                            curve: Curves.easeOutCubic,
-                          ),
-                        ),
-                      ),
-                  child: FadeTransition(
-                    opacity: CurvedAnimation(
-                      parent: _entryController,
-                      curve: const Interval(0.4, 0.8, curve: Curves.easeOut),
-                    ),
-                    child: _buildStagingArea(context, provider),
-                  ),
-                ),
-                const SizedBox(height: 4),
+                // Particle Layer
+                ..._particles,
 
-                // Bottom Controls (0.5 - 1.0)
-                SlideTransition(
-                  position:
-                      Tween<Offset>(
-                        begin: const Offset(0, 0.5),
-                        end: Offset.zero,
-                      ).animate(
-                        CurvedAnimation(
-                          parent: _entryController,
-                          curve: const Interval(
-                            0.5,
-                            1.0,
-                            curve: Curves.easeOutCubic,
-                          ),
-                        ),
-                      ),
-                  child: FadeTransition(
-                    opacity: CurvedAnimation(
-                      parent: _entryController,
-                      curve: const Interval(0.5, 1.0, curve: Curves.easeOut),
-                    ),
-                    child: _buildBottomControls(context, provider),
+                if (handler.isRevealingBluff && handler.lastMove != null)
+                  BluffRevealOverlay(
+                    cards: handler.lastMove!.actualUnits,
+                    declaredRank: handler.lastMove!.declaredRank,
                   ),
-                ),
               ],
             ),
-          ),
-
-          if (provider.state.currentPhase == SessionPhase.finished)
-            _buildWinOverlay(context, provider),
-
-          // Action Overlays (Flying Cards, Badges)
-          Positioned.fill(
-            child: IgnorePointer(
-              child: FlyingCardsLayer(
-                activeAnimations: _flyingCards,
-                onComplete: () {},
-              ),
-            ),
-          ),
-
-          // Particle Layer
-          ..._particles,
-
-          if (provider.isRevealingBluff && provider.lastMove != null)
-            BluffRevealOverlay(
-              cards: provider.lastMove!.actualUnits,
-              declaredRank: provider.lastMove!.declaredRank,
-            ),
-        ],
+          );
+        },
       ),
     );
   }
 
-  Widget _buildWinOverlay(BuildContext context, SessionProvider provider) {
-    final winnerName = provider.pNames[provider.state.winnerId] ?? "Someone";
-    final isMe = provider.state.winnerId == 'me';
+  Widget _buildWinOverlay(BuildContext context, SessionBlocState state) {
+    final bloc = context.read<SessionBloc>();
+    final winnerName =
+        bloc.handler.pNames[state.engineState.winnerId] ?? "Someone";
+    final isMe = state.engineState.winnerId == 'me';
 
     return Container(
       color: Colors.black.withValues(alpha: 0.85),
@@ -529,16 +561,13 @@ class _SessionScreenState extends State<SessionScreen>
     );
   }
 
-  Widget _buildTopBar(SessionProvider provider) {
+  Widget _buildTopBar(BuildContext context, SessionBlocState state) {
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          _buildCircleButton(
-            Icons.menu,
-            () => _showGameMenu(context, provider),
-          ),
+          _buildCircleButton(Icons.menu, () => _showGameMenu(context, state)),
           Column(
             mainAxisSize: MainAxisSize.min,
             children: [
@@ -559,11 +588,8 @@ class _SessionScreenState extends State<SessionScreen>
     );
   }
 
-  Widget _buildOpponentCarousel(
-    BuildContext context,
-    SessionProvider provider,
-  ) {
-    final participants = provider.state.participants
+  Widget _buildOpponentCarousel(BuildContext context, SessionBlocState state) {
+    final participants = state.engineState.participants
         .where((p) => p.id != 'me')
         .toList();
     WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -605,22 +631,27 @@ class _SessionScreenState extends State<SessionScreen>
     );
   }
 
-  Widget _buildCenterPile(SessionProvider provider) {
-    final rankName = provider.currentRank?.name.toUpperCase() ?? "???";
-    final roundStatus = provider.isRoundSet ? "${rankName}S" : "WAITING";
+  Widget _buildCenterPile(BuildContext context, SessionBlocState state) {
+    final bloc = context.read<SessionBloc>();
+    final handler = bloc.handler;
+    final currentRank = handler.lastMove?.declaredRank ?? state.stagedRank;
+    final rankName = currentRank?.name.toUpperCase() ?? "???";
+    final isRoundSet = handler.lastMove != null;
+    final roundStatus = isRoundSet ? "${rankName}S" : "WAITING";
 
     return AnimatedPileView(
-      pileCount: provider.pileCount,
+      pileCount: state.engineState.pileCount,
       roundStatus: roundStatus,
       onTap: () {
-        if (!provider.isRoundSet && provider.isMyTurn) {
-          provider.toggleRankSelectionMode();
+        if (!isRoundSet && state.isMyTurn) {
+          bloc.add(RankSelectionToggleRequested());
         }
       },
     );
   }
 
-  Widget _buildRankSelector(SessionProvider provider) {
+  Widget _buildRankSelector(BuildContext context, SessionBlocState state) {
+    final bloc = context.read<SessionBloc>();
     final ranks = UnitRank.values.toList();
     String getRankSymbol(UnitRank rank) {
       switch (rank) {
@@ -672,9 +703,9 @@ class _SessionScreenState extends State<SessionScreen>
               runSpacing: 8,
               alignment: WrapAlignment.center,
               children: ranks.map((rank) {
-                final isStaged = provider.stagedRank == rank;
+                final isStaged = state.stagedRank == rank;
                 return GestureDetector(
-                  onTap: () => provider.stageRank(rank),
+                  onTap: () => bloc.add(RankStaged(rank)),
                   child: AnimatedContainer(
                     duration: const Duration(milliseconds: 200),
                     width: 36,
@@ -706,7 +737,7 @@ class _SessionScreenState extends State<SessionScreen>
           ),
           const SizedBox(height: 12),
           TextButton(
-            onPressed: () => provider.toggleRankSelectionMode(),
+            onPressed: () => bloc.add(RankSelectionToggleRequested()),
             child: const Text(
               "CANCEL",
               style: TextStyle(color: Colors.white54, fontSize: 12),
@@ -717,12 +748,13 @@ class _SessionScreenState extends State<SessionScreen>
     );
   }
 
-  Widget _buildBottomControls(BuildContext context, SessionProvider provider) {
-    final selectionCount = provider.selectedUnitIds.length;
+  Widget _buildBottomControls(BuildContext context, SessionBlocState state) {
+    final bloc = context.read<SessionBloc>();
+    final selectionCount = state.selectedUnitIds.length;
     final hasSelection = selectionCount > 0;
-    final isMyTurn = provider.isMyTurn;
-    final isRoundSet = provider.isRoundSet;
-    final canSubmit = provider.canSubmit();
+    final isMyTurn = state.isMyTurn;
+    final isRoundSet = bloc.handler.lastMove != null;
+    final canSubmit = state.canSubmit(isRoundSet);
 
     return Container(
       decoration: BoxDecoration(
@@ -746,10 +778,10 @@ class _SessionScreenState extends State<SessionScreen>
             height: 130,
             child: _buildHandArea(
               context,
-              provider.state.myHand
-                  .where((u) => !provider.selectedUnitIds.contains(u.id))
+              state.engineState.myHand
+                  .where((u) => !state.selectedUnitIds.contains(u.id))
                   .toList(),
-              provider,
+              state,
             ),
           ),
           const SizedBox(height: 8),
@@ -759,7 +791,9 @@ class _SessionScreenState extends State<SessionScreen>
                 child: SizedBox(
                   height: 52,
                   child: OutlinedButton(
-                    onPressed: isMyTurn ? () => provider.passTurn() : null,
+                    onPressed: isMyTurn
+                        ? () => bloc.add(TurnPassRequested())
+                        : null,
                     style: OutlinedButton.styleFrom(
                       side: const BorderSide(color: Colors.white24),
                       shape: RoundedRectangleBorder(
@@ -794,7 +828,7 @@ class _SessionScreenState extends State<SessionScreen>
                   ),
                   child: ElevatedButton(
                     onPressed: canSubmit
-                        ? () => provider.submitSelectedUnits()
+                        ? () => bloc.add(CardsPlayRequested())
                         : null,
                     style: ElevatedButton.styleFrom(
                       backgroundColor: Colors.transparent,
@@ -820,7 +854,7 @@ class _SessionScreenState extends State<SessionScreen>
                   height: 52,
                   child: ElevatedButton(
                     onPressed: (isRoundSet && isMyTurn)
-                        ? () => provider.raiseChallenge()
+                        ? () => bloc.add(ChallengeRaiseRequested())
                         : null,
                     style: ElevatedButton.styleFrom(
                       backgroundColor: isRoundSet
@@ -849,9 +883,10 @@ class _SessionScreenState extends State<SessionScreen>
     );
   }
 
-  Widget _buildStagingArea(BuildContext context, SessionProvider provider) {
-    final selectedUnits = provider.state.myHand
-        .where((u) => provider.selectedUnitIds.contains(u.id))
+  Widget _buildStagingArea(BuildContext context, SessionBlocState state) {
+    final bloc = context.read<SessionBloc>();
+    final selectedUnits = state.engineState.myHand
+        .where((u) => state.selectedUnitIds.contains(u.id))
         .toList();
 
     return SizedBox(
@@ -877,7 +912,7 @@ class _SessionScreenState extends State<SessionScreen>
                         35,
                     child: UnitCard(
                       unit: unit,
-                      onTap: () => provider.toggleUnitSelection(unit.id),
+                      onTap: () => bloc.add(UnitToggled(unit.id)),
                       isSelected: true,
                       width: 50,
                       height: 70,
@@ -892,7 +927,7 @@ class _SessionScreenState extends State<SessionScreen>
   Widget _buildHandArea(
     BuildContext context,
     List<Unit> hand,
-    SessionProvider provider,
+    SessionBlocState state,
   ) {
     if (hand.isEmpty) {
       return const Center(
@@ -907,7 +942,7 @@ class _SessionScreenState extends State<SessionScreen>
         const double overlap = 25;
 
         if (hand.length <= 10) {
-          return _buildRowContent(hand, provider, width, cardWidth, overlap);
+          return _buildRowContent(hand, state, width, cardWidth, overlap);
         } else {
           final int mid = (hand.length / 2).ceil();
           final backRow = hand.sublist(0, mid);
@@ -919,7 +954,7 @@ class _SessionScreenState extends State<SessionScreen>
                 bottom: 30,
                 child: _buildRowContent(
                   backRow,
-                  provider,
+                  state,
                   width,
                   cardWidth,
                   overlap,
@@ -929,7 +964,7 @@ class _SessionScreenState extends State<SessionScreen>
                 bottom: 0,
                 child: _buildRowContent(
                   frontRow,
-                  provider,
+                  state,
                   width,
                   cardWidth,
                   overlap,
@@ -944,11 +979,12 @@ class _SessionScreenState extends State<SessionScreen>
 
   Widget _buildRowContent(
     List<Unit> handSlice,
-    SessionProvider provider,
+    SessionBlocState state,
     double maxWidth,
     double cardWidth,
     double overlap,
   ) {
+    final bloc = context.read<SessionBloc>();
     final double scrollWidth = cardWidth + (handSlice.length - 1) * overlap;
 
     return SizedBox(
@@ -964,32 +1000,7 @@ class _SessionScreenState extends State<SessionScreen>
               buildDefaultDragHandles: true,
               itemCount: handSlice.length,
               onReorder: (oldIndex, newIndex) {
-                // Adjust for global index if in two rows
-                int globalOld = -1;
-                int globalNew = -1;
-
-                final fullHand = provider.state.myHand;
-                final id = handSlice[oldIndex].id;
-                globalOld = fullHand.indexWhere((u) => u.id == id);
-
-                if (newIndex >= handSlice.length) {
-                  // Dragged to end of slice
-                  if (handSlice.length == fullHand.length) {
-                    globalNew = fullHand.length;
-                  } else {
-                    // Complex case: find neighbor in full hand
-                    final neighborId = handSlice.last.id;
-                    globalNew =
-                        fullHand.indexWhere((u) => u.id == neighborId) + 1;
-                  }
-                } else {
-                  final targetId = handSlice[newIndex].id;
-                  globalNew = fullHand.indexWhere((u) => u.id == targetId);
-                }
-
-                if (globalOld != -1 && globalNew != -1) {
-                  provider.reorderHand(globalOld, globalNew);
-                }
+                bloc.add(HandReorderRequested(oldIndex, newIndex));
               },
               proxyDecorator: (child, index, animation) {
                 return AnimatedBuilder(
@@ -1015,7 +1026,7 @@ class _SessionScreenState extends State<SessionScreen>
                     child: UnitCard(
                       unit: unit,
                       isSelected: false,
-                      onTap: () => provider.toggleUnitSelection(unit.id),
+                      onTap: () => bloc.add(UnitToggled(unit.id)),
                       width: cardWidth,
                       height: 100,
                     ),
@@ -1042,7 +1053,8 @@ class _SessionScreenState extends State<SessionScreen>
     );
   }
 
-  void _showGameMenu(BuildContext context, SessionProvider provider) {
+  void _showGameMenu(BuildContext context, SessionBlocState state) {
+    final bloc = context.read<SessionBloc>();
     showModalBottomSheet(
       context: context,
       backgroundColor: const Color(0xFF1A1A1A),
@@ -1102,7 +1114,7 @@ class _SessionScreenState extends State<SessionScreen>
             ),
             onTap: () {
               Navigator.pop(context);
-              provider.sortHand();
+              bloc.add(HandSortRequested());
             },
           ),
           const Divider(color: Colors.white12),
@@ -1207,37 +1219,6 @@ class _SessionScreenState extends State<SessionScreen>
         ],
       ),
     );
-  }
-}
-
-class _EventListenerWrapper extends StatefulWidget {
-  final SessionProvider provider;
-  final Function(SessionEventType) onEvent;
-
-  const _EventListenerWrapper({required this.provider, required this.onEvent});
-
-  @override
-  State<_EventListenerWrapper> createState() => _EventListenerWrapperState();
-}
-
-class _EventListenerWrapperState extends State<_EventListenerWrapper> {
-  SessionEventType _lastHandled = SessionEventType.none;
-  String? _lastActor = "";
-
-  @override
-  Widget build(BuildContext context) {
-    final currentEvent = widget.provider.lastEvent;
-    final currentActor = widget.provider.lastEventActorId;
-
-    if (currentEvent != SessionEventType.none &&
-        (currentEvent != _lastHandled || currentActor != _lastActor)) {
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (mounted) widget.onEvent(currentEvent);
-      });
-      _lastHandled = currentEvent;
-      _lastActor = currentActor;
-    }
-    return const SizedBox.shrink();
   }
 }
 
@@ -1573,9 +1554,10 @@ class _FullHistoryList extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Consumer<SessionProvider>(
-      builder: (context, provider, child) {
-        final logs = provider.gameLog;
+    return BlocBuilder<SessionBloc, SessionBlocState>(
+      builder: (context, state) {
+        final bloc = context.read<SessionBloc>();
+        final logs = bloc.handler.gameLog;
         if (logs.isEmpty) {
           return const Center(
             child: Text(

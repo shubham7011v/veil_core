@@ -1,12 +1,12 @@
 import 'package:flutter/material.dart';
-import 'package:provider/provider.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
 import '../../../../core/theme/colors.dart';
 import '../../../../core/constants/dimens.dart';
 import '../../../../core/utils/responsive.dart';
 import '../../../../shared/components/primary_button.dart';
 import '../../../../shared/components/glass_container.dart';
-import '../../state/session_provider.dart';
-import '../../logic/local_bot_session_handler.dart'; // Import Logic
+import '../../bloc/session_bloc.dart';
+import '../../bloc/session_event.dart';
 
 class BotSettingsScreen extends StatefulWidget {
   const BotSettingsScreen({super.key});
@@ -113,16 +113,11 @@ class _BotSettingsScreenState extends State<BotSettingsScreen> {
                   label: 'START BATTLE',
                   icon: Icons.play_arrow,
                   onPressed: () {
-                    final handler = LocalBotSessionHandler(); // Create Logic
-                    // We can configure it before or after starting?
-                    // Handler has startGame method.
-
-                    final provider = context.read<SessionProvider>();
-                    provider.setHandler(handler); // Inject Logic
-                    provider.startSession(
-                      // Start Game
-                      playerCount: _playerCount.toInt(),
-                      thinkingTimeS: _botThinkingTime.toInt(),
+                    context.read<SessionBloc>().add(
+                      SessionStartRequested(
+                        playerCount: _playerCount.toInt(),
+                        thinkingTimeS: _botThinkingTime.toInt(),
+                      ),
                     );
                     Navigator.pushReplacementNamed(context, '/session');
                   },
