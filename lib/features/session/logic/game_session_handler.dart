@@ -21,10 +21,12 @@ abstract class GameSessionHandler {
   Future<void> startGame({int playerCount = 5, int thinkingTimeS = 10});
 
   void playCards(List<String> unitIds, UnitRank declaredRank);
-
   void passTurn();
-
   void raiseChallenge();
+
+  /// Manual & Auto Sorting
+  void sortHand();
+  void reorderHand(int oldIndex, int newIndex);
 
   void dispose();
 }

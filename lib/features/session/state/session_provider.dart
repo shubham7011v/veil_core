@@ -181,4 +181,12 @@ class SessionProvider extends ChangeNotifier {
   void raiseChallenge() {
     _handler.raiseChallenge();
   }
+
+  void sortHand() {
+    _handler.sortHand();
+  }
+
+  void reorderHand(int oldIndex, int newIndex) {
+    _handler.reorderHand(oldIndex, newIndex);
+  }
 }

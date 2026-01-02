@@ -219,6 +219,30 @@ class LocalBotSessionHandler implements GameSessionHandler {
     });
   }
 
+  @override
+  void sortHand() {
+    final myCards = _hands['me'];
+    if (myCards == null) return;
+    myCards.sort((a, b) => a.rank.index.compareTo(b.rank.index));
+    _currentState = _currentState.copyWith(myHand: List.from(myCards));
+    _emitState();
+  }
+
+  @override
+  void reorderHand(int oldIndex, int newIndex) {
+    final myCards = _hands['me'];
+    if (myCards == null) return;
+
+    if (oldIndex < newIndex) {
+      newIndex -= 1;
+    }
+    final item = myCards.removeAt(oldIndex);
+    myCards.insert(newIndex, item);
+
+    _currentState = _currentState.copyWith(myHand: List.from(myCards));
+    _emitState();
+  }
+
   // Use dispose to close streams
   @override
   void dispose() {

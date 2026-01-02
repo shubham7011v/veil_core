@@ -465,7 +465,10 @@ class _SessionScreenState extends State<SessionScreen>
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          _buildCircleButton(Icons.menu, () => _showGameMenu(context)),
+          _buildCircleButton(
+            Icons.menu,
+            () => _showGameMenu(context, provider),
+          ),
           Column(
             mainAxisSize: MainAxisSize.min,
             children: [
@@ -886,26 +889,82 @@ class _SessionScreenState extends State<SessionScreen>
     double cardWidth,
     double overlap,
   ) {
-    final int count = handSlice.length;
-    final double totalWidth = cardWidth + (count - 1) * overlap;
+    final double scrollWidth = cardWidth + (handSlice.length - 1) * overlap;
+
     return SizedBox(
-      width: totalWidth,
       height: 100,
-      child: Stack(
-        children: List.generate(count, (index) {
-          final unit = handSlice[index];
-          return Positioned(
-            left: index * overlap,
-            bottom: 0,
-            child: UnitCard(
-              unit: unit,
-              isSelected: false,
-              onTap: () => provider.toggleUnitSelection(unit.id),
-              width: cardWidth,
-              height: 100,
+      width: maxWidth,
+      child: Center(
+        child: SingleChildScrollView(
+          scrollDirection: Axis.horizontal,
+          child: SizedBox(
+            width: scrollWidth + 40, // padding for drag
+            child: ReorderableListView.builder(
+              scrollDirection: Axis.horizontal,
+              buildDefaultDragHandles: true,
+              itemCount: handSlice.length,
+              onReorder: (oldIndex, newIndex) {
+                // Adjust for global index if in two rows
+                int globalOld = -1;
+                int globalNew = -1;
+
+                final fullHand = provider.state.myHand;
+                final id = handSlice[oldIndex].id;
+                globalOld = fullHand.indexWhere((u) => u.id == id);
+
+                if (newIndex >= handSlice.length) {
+                  // Dragged to end of slice
+                  if (handSlice.length == fullHand.length) {
+                    globalNew = fullHand.length;
+                  } else {
+                    // Complex case: find neighbor in full hand
+                    final neighborId = handSlice.last.id;
+                    globalNew =
+                        fullHand.indexWhere((u) => u.id == neighborId) + 1;
+                  }
+                } else {
+                  final targetId = handSlice[newIndex].id;
+                  globalNew = fullHand.indexWhere((u) => u.id == targetId);
+                }
+
+                if (globalOld != -1 && globalNew != -1) {
+                  provider.reorderHand(globalOld, globalNew);
+                }
+              },
+              proxyDecorator: (child, index, animation) {
+                return AnimatedBuilder(
+                  animation: animation,
+                  builder: (context, child) {
+                    return Transform.scale(
+                      scale: 1.0 + (animation.value * 0.1),
+                      child: Material(color: Colors.transparent, child: child),
+                    );
+                  },
+                  child: child,
+                );
+              },
+              itemBuilder: (context, index) {
+                final unit = handSlice[index];
+                return SizedBox(
+                  key: ValueKey(unit.id),
+                  width: index == handSlice.length - 1 ? cardWidth : overlap,
+                  child: OverflowBox(
+                    maxWidth: cardWidth,
+                    minWidth: cardWidth,
+                    alignment: Alignment.centerLeft,
+                    child: UnitCard(
+                      unit: unit,
+                      isSelected: false,
+                      onTap: () => provider.toggleUnitSelection(unit.id),
+                      width: cardWidth,
+                      height: 100,
+                    ),
+                  ),
+                );
+              },
             ),
-          );
-        }),
+          ),
+        ),
       ),
     );
   }
@@ -923,7 +982,7 @@ class _SessionScreenState extends State<SessionScreen>
     );
   }
 
-  void _showGameMenu(BuildContext context) {
+  void _showGameMenu(BuildContext context, SessionProvider provider) {
     showModalBottomSheet(
       context: context,
       backgroundColor: const Color(0xFF1A1A1A),
@@ -970,6 +1029,20 @@ class _SessionScreenState extends State<SessionScreen>
             onTap: () {
               Navigator.pop(context);
               _showRules(context);
+            },
+          ),
+          ListTile(
+            leading: const Icon(Icons.sort, color: Colors.blueAccent),
+            title: const Text(
+              "SORT CARDS (ASC)",
+              style: TextStyle(
+                color: Colors.white,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+            onTap: () {
+              Navigator.pop(context);
+              provider.sortHand();
             },
           ),
           const Divider(color: Colors.white12),
