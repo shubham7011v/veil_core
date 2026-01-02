@@ -460,9 +460,6 @@ class _SessionScreenState extends State<SessionScreen>
   }
 
   Widget _buildTopBar(SessionProvider provider) {
-    final isRoundSet = provider.isRoundSet;
-    final rankName = provider.currentRank?.name.toUpperCase() ?? "???";
-
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
       child: Row(
@@ -473,29 +470,21 @@ class _SessionScreenState extends State<SessionScreen>
             mainAxisSize: MainAxisSize.min,
             children: [
               const Text(
-                "👑 CURRENT ROUND",
+                "VEIL CORE",
                 style: TextStyle(
                   color: Colors.white54,
-                  fontSize: 10,
+                  fontSize: 12,
                   fontWeight: FontWeight.w900,
-                  letterSpacing: 1.5,
+                  letterSpacing: 2.0,
                 ),
               ),
-              ShaderMask(
-                shaderCallback: (bounds) => const LinearGradient(
-                  colors: [
-                    Color(0xFFFFD700),
-                    Color(0xFFFFECB3),
-                    Color(0xFFB8860B),
-                  ],
-                ).createShader(bounds),
-                child: Text(
-                  isRoundSet ? "${rankName}S" : "WAITING...",
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontSize: 20,
-                    fontWeight: FontWeight.w900,
-                  ),
+              Container(
+                height: 2,
+                width: 20,
+                margin: const EdgeInsets.only(top: 4),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFFFD700).withValues(alpha: 0.5),
+                  borderRadius: BorderRadius.circular(1),
                 ),
               ),
             ],
@@ -553,9 +542,13 @@ class _SessionScreenState extends State<SessionScreen>
   }
 
   Widget _buildCenterPile(SessionProvider provider) {
+    final rankName = provider.currentRank?.name.toUpperCase() ?? "???";
+    final roundStatus = provider.isRoundSet ? "${rankName}S" : "WAITING";
+
     return AnimatedPileView(
       key: _pileKey,
       pileCount: provider.pileCount,
+      roundStatus: roundStatus,
       onTap: () {
         if (!provider.isRoundSet && provider.isMyTurn) {
           provider.toggleRankSelectionMode();
@@ -1208,10 +1201,12 @@ class _Particle {
 
 class AnimatedPileView extends StatefulWidget {
   final int pileCount;
+  final String roundStatus;
   final VoidCallback onTap;
   const AnimatedPileView({
     super.key,
     required this.pileCount,
+    required this.roundStatus,
     required this.onTap,
   });
 
@@ -1337,10 +1332,13 @@ class _AnimatedPileViewState extends State<AnimatedPileView>
                     ],
                   ),
                   child: Center(
-                    child: Icon(
-                      Icons.style,
-                      size: 60,
-                      color: Colors.white.withValues(alpha: 0.1),
+                    child: Padding(
+                      padding: const EdgeInsets.only(top: 8),
+                      child: Icon(
+                        Icons.style,
+                        size: 60,
+                        color: Colors.white.withValues(alpha: 0.1),
+                      ),
                     ),
                   ),
                 ),
@@ -1362,7 +1360,43 @@ class _AnimatedPileViewState extends State<AnimatedPileView>
                     ),
                   ),
                 Positioned(
-                  bottom: 20,
+                  top: 20,
+                  child: ShaderMask(
+                    shaderCallback: (bounds) => const LinearGradient(
+                      colors: [
+                        Color(0xFFFFD700),
+                        Color(0xFFFFECB3),
+                        Color(0xFFB8860B),
+                      ],
+                    ).createShader(bounds),
+                    child: Text(
+                      widget.roundStatus.toUpperCase(),
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 16,
+                        fontWeight: FontWeight.w900,
+                        letterSpacing: 1.5,
+                      ),
+                    ),
+                  ),
+                ),
+                // "PILE" label in Bottom Right
+                Positioned(
+                  bottom: 15,
+                  right: 15,
+                  child: Text(
+                    'PILE',
+                    style: TextStyle(
+                      color: pressureColor.withValues(alpha: 0.5),
+                      fontSize: 8,
+                      fontWeight: FontWeight.bold,
+                      letterSpacing: 1,
+                    ),
+                  ),
+                ),
+                // Pile Count (Number) in Bottom Middle
+                Positioned(
+                  bottom: 12,
                   child: Container(
                     padding: const EdgeInsets.symmetric(
                       horizontal: 12,
@@ -1370,7 +1404,11 @@ class _AnimatedPileViewState extends State<AnimatedPileView>
                     ),
                     decoration: BoxDecoration(
                       color: Colors.black54,
-                      borderRadius: BorderRadius.circular(20),
+                      shape: BoxShape.circle,
+                      border: Border.all(
+                        color: pressureColor.withValues(alpha: 0.3),
+                        width: 1,
+                      ),
                     ),
                     child: AnimatedSwitcher(
                       duration: const Duration(milliseconds: 300),
@@ -1382,21 +1420,9 @@ class _AnimatedPileViewState extends State<AnimatedPileView>
                         style: TextStyle(
                           color: pressureColor,
                           fontSize: 24,
-                          fontWeight: FontWeight.bold,
+                          fontWeight: FontWeight.w900,
                         ),
                       ),
-                    ),
-                  ),
-                ),
-                Positioned(
-                  top: 20,
-                  child: Text(
-                    'PILE',
-                    style: TextStyle(
-                      color: pressureColor.withValues(alpha: 0.5),
-                      fontSize: 10,
-                      fontWeight: FontWeight.bold,
-                      letterSpacing: 2,
                     ),
                   ),
                 ),
