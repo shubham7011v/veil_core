@@ -18,12 +18,12 @@ class FlyingCard {
 
 class FlyingCardsLayer extends StatefulWidget {
   final List<FlyingCard> activeAnimations;
-  final VoidCallback onComplete;
+  final VoidCallback? onComplete;
 
   const FlyingCardsLayer({
     super.key,
     required this.activeAnimations,
-    required this.onComplete,
+    this.onComplete,
   });
 
   @override
@@ -52,13 +52,9 @@ class _FlyingCardsLayerState extends State<FlyingCardsLayer>
 
 class _FlyingCardAnimation extends StatefulWidget {
   final FlyingCard anim;
-  final VoidCallback onComplete;
+  final VoidCallback? onComplete;
 
-  const _FlyingCardAnimation({
-    super.key,
-    required this.anim,
-    required this.onComplete,
-  });
+  const _FlyingCardAnimation({super.key, required this.anim, this.onComplete});
 
   @override
   State<_FlyingCardAnimation> createState() => _FlyingCardAnimationState();
@@ -81,7 +77,9 @@ class _FlyingCardAnimationState extends State<_FlyingCardAnimation>
       curve: Curves.easeInOutCubic,
     );
 
-    _controller.forward().then((_) => widget.onComplete());
+    _controller.forward().then((_) {
+      if (mounted) widget.onComplete?.call();
+    });
   }
 
   @override

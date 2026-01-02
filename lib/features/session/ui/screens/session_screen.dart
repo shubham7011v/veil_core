@@ -9,6 +9,8 @@ import '../../widgets/flying_cards_layer.dart';
 import '../../widgets/session_top_bar.dart';
 import '../../widgets/opponent_carousel.dart';
 import '../../widgets/game_table_view.dart';
+import '../../widgets/session_background.dart';
+import '../../widgets/game_win_overlay.dart';
 import '../../widgets/session_staging_area.dart';
 import '../../widgets/session_bottom_controls.dart';
 
@@ -37,8 +39,6 @@ class _SessionScreenState extends State<SessionScreen>
   };
   final GlobalKey _pileKey = GlobalKey();
   final List<FlyingCard> _flyingCards = [];
-  Color? _flashColor;
-  final List<Widget> _particles = [];
 
   @override
   void initState() {
@@ -160,24 +160,7 @@ class _SessionScreenState extends State<SessionScreen>
             backgroundColor: const Color(0xFF121212),
             body: Stack(
               children: [
-                Positioned.fill(
-                  child: Container(
-                    decoration: const BoxDecoration(
-                      gradient: RadialGradient(
-                        center: Alignment.center,
-                        radius: 1.5,
-                        colors: [Color(0xFF2A1E17), Color(0xFF0D0D0D)],
-                      ),
-                    ),
-                  ),
-                ),
-                if (_flashColor != null)
-                  Positioned.fill(
-                    child: AnimatedContainer(
-                      duration: const Duration(milliseconds: 300),
-                      color: _flashColor,
-                    ),
-                  ),
+                const SessionBackground(),
                 SafeArea(
                   child: Column(
                     children: [
@@ -340,21 +323,24 @@ class _SessionScreenState extends State<SessionScreen>
                 ),
 
                 if (state.engineState.currentPhase ==
-                    engine.SessionPhase.finished)
-                  _buildWinOverlay(context, state),
+                        engine.SessionPhase.finished &&
+                    state.engineState.winnerId != null)
+                  GameWinOverlay(
+                    winnerId: state.engineState.winnerId!,
+                    winnerName:
+                        bloc.handler.pNames[state.engineState.winnerId] ??
+                        "Someone",
+                    onBackToHome: () => Navigator.of(
+                      context,
+                    ).pushNamedAndRemoveUntil('/home', (route) => false),
+                  ),
 
                 // Action Overlays (Flying Cards, Badges)
                 Positioned.fill(
                   child: IgnorePointer(
-                    child: FlyingCardsLayer(
-                      activeAnimations: _flyingCards,
-                      onComplete: () {},
-                    ),
+                    child: FlyingCardsLayer(activeAnimations: _flyingCards),
                   ),
                 ),
-
-                // Particle Layer
-                ..._particles,
 
                 if (handler.isRevealingBluff && handler.lastMove != null)
                   BluffRevealOverlay(
@@ -365,70 +351,6 @@ class _SessionScreenState extends State<SessionScreen>
             ),
           );
         },
-      ),
-    );
-  }
-
-  Widget _buildWinOverlay(BuildContext context, SessionBlocState state) {
-    final bloc = context.read<SessionBloc>();
-    final winnerName =
-        bloc.handler.pNames[state.engineState.winnerId] ?? "Someone";
-    final isMe = state.engineState.winnerId == 'me';
-
-    return Container(
-      color: Colors.black.withValues(alpha: 0.85),
-      child: Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(
-              isMe ? Icons.emoji_events : Icons.sentiment_very_dissatisfied,
-              size: 100,
-              color: const Color(0xFFFFD700),
-            ),
-            const SizedBox(height: 24),
-            Text(
-              isMe ? "VICTORY!" : "GAME OVER",
-              style: const TextStyle(
-                color: Colors.white,
-                fontSize: 40,
-                fontWeight: FontWeight.w900,
-                letterSpacing: 4,
-              ),
-            ),
-            const SizedBox(height: 8),
-            Text(
-              isMe
-                  ? "You have cleared all your cards!"
-                  : "$winnerName has won the game.",
-              style: const TextStyle(color: Colors.white70, fontSize: 16),
-            ),
-            const SizedBox(height: 48),
-            SizedBox(
-              width: 200,
-              height: 56,
-              child: ElevatedButton(
-                onPressed: () => Navigator.of(
-                  context,
-                ).pushNamedAndRemoveUntil('/home', (route) => false),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: const Color(0xFFFFD700),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(28),
-                  ),
-                ),
-                child: const Text(
-                  "BACK TO HOME",
-                  style: TextStyle(
-                    color: Colors.black,
-                    fontWeight: FontWeight.w900,
-                    letterSpacing: 1.2,
-                  ),
-                ),
-              ),
-            ),
-          ],
-        ),
       ),
     );
   }
