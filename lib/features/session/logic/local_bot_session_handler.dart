@@ -173,7 +173,7 @@ class LocalBotSessionHandler implements GameSessionHandler {
     _emitState();
 
     // Phase 2: Deferred "Deal" (triggers flycard animation from pile)
-    Future.delayed(const Duration(milliseconds: 800), () {
+    Future.delayed(const Duration(milliseconds: 1500), () {
       _currentState = _currentState.copyWith(
         participants: participants,
         myHand: _hands['me']!,

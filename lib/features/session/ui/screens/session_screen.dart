@@ -171,14 +171,22 @@ class _SessionScreenState extends State<SessionScreen>
     // 1. Get Start Position
     Offset startPos;
     if (sourceId == 'pile') {
-      if (_pileKey.currentContext == null) return;
+      if (_pileKey.currentContext == null) {
+        debugPrint("Animation failed: Pile anchor context is null.");
+        return;
+      }
       final box = _pileKey.currentContext!.findRenderObject() as RenderBox;
       startPos =
           box.localToGlobal(Offset.zero) +
           Offset(box.size.width / 2, box.size.height / 2);
     } else {
       final key = _avatarKeys[sourceId];
-      if (key == null || key.currentContext == null) return;
+      if (key == null || key.currentContext == null) {
+        debugPrint(
+          "Animation failed: Avatar key/context for $sourceId is null.",
+        );
+        return;
+      }
       final box = key.currentContext!.findRenderObject() as RenderBox;
       startPos =
           box.localToGlobal(Offset.zero) +
@@ -188,14 +196,22 @@ class _SessionScreenState extends State<SessionScreen>
     // 2. Get End Position
     Offset endPos;
     if (targetId == 'pile') {
-      if (_pileKey.currentContext == null) return;
+      if (_pileKey.currentContext == null) {
+        debugPrint("Animation failed: Pile anchor context is null.");
+        return;
+      }
       final box = _pileKey.currentContext!.findRenderObject() as RenderBox;
       endPos =
           box.localToGlobal(Offset.zero) +
           Offset(box.size.width / 2, box.size.height / 2);
     } else {
       final key = _avatarKeys[targetId];
-      if (key == null || key.currentContext == null) return;
+      if (key == null || key.currentContext == null) {
+        debugPrint(
+          "Animation failed: Avatar key/context for $targetId is null.",
+        );
+        return;
+      }
       final box = key.currentContext!.findRenderObject() as RenderBox;
       endPos =
           box.localToGlobal(Offset.zero) +
@@ -235,6 +251,9 @@ class _SessionScreenState extends State<SessionScreen>
       // If everyone has 0 cards, we are likely in the "shuffle" phase of a new game.
       // Reset trackers so the subsequent "deal" triggers an increase animation.
       if (totalCards == 0 && provider.state.participants.isNotEmpty) {
+        debugPrint(
+          "DIFFING: Total cards 0, participants present. Tracking start.",
+        );
         if (_lastKnownCounts.isNotEmpty) {
           debugPrint("RESETTING card count trackers for new game.");
           _lastKnownCounts.clear();
@@ -342,6 +361,7 @@ class _SessionScreenState extends State<SessionScreen>
                   child: Center(
                     child: SingleChildScrollView(
                       child: Stack(
+                        key: _pileKey,
                         clipBehavior: Clip.none,
                         alignment: Alignment.center,
                         children: [
@@ -523,21 +543,12 @@ class _SessionScreenState extends State<SessionScreen>
             mainAxisSize: MainAxisSize.min,
             children: [
               const Text(
-                "VEIL CORE",
+                "BLUFFDEV",
                 style: TextStyle(
                   color: Colors.white54,
                   fontSize: 12,
                   fontWeight: FontWeight.w900,
-                  letterSpacing: 2.0,
-                ),
-              ),
-              Container(
-                height: 2,
-                width: 20,
-                margin: const EdgeInsets.only(top: 4),
-                decoration: BoxDecoration(
-                  color: const Color(0xFFFFD700).withValues(alpha: 0.5),
-                  borderRadius: BorderRadius.circular(1),
+                  letterSpacing: 1.5,
                 ),
               ),
             ],
@@ -599,7 +610,6 @@ class _SessionScreenState extends State<SessionScreen>
     final roundStatus = provider.isRoundSet ? "${rankName}S" : "WAITING";
 
     return AnimatedPileView(
-      key: _pileKey,
       pileCount: provider.pileCount,
       roundStatus: roundStatus,
       onTap: () {

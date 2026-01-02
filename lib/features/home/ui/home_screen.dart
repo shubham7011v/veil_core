@@ -90,19 +90,11 @@ class HomeScreen extends StatelessWidget {
                       ),
                       SizedBox(height: Responsive.h(16)),
                       Text(
-                        'VEIL',
+                        'BLUFFDEV',
                         style: TextStyle(
                           color: AppColors.primary,
-                          fontSize: Responsive.sp(48),
+                          fontSize: Responsive.sp(40),
                           fontWeight: FontWeight.bold,
-                          letterSpacing: 8.0,
-                        ),
-                      ),
-                      Text(
-                        'CORE EDITION',
-                        style: TextStyle(
-                          color: AppColors.textSecondary,
-                          fontSize: Responsive.sp(12),
                           letterSpacing: 4.0,
                         ),
                       ),
