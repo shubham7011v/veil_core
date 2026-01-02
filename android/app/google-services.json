@@ -1,0 +1,48 @@
+{
+  "project_info": {
+    "project_number": "90881218120",
+    "project_id": "veil-dev-shubham",
+    "storage_bucket": "veil-dev-shubham.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:90881218120:android:8b03404211ca93d6c06a7d",
+        "android_client_info": {
+          "package_name": "com.veil.bluff"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCER1wjWTk4RJtgEmZ4tfIbjX4SlMh4WWA"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    },
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:90881218120:android:4f1ae317ca6ab578c06a7d",
+        "android_client_info": {
+          "package_name": "com.veil.bluff.dev"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCER1wjWTk4RJtgEmZ4tfIbjX4SlMh4WWA"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

@@ -1,9 +1,13 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
 import '../../../../core/theme/colors.dart';
 import '../../../../core/constants/dimens.dart';
 import '../../../../core/utils/responsive.dart';
 import '../../../../shared/components/primary_button.dart';
 import '../../../../shared/components/glass_container.dart';
+import '../bloc/auth_bloc.dart';
+import '../bloc/auth_event.dart';
+import '../bloc/auth_state.dart';
 
 class LoginScreen extends StatelessWidget {
   const LoginScreen({super.key});
@@ -107,12 +111,42 @@ class LoginScreen extends StatelessWidget {
                 ),
                 SizedBox(height: Responsive.h(AppDimens.paddingL)),
 
-                Row(
-                  children: [
-                    Expanded(child: _buildSocialButton('Google', Icons.circle)),
-                    SizedBox(width: Responsive.w(AppDimens.paddingM)),
-                    Expanded(child: _buildSocialButton('Apple', Icons.apple)),
-                  ],
+                BlocConsumer<AuthBloc, AuthState>(
+                  listener: (context, state) {
+                    if (state is Authenticated) {
+                      Navigator.pushReplacementNamed(context, '/home');
+                    } else if (state is AuthFailure) {
+                      ScaffoldMessenger.of(
+                        context,
+                      ).showSnackBar(SnackBar(content: Text(state.message)));
+                    }
+                  },
+                  builder: (context, state) {
+                    if (state is AuthLoading) {
+                      return const Center(child: CircularProgressIndicator());
+                    }
+                    return Row(
+                      children: [
+                        Expanded(
+                          child: GestureDetector(
+                            onTap: () => context.read<AuthBloc>().add(
+                              GoogleSignInRequested(),
+                            ),
+                            child: _buildSocialButton('Google', Icons.circle),
+                          ),
+                        ),
+                        SizedBox(width: Responsive.w(AppDimens.paddingM)),
+                        Expanded(
+                          child: GestureDetector(
+                            onTap: () => context.read<AuthBloc>().add(
+                              AppleSignInRequested(),
+                            ),
+                            child: _buildSocialButton('Apple', Icons.apple),
+                          ),
+                        ),
+                      ],
+                    );
+                  },
                 ),
 
                 SizedBox(height: Responsive.h(AppDimens.paddingXL)),
