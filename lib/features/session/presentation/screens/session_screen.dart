@@ -1,0 +1,357 @@
+import 'package:flutter/material.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
+import '../bloc/session_bloc.dart';
+import '../bloc/session_state.dart';
+import '../../../../core/engine/engine.dart' as engine;
+import '../widgets/bluff_reveal_overlay.dart';
+import '../widgets/flying_cards_layer.dart';
+import '../widgets/session_top_bar.dart';
+import '../widgets/opponent_carousel.dart';
+import '../widgets/game_table_view.dart';
+import '../widgets/session_background.dart';
+import '../widgets/game_win_overlay.dart';
+import '../widgets/session_staging_area.dart';
+import '../widgets/session_bottom_controls.dart';
+
+class SessionScreen extends StatefulWidget {
+  const SessionScreen({super.key});
+
+  @override
+  State<SessionScreen> createState() => _SessionScreenState();
+}
+
+class _SessionScreenState extends State<SessionScreen>
+    with TickerProviderStateMixin {
+  late AnimationController _entryController;
+
+  final Map<String, GlobalKey> _avatarKeys = {
+    'me': GlobalKey(),
+    'p1': GlobalKey(),
+    'p2': GlobalKey(),
+    'p3': GlobalKey(),
+    'p4': GlobalKey(),
+    'p5': GlobalKey(),
+    'p6': GlobalKey(),
+    'p7': GlobalKey(),
+    'p8': GlobalKey(),
+    'p9': GlobalKey(),
+  };
+  final GlobalKey _pileKey = GlobalKey();
+  final List<FlyingCard> _flyingCards = [];
+
+  @override
+  void initState() {
+    super.initState();
+    _entryController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 1200),
+    );
+    _entryController.forward();
+  }
+
+  @override
+  void dispose() {
+    _entryController.dispose();
+    super.dispose();
+  }
+
+  Offset _getCenterOffset(GlobalKey key) {
+    final renderBox = key.currentContext?.findRenderObject() as RenderBox?;
+    if (renderBox == null) return Offset.zero;
+    final size = renderBox.size;
+    final position = renderBox.localToGlobal(Offset.zero);
+    return Offset(position.dx + size.width / 2, position.dy + size.height / 2);
+  }
+
+  void _triggerCardAnimation({
+    required String sourceId,
+    required String targetId,
+    int count = 1,
+  }) {
+    if (!mounted) return;
+
+    final sourceKey = sourceId == 'pile' ? _pileKey : _avatarKeys[sourceId];
+    final targetKey = targetId == 'pile' ? _pileKey : _avatarKeys[targetId];
+
+    if (sourceKey == null || targetKey == null) return;
+
+    // Use addPostFrameCallback to ensure keys are rendered
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      final start = _getCenterOffset(sourceKey);
+      final end = _getCenterOffset(targetKey);
+
+      if (start == Offset.zero || end == Offset.zero) return;
+
+      final id =
+          DateTime.now().millisecondsSinceEpoch.toString() +
+          sourceId +
+          targetId;
+      setState(() {
+        _flyingCards.add(
+          FlyingCard(id: id, start: start, end: end, count: count),
+        );
+      });
+
+      Future.delayed(const Duration(milliseconds: 800), () {
+        if (mounted) {
+          setState(() {
+            _flyingCards.removeWhere((anim) => anim.id == id);
+          });
+        }
+      });
+    });
+  }
+
+  void _handleGameEvents(
+    engine.SessionEventType event,
+    SessionBlocState state,
+  ) {
+    debugPrint("SessionScreen: Handling Event -> $event");
+    switch (event) {
+      case engine.SessionEventType.cardsPlayed:
+        if (state.lastEventActorId != null) {
+          _triggerCardAnimation(
+            sourceId: state.lastEventActorId!,
+            targetId: 'pile',
+            count: state.lastEventCardCount,
+          );
+        }
+        break;
+      case engine.SessionEventType.bluffResolved:
+        if (state.lastEventActorId != null) {
+          _triggerCardAnimation(
+            sourceId: 'pile',
+            targetId: state.lastEventActorId!,
+            count: state.lastEventCardCount,
+          );
+        }
+        break;
+      case engine.SessionEventType.cardsDealt:
+        for (var p in state.engineState.participants) {
+          _triggerCardAnimation(
+            sourceId: 'pile',
+            targetId: p.id,
+            count: 4, // Visual representation of deal
+          );
+        }
+        break;
+      default:
+        break;
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return BlocListener<SessionBloc, SessionBlocState>(
+      listenWhen: (prev, curr) =>
+          prev.lastEvent != curr.lastEvent ||
+          (curr.lastEvent != engine.SessionEventType.none &&
+              prev.lastEventActorId != curr.lastEventActorId),
+      listener: (context, state) {
+        if (state.lastEvent != engine.SessionEventType.none) {
+          _handleGameEvents(state.lastEvent, state);
+        }
+      },
+      child: BlocBuilder<SessionBloc, SessionBlocState>(
+        builder: (context, state) {
+          // Removed direct handler access to enforce reactivity through state
+
+          return Scaffold(
+            backgroundColor: const Color(0xFF121212),
+            body: Stack(
+              children: [
+                const SessionBackground(),
+                SafeArea(
+                  child: Column(
+                    children: [
+                      // Top Bar (0.0 - 0.4)
+                      SlideTransition(
+                        position:
+                            Tween<Offset>(
+                              begin: const Offset(0, -0.5),
+                              end: Offset.zero,
+                            ).animate(
+                              CurvedAnimation(
+                                parent: _entryController,
+                                curve: const Interval(
+                                  0.0,
+                                  0.4,
+                                  curve: Curves.easeOutCubic,
+                                ),
+                              ),
+                            ),
+                        child: FadeTransition(
+                          opacity: CurvedAnimation(
+                            parent: _entryController,
+                            curve: const Interval(
+                              0.0,
+                              0.4,
+                              curve: Curves.easeOut,
+                            ),
+                          ),
+                          child: SessionTopBar(state: state),
+                        ),
+                      ),
+
+                      // Opponents (0.1 - 0.5)
+                      SlideTransition(
+                        position:
+                            Tween<Offset>(
+                              begin: const Offset(0, -0.2),
+                              end: Offset.zero,
+                            ).animate(
+                              CurvedAnimation(
+                                parent: _entryController,
+                                curve: const Interval(
+                                  0.1,
+                                  0.5,
+                                  curve: Curves.easeOutCubic,
+                                ),
+                              ),
+                            ),
+                        child: FadeTransition(
+                          opacity: CurvedAnimation(
+                            parent: _entryController,
+                            curve: const Interval(
+                              0.1,
+                              0.5,
+                              curve: Curves.easeOut,
+                            ),
+                          ),
+                          child: OpponentCarousel(
+                            state: state,
+                            avatarKeys: _avatarKeys,
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 10),
+
+                      // Center Pile + Claim Badge
+                      Expanded(
+                        child: Center(
+                          child: Stack(
+                            clipBehavior: Clip.none,
+                            alignment: Alignment.center,
+                            children: [
+                              ScaleTransition(
+                                scale: CurvedAnimation(
+                                  parent: _entryController,
+                                  curve: const Interval(
+                                    0.2,
+                                    0.7,
+                                    curve: Curves.elasticOut,
+                                  ),
+                                ),
+                                child: GameTableView(
+                                  state: state,
+                                  pileKey: _pileKey,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 16),
+
+                      // Staging Area (0.4 - 0.8)
+                      SlideTransition(
+                        position:
+                            Tween<Offset>(
+                              begin: const Offset(0, 0.2),
+                              end: Offset.zero,
+                            ).animate(
+                              CurvedAnimation(
+                                parent: _entryController,
+                                curve: const Interval(
+                                  0.4,
+                                  0.8,
+                                  curve: Curves.easeOutCubic,
+                                ),
+                              ),
+                            ),
+                        child: FadeTransition(
+                          opacity: CurvedAnimation(
+                            parent: _entryController,
+                            curve: const Interval(
+                              0.4,
+                              0.8,
+                              curve: Curves.easeOut,
+                            ),
+                          ),
+                          child: SessionStagingArea(
+                            state: state,
+                            myAvatarKey: _avatarKeys['me']!,
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 2),
+
+                      // Bottom Controls (0.5 - 1.0)
+                      SlideTransition(
+                        position:
+                            Tween<Offset>(
+                              begin: const Offset(0, 0.5),
+                              end: Offset.zero,
+                            ).animate(
+                              CurvedAnimation(
+                                parent: _entryController,
+                                curve: const Interval(
+                                  0.5,
+                                  1.0,
+                                  curve: Curves.easeOutCubic,
+                                ),
+                              ),
+                            ),
+                        child: FadeTransition(
+                          opacity: CurvedAnimation(
+                            parent: _entryController,
+                            curve: const Interval(
+                              0.5,
+                              1.0,
+                              curve: Curves.easeOut,
+                            ),
+                          ),
+                          child: SessionBottomControls(
+                            state: state,
+                            myAvatarKey: _avatarKeys['me']!,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+
+                if (state.engineState.currentPhase ==
+                        engine.SessionPhase.finished &&
+                    state.engineState.winnerId != null)
+                  GameWinOverlay(
+                    winnerId: state.engineState.winnerId!,
+                    winnerName: state.getPlayerName(
+                      state.engineState.winnerId!,
+                    ),
+                    onBackToHome: () => Navigator.of(
+                      context,
+                    ).pushNamedAndRemoveUntil('/home', (route) => false),
+                  ),
+
+                // Action Overlays (Flying Cards, Badges)
+                Positioned.fill(
+                  child: IgnorePointer(
+                    child: FlyingCardsLayer(activeAnimations: _flyingCards),
+                  ),
+                ),
+
+                if (state.isRevealingBluff && state.lastMove != null)
+                  BluffRevealOverlay(
+                    cards: state.lastMove!.actualUnits,
+                    declaredRank: state.lastMove!.declaredRank,
+                  ),
+              ],
+            ),
+          );
+        },
+      ),
+    );
+  }
+}

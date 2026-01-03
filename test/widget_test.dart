@@ -2,12 +2,12 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:veil_core/config/app_config.dart';
 import 'package:veil_core/main_common.dart';
-import 'package:veil_core/features/auth/ui/splash_screen.dart';
+import 'package:veil_core/features/auth/auth.dart';
 
 void main() {
   testWidgets('App launch smoke test', (WidgetTester tester) async {
     SharedPreferences.setMockInitialValues({});
-    final prefs = await SharedPreferences.getInstance();
+    await SharedPreferences.getInstance();
 
     final testConfig = AppConfig(
       environment: Environment.dev,
@@ -17,7 +17,7 @@ void main() {
     );
 
     // Build our app and trigger a frame.
-    await tester.pumpWidget(VeilApp(config: testConfig, prefs: prefs));
+    await tester.pumpWidget(VeilApp(config: testConfig));
 
     // Initially should show splash screen
     expect(find.byType(SplashScreen), findsOneWidget);
