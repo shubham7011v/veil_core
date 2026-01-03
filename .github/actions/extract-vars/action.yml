@@ -1,0 +1,27 @@
+name: 'Extract Tag Variables'
+description: 'Extracts version_name and track from GITHUB_REF'
+outputs:
+  version_name:
+    description: 'Extracted version name'
+    value: ${{ steps.extract.outputs.version_name }}
+  track:
+    description: 'Deployment track (alpha, beta, production)'
+    value: ${{ steps.extract.outputs.track }}
+
+runs:
+  using: "composite"
+  steps:
+    - id: extract
+      shell: bash
+      run: |
+        TAG=${GITHUB_REF#refs/tags/v}
+        VERSION_NAME=$(echo $TAG | cut -d'-' -f1)
+        echo "version_name=$VERSION_NAME" >> $GITHUB_OUTPUT
+        
+        if [[ $TAG == *"alpha"* ]]; then 
+          echo "track=alpha" >> $GITHUB_OUTPUT
+        elif [[ $TAG == *"beta"* ]]; then 
+          echo "track=beta" >> $GITHUB_OUTPUT
+        else 
+          echo "track=production" >> $GITHUB_OUTPUT
+        fi

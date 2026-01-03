@@ -1,0 +1,49 @@
+name: 'Setup Flutter environment'
+description: 'Sets up Java, Flutter, and handles caching'
+inputs:
+  flutter-version:
+    description: 'Flutter version to use'
+    required: false
+    default: '3.38.5'
+  java-version:
+    description: 'Java version to use'
+    required: false
+    default: '17'
+
+runs:
+  using: "composite"
+  steps:
+    - name: Read Flutter version
+      id: flutter-version
+      shell: bash
+      run: |
+        if [ -f .flutter-version ]; then
+          echo "version=$(cat .flutter-version)" >> $GITHUB_OUTPUT
+        else
+          echo "version=${{ inputs.flutter-version }}" >> $GITHUB_OUTPUT
+        fi
+
+    - name: Setup Java
+      uses: actions/setup-java@v4
+      with:
+        distribution: 'temurin'
+        java-version: ${{ inputs.java-version }}
+        
+    - uses: subosito/flutter-action@v2
+      with:
+        flutter-version: ${{ steps.flutter-version.outputs.version }}
+        channel: 'stable'
+        cache: true
+        
+    - name: Cache Pub dependencies
+      uses: actions/cache@v4
+      with:
+        path: |
+          ~/.pub-cache
+        key: ${{ runner.os }}-pub-${{ hashFiles('**/pubspec.lock') }}
+        restore-keys: |
+          ${{ runner.os }}-pub-
+
+    - name: Install dependencies
+      shell: bash
+      run: flutter pub get
