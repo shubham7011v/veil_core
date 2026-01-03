@@ -1,0 +1,50 @@
+name: Veil CD (Development)
+
+on:
+  push:
+    tags: 
+      - "v*-dev"
+      - "v*-internal"
+
+jobs:
+  vars:
+    runs-on: ubuntu-latest
+    outputs:
+      version_name: ${{ steps.extract.outputs.version_name }}
+    steps:
+      - id: extract
+        run: |
+          TAG=${GITHUB_REF#refs/tags/v}
+          VERSION_NAME=$(echo $TAG | cut -d'-' -f1)
+          echo "version_name=$VERSION_NAME" >> $GITHUB_OUTPUT
+
+  build:
+    needs: vars
+    uses: ./.github/workflows/_build_flutter.yml
+    with:
+      flavor: dev
+      target: lib/main_dev.dart
+      build_type: apk
+      version_name: ${{ needs.vars.outputs.version_name }}
+      build_number: ${{ github.run_number }}
+      artifact_name: dev-release-apk
+      artifact_path: build/app/outputs/flutter-apk/app-dev-release.apk
+    secrets:
+      keystore_base64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+      keystore_password: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+      key_alias: ${{ secrets.ANDROID_KEY_ALIAS }}
+      key_password: ${{ secrets.ANDROID_KEY_PASSWORD }}
+
+  deploy_rules:
+    name: Deploy Firebase Rules (Dev)
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Deploy Firebase Rules
+        uses: w9jds/firebase-action@master
+        with:
+          args: deploy --only firestore:rules,storage:rules
+        env:
+          GCP_SA_KEY: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_DEV }}
+          PROJECT_ID: "veil-dev-shubham"

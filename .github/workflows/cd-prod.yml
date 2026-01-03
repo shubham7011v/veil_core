@@ -1,0 +1,83 @@
+name: Veil CD (Production)
+
+on:
+  push:
+    tags: 
+      - "v*"
+      # Note: We filter in the jobs to avoid double-running if it's a dev tag,
+      # but standardizing v* for production-type releases.
+
+jobs:
+  vars:
+    if: "!contains(github.ref, '-dev') && !contains(github.ref, '-internal')"
+    runs-on: ubuntu-latest
+    outputs:
+      version_name: ${{ steps.extract.outputs.version_name }}
+      track: ${{ steps.extract.outputs.track }}
+    steps:
+      - id: extract
+        run: |
+          TAG=${GITHUB_REF#refs/tags/v}
+          VERSION_NAME=$(echo $TAG | cut -d'-' -f1)
+          echo "version_name=$VERSION_NAME" >> $GITHUB_OUTPUT
+          
+          if [[ $TAG == *"alpha"* ]]; then 
+            echo "track=alpha" >> $GITHUB_OUTPUT
+          elif [[ $TAG == *"beta"* ]]; then 
+            echo "track=beta" >> $GITHUB_OUTPUT
+          else 
+            echo "track=production" >> $GITHUB_OUTPUT
+          fi
+
+  build:
+    needs: vars
+    uses: ./.github/workflows/_build_flutter.yml
+    with:
+      flavor: prod
+      target: lib/main_prod.dart
+      build_type: appbundle
+      version_name: ${{ needs.vars.outputs.version_name }}
+      build_number: ${{ github.run_number }}
+      artifact_name: prod-release-bundle
+      artifact_path: build/app/outputs/bundle/prodRelease/app-prod-release.aab
+    secrets:
+      keystore_base64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+      keystore_password: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+      key_alias: ${{ secrets.ANDROID_KEY_ALIAS }}
+      key_password: ${{ secrets.ANDROID_KEY_PASSWORD }}
+
+  deploy_rules:
+    name: Deploy Firebase Rules (Prod)
+    needs: [vars, build]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Deploy Firebase Rules
+        uses: w9jds/firebase-action@master
+        with:
+          args: deploy --only firestore:rules,storage:rules
+        env:
+          GCP_SA_KEY: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_PROD }}
+          PROJECT_ID: "veil-prod-shubham"
+
+  deploy_play_store:
+    name: Deploy to Play Store
+    needs: [vars, build]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Download Artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: prod-release-bundle
+          path: build/app/outputs/bundle/prodRelease/
+          
+      - name: Deploy to Play Store
+        uses: r0adkll/upload-google-play@v1
+        with:
+          serviceAccountJson: ${{ secrets.PLAY_STORE_SERVICE_ACCOUNT_JSON }}
+          packageName: com.veil.bluff
+          releaseFiles: build/app/outputs/bundle/prodRelease/app-prod-release.aab
+          track: ${{ needs.vars.outputs.track }}
+          status: completed
+          whatsNewDir: distribution/whatsnew

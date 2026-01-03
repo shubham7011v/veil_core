@@ -1,0 +1,79 @@
+name: Reusable Build Workflow
+
+on:
+  workflow_call:
+    inputs:
+      flavor:
+        required: true
+        type: string
+      target:
+        required: true
+        type: string
+      build_type:
+        required: true
+        type: string
+      version_name:
+        required: true
+        type: string
+      build_number:
+        required: true
+        type: string
+      artifact_name:
+        required: true
+        type: string
+      artifact_path:
+        required: true
+        type: string
+    secrets:
+      keystore_base64:
+        required: true
+      keystore_password:
+        required: true
+      key_alias:
+        required: true
+      key_password:
+        required: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+          
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.24.0'
+          channel: 'stable'
+          cache: true
+          
+      - name: Install dependencies
+        run: flutter pub get
+        
+      - name: Setup Keystore
+        run: |
+          echo "${{ secrets.keystore_base64 }}" | base64 --decode > android/app/upload-keystore.jks
+          echo "storeFile=upload-keystore.jks" > android/key.properties
+          echo "storePassword=${{ secrets.keystore_password }}" >> android/key.properties
+          echo "keyPassword=${{ secrets.key_password }}" >> android/key.properties
+          echo "keyAlias=${{ secrets.key_alias }}" >> android/key.properties
+          
+      - name: Build App
+        run: |
+          flutter build ${{ inputs.build_type }} \
+            --flavor ${{ inputs.flavor }} \
+            -t ${{ inputs.target }} \
+            --build-name=${{ inputs.version_name }} \
+            --build-number=${{ inputs.build_number }} \
+            --release
+            
+      - name: Upload Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ inputs.artifact_name }}
+          path: ${{ inputs.artifact_path }}
