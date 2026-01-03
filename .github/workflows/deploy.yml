@@ -3,7 +3,7 @@ name: Veil CI/CD
 on:
   push:
     branches: [ "main" ]
-    tags: [ "v*-internal", "v*-alpha", "v*-beta", "v*-prod" ]
+    tags: [ "v*-internal", "v*-alpha", "v*-beta", "v*-prod", "v*-dev" ]
   pull_request:
     branches: [ "main" ]
 
@@ -39,39 +39,57 @@ jobs:
   deploy:
     name: Build & Deploy
     needs: test
-    if: github.event_name == 'push'
+    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
       
       - name: Set Variables
         id: vars
         run: |
-          # Default values for main branch push
-          echo "track=internal" >> $GITHUB_OUTPUT
-          echo "status=completed" >> $GITHUB_OUTPUT
-          echo "flavor=dev" >> $GITHUB_OUTPUT
-          echo "entry=lib/main_dev.dart" >> $GITHUB_OUTPUT
-          echo "build_type=apk" >> $GITHUB_OUTPUT
-          echo "version_name=1.0.0" >> $GITHUB_OUTPUT
+          TAG=${GITHUB_REF#refs/tags/v}
+          VERSION_NAME=$(echo $TAG | cut -d'-' -f1)
+          echo "version_name=$VERSION_NAME" >> $GITHUB_OUTPUT
           
-          if [[ $GITHUB_REF == refs/tags/v* ]]; then
-            TAG=${GITHUB_REF#refs/tags/v}
-            # Extract version name (e.g. 1.2.3 from 1.2.3-prod)
-            VERSION_NAME=$(echo $TAG | cut -d'-' -f1)
-            echo "version_name=$VERSION_NAME" >> $GITHUB_OUTPUT
+          if [[ $TAG == *"dev"* ]]; then
+            # PURE DEV: APK + Dev Rules. No Play Store.
+            echo "env=dev" >> $GITHUB_OUTPUT
+            echo "flavor=dev" >> $GITHUB_OUTPUT
+            echo "entry=lib/main_dev.dart" >> $GITHUB_OUTPUT
+            echo "build_type=apk" >> $GITHUB_OUTPUT
+            echo "is_on_main=true" >> $GITHUB_OUTPUT
+          else
+            # PROD (Internal, Alpha, Beta, Prod): AAB + Prod Rules + Play Store.
+            echo "env=prod" >> $GITHUB_OUTPUT
             echo "flavor=prod" >> $GITHUB_OUTPUT
             echo "entry=lib/main_prod.dart" >> $GITHUB_OUTPUT
             echo "build_type=appbundle" >> $GITHUB_OUTPUT
             
-            if [[ $TAG == *"internal"* ]]; then
+            # Set Track
+            if [[ $TAG == *"internal"* ]]; then 
               echo "track=internal" >> $GITHUB_OUTPUT
-            elif [[ $TAG == *"alpha"* ]]; then
+              echo "is_on_main=true" >> $GITHUB_OUTPUT # Internal doesn't require main
+            elif [[ $TAG == *"alpha"* ]]; then 
               echo "track=alpha" >> $GITHUB_OUTPUT
-            elif [[ $TAG == *"beta"* ]]; then
+              echo "is_on_main=true" >> $GITHUB_OUTPUT # Open testing (Alpha) doesn't require main
+            elif [[ $TAG == *"beta"* ]]; then 
               echo "track=beta" >> $GITHUB_OUTPUT
-            elif [[ $TAG == *"prod"* ]]; then
+              # Closed testing (Beta) REQUIRES main
+              if git branch -r --contains HEAD | grep -q "origin/main"; then
+                echo "is_on_main=true" >> $GITHUB_OUTPUT
+              else
+                echo "is_on_main=false" >> $GITHUB_OUTPUT
+              fi
+            else 
               echo "track=production" >> $GITHUB_OUTPUT
+              # Production REQUIRES main
+              if git branch -r --contains HEAD | grep -q "origin/main"; then
+                echo "is_on_main=true" >> $GITHUB_OUTPUT
+              else
+                echo "is_on_main=false" >> $GITHUB_OUTPUT
+              fi
             fi
           fi
 
@@ -106,31 +124,37 @@ jobs:
             --release
 
       - name: Upload APK (Dev only)
-        if: steps.vars.outputs.flavor == 'dev'
+        if: steps.vars.outputs.env == 'dev'
         uses: actions/upload-artifact@v4
         with:
           name: dev-release-apk
           path: build/app/outputs/flutter-apk/app-dev-release.apk
 
-      - name: Deploy Firebase Rules
-        if: steps.vars.outputs.flavor == 'prod'
-        uses: FirebaseExtended/action-hosting-deploy@v0
+      - name: Deploy Firebase Rules (Dev)
+        if: steps.vars.outputs.env == 'dev'
+        uses: w9jds/firebase-action@master
         with:
-          repoToken: "${{ secrets.GITHUB_TOKEN }}"
-          firebaseServiceAccount: "${{ secrets.GOOGLE_SERVICES_JSON }}"
-          projectId: veil-prod-shubham
+          args: deploy --only firestore:rules,storage:rules
+        env:
+          GCP_SA_KEY: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_DEV }}
+          PROJECT_ID: "veil-dev-shubham"
 
-      - name: Create Service Account File
-        if: steps.vars.outputs.flavor == 'prod'
-        run: echo "${{ secrets.GOOGLE_SERVICES_JSON }}" | base64 --decode > service-account.json
+      - name: Deploy Firebase Rules (Prod)
+        if: steps.vars.outputs.env == 'prod' && steps.vars.outputs.is_on_main == 'true'
+        uses: w9jds/firebase-action@master
+        with:
+          args: deploy --only firestore:rules,storage:rules
+        env:
+          GCP_SA_KEY: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_PROD }}
+          PROJECT_ID: "veil-prod-shubham"
 
-      - name: Deploy to Play Store
-        if: steps.vars.outputs.flavor == 'prod'
+      - name: Deploy to Play Store (Prod only)
+        if: steps.vars.outputs.env == 'prod' && steps.vars.outputs.is_on_main == 'true'
         uses: r0adkll/upload-google-play@v1
         with:
-          serviceAccountJson: service-account.json
+          serviceAccountJson: ${{ secrets.PLAY_STORE_SERVICE_ACCOUNT_JSON }}
           packageName: com.veil.bluff
           releaseFiles: build/app/outputs/bundle/prodRelease/app-prod-release.aab
           track: ${{ steps.vars.outputs.track }}
-          status: ${{ steps.vars.outputs.status }}
+          status: completed
           whatsNewDir: distribution/whatsnew

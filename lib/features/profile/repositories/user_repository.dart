@@ -24,21 +24,23 @@ class UserRepository {
     final doc = await _usersCollection.doc(uid).get();
 
     if (doc.exists) {
-      // Update last login
+      // Update last login but keep coins/rank
       await _usersCollection.doc(uid).update({
         'lastLoginAt': DateTime.now().toIso8601String(),
-        'name': firebaseUser.displayName ?? 'Player',
         'photoUrl': firebaseUser.photoURL,
       });
     } else {
-      // Create new profile
+      // Create new cinematic profile
       final newUser = UserModel(
         id: uid,
         email: firebaseUser.email ?? '',
-        name: firebaseUser.displayName ?? 'Player',
+        name: firebaseUser.displayName ?? 'Player ${uid.substring(0, 4)}',
         photoUrl: firebaseUser.photoURL,
         createdAt: DateTime.now(),
         lastLoginAt: DateTime.now(),
+        coins: 1000,
+        rank: 'Novice',
+        isNameSet: false, // Will trigger modal in Lobby
       );
       await _usersCollection.doc(uid).set(newUser.toMap());
     }

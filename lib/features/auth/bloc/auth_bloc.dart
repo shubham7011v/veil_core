@@ -1,7 +1,9 @@
 import 'dart:async';
 import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import '../repositories/auth_repository.dart';
 import '../../profile/repositories/user_repository.dart';
+import '../../../core/utils/error_messages.dart';
 import 'auth_event.dart';
 import 'auth_state.dart';
 
@@ -18,7 +20,6 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
        super(AuthInitial()) {
     on<AuthCheckRequested>(_onAuthCheckRequested);
     on<GoogleSignInRequested>(_onGoogleSignInRequested);
-    on<AppleSignInRequested>(_onAppleSignInRequested);
     on<SignOutRequested>(_onSignOutRequested);
 
     _authStateSubscription = _authRepository.authStateChanges.listen((user) {
@@ -56,27 +57,26 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
       } else {
         emit(Unauthenticated());
       }
-    } catch (e) {
-      emit(AuthFailure(e.toString()));
-    }
-  }
-
-  Future<void> _onAppleSignInRequested(
-    AppleSignInRequested event,
-    Emitter<AuthState> emit,
-  ) async {
-    emit(AuthLoading());
-    try {
-      await _authRepository.signInWithApple();
-      final user = _authRepository.currentUser;
-      if (user != null) {
-        await _userRepository.syncUser(user);
-        emit(Authenticated(user));
-      } else {
-        emit(Unauthenticated());
+    } on FirebaseAuthException catch (e) {
+      String message = 'Sign-in failed. Please try again.';
+      switch (e.code) {
+        case 'ERROR_ABORTED_BY_USER':
+        case 'canceled':
+          message = 'Sign-in was cancelled.';
+          break;
+        case 'network-request-failed':
+          message = 'No internet connection.';
+          break;
+        case 'invalid-credential':
+          message = 'Invalid credentials. Try again.';
+          break;
+        case 'user-disabled':
+          message = 'This account has been disabled.';
+          break;
       }
+      emit(AuthFailure(message));
     } catch (e) {
-      emit(AuthFailure(e.toString()));
+      emit(AuthFailure(ErrorMessages.getFromException(e)));
     }
   }
 
