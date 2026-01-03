@@ -37,6 +37,7 @@ class _SessionScreenState extends State<SessionScreen>
     'p9': GlobalKey(),
   };
   final GlobalKey _pileKey = GlobalKey();
+  final GlobalKey _stagingKey = GlobalKey();
   final List<FlyingCard> _flyingCards = [];
 
   @override
@@ -70,8 +71,12 @@ class _SessionScreenState extends State<SessionScreen>
   }) {
     if (!mounted) return;
 
-    final sourceKey = sourceId == 'pile' ? _pileKey : _avatarKeys[sourceId];
-    final targetKey = targetId == 'pile' ? _pileKey : _avatarKeys[targetId];
+    final sourceKey = sourceId == 'pile'
+        ? _pileKey
+        : (sourceId == 'staging' ? _stagingKey : _avatarKeys[sourceId]);
+    final targetKey = targetId == 'pile'
+        ? _pileKey
+        : (targetId == 'staging' ? _stagingKey : _avatarKeys[targetId]);
 
     if (sourceKey == null || targetKey == null) return;
 
@@ -111,14 +116,16 @@ class _SessionScreenState extends State<SessionScreen>
     switch (event) {
       case engine.SessionEventType.cardsPlayed:
         if (state.lastEventActorId != null) {
+          final isMe = state.lastEventActorId == 'me';
           _triggerCardAnimation(
-            sourceId: state.lastEventActorId!,
+            sourceId: isMe ? 'staging' : state.lastEventActorId!,
             targetId: 'pile',
             count: state.lastEventCardCount,
           );
         }
         break;
       case engine.SessionEventType.bluffResolved:
+      case engine.SessionEventType.cardsPickedUp:
         if (state.lastEventActorId != null) {
           _triggerCardAnimation(
             sourceId: 'pile',
@@ -134,6 +141,11 @@ class _SessionScreenState extends State<SessionScreen>
             targetId: p.id,
             count: 4, // Visual representation of deal
           );
+        }
+        break;
+      case engine.SessionEventType.cardStaged:
+        if (state.lastEventActorId == 'me') {
+          _triggerCardAnimation(sourceId: 'me', targetId: 'staging', count: 1);
         }
         break;
       default:
@@ -279,6 +291,7 @@ class _SessionScreenState extends State<SessionScreen>
                             ),
                           ),
                           child: SessionStagingArea(
+                            key: _stagingKey,
                             state: state,
                             myAvatarKey: _avatarKeys['me']!,
                           ),

@@ -11,4 +11,5 @@ enum SessionEventType {
   cardsDealt,
   cardsPickedUp,
   pileDiscarded,
+  cardStaged,
 }

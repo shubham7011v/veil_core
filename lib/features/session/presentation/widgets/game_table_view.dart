@@ -80,7 +80,12 @@ class GameTableView extends StatelessWidget {
     final spacing = (width * 0.03).clamp(8.0, 16.0);
 
     return GestureDetector(
-      onTap: () => bloc.add(RankSelectionToggleRequested()),
+      onTap: () {
+        // Block flipping back to pile if rank is not yet selected on our turn to start a round
+        if (state.stagedRank != null || !state.isMyTurn || state.isRoundSet) {
+          bloc.add(RankSelectionToggleRequested());
+        }
+      },
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
         width: width,
@@ -181,9 +186,13 @@ class GameTableView extends StatelessWidget {
                 }).toList(),
               ),
               const SizedBox(height: 8),
-              const Text(
-                "TAP TO DISMISS",
-                style: TextStyle(
+              Text(
+                (state.stagedRank == null &&
+                        state.isMyTurn &&
+                        !state.isRoundSet)
+                    ? "CHOOSE A RANK TO PROCEED"
+                    : "TAP TO DISMISS",
+                style: const TextStyle(
                   color: Colors.white24,
                   fontSize: 9,
                   fontWeight: FontWeight.bold,

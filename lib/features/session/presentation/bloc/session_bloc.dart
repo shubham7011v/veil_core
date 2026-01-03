@@ -27,12 +27,19 @@ class SessionBloc extends Bloc<SessionEvent, SessionBlocState> {
 
     // Engine update handlers
     on<EngineStateUpdated>((event, emit) {
+      final isNewRound = _handler.lastMove == null;
+      final shouldForceRankSelector =
+          isNewRound && event.state.activeParticipantId == 'me';
+
       emit(
         state.copyWith(
           engineState: event.state,
           isRevealingBluff: _handler.isRevealingBluff,
           lastMove: _handler.lastMove,
           pNames: _handler.pNames,
+          isSelectingRank: shouldForceRankSelector
+              ? true
+              : state.isSelectingRank,
         ),
       );
     });
@@ -88,7 +95,15 @@ class SessionBloc extends Bloc<SessionEvent, SessionBlocState> {
       if (ids.length >= 4) return;
       ids.add(event.unitId);
     }
-    emit(state.copyWith(selectedUnitIds: ids));
+    emit(
+      state.copyWith(
+        selectedUnitIds: ids,
+        lastEvent: SessionEventType.cardStaged,
+        lastEventActorId: 'me',
+        lastEventCardCount: 1,
+        lastEventTimestamp: DateTime.now().millisecondsSinceEpoch,
+      ),
+    );
   }
 
   void _onRankStaged(RankStaged event, Emitter<SessionBlocState> emit) {
@@ -114,7 +129,13 @@ class SessionBloc extends Bloc<SessionEvent, SessionBlocState> {
     if (rankToPlay == null || state.selectedUnitIds.isEmpty) return;
 
     _handler.playCards(state.selectedUnitIds, rankToPlay);
-    emit(state.copyWith(selectedUnitIds: const [], clearStagedRank: true));
+    emit(
+      state.copyWith(
+        selectedUnitIds: const [],
+        clearStagedRank: true,
+        isSelectingRank: false,
+      ),
+    );
   }
 
   void _onTurnPassRequested(
