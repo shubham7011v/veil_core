@@ -53,6 +53,7 @@ class SessionBloc extends Bloc<SessionEvent, SessionBlocState> {
           lastMove: _handler.lastMove,
           clearLastMove: _handler.lastMove == null,
           pNames: _handler.pNames,
+          gameLog: _handler.gameLog,
           // Clear stagedRank on round reset or game start, show selector
           clearStagedRank: roundJustReset || gameJustStarted,
           isSelectingRank: shouldShowRankSelector
@@ -75,6 +76,7 @@ class SessionBloc extends Bloc<SessionEvent, SessionBlocState> {
           lastEventCardCount: event.cardCount,
           lastEventTimestamp: DateTime.now().millisecondsSinceEpoch,
           isRevealingBluff: _handler.isRevealingBluff,
+          gameLog: _handler.gameLog,
           lastMove: shouldSync
               ? _handler.lastMove
               : null, // keep existing if null
@@ -215,6 +217,7 @@ class SessionBloc extends Bloc<SessionEvent, SessionBlocState> {
         isRevealingBluff: _handler.isRevealingBluff,
         lastMove: _handler.lastMove,
         clearLastMove: _handler.lastMove == null,
+        gameLog: _handler.gameLog,
       ),
     );
   }

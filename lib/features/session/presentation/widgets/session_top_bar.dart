@@ -163,9 +163,9 @@ class SessionTopBar extends StatelessWidget {
             Expanded(
               child: SingleChildScrollView(
                 controller: controller,
-                child: const Padding(
-                  padding: EdgeInsets.all(16.0),
-                  child: SessionHistoryList(),
+                child: Padding(
+                  padding: const EdgeInsets.all(16.0),
+                  child: SessionHistoryList(gameLog: state.gameLog),
                 ),
               ),
             ),

@@ -21,6 +21,9 @@ class SessionBlocState extends Equatable {
   // -- Player Info --
   final Map<String, String> pNames;
 
+  // -- Game History --
+  final List<String> gameLog;
+
   const SessionBlocState({
     required this.engineState,
     required this.selectedUnitIds,
@@ -33,6 +36,7 @@ class SessionBlocState extends Equatable {
     this.lastMove,
     this.lastEventTimestamp = 0,
     required this.pNames,
+    required this.gameLog,
   });
 
   factory SessionBlocState.initial() => SessionBlocState(
@@ -43,6 +47,7 @@ class SessionBlocState extends Equatable {
     isRevealingBluff: false,
     lastEventTimestamp: 0,
     pNames: const {},
+    gameLog: const [],
   );
 
   SessionBlocState copyWith({
@@ -57,6 +62,7 @@ class SessionBlocState extends Equatable {
     engine.GameMove? lastMove,
     int? lastEventTimestamp,
     Map<String, String>? pNames,
+    List<String>? gameLog,
     bool clearStagedRank = false,
     bool clearLastMove = false,
   }) {
@@ -72,6 +78,7 @@ class SessionBlocState extends Equatable {
       lastMove: clearLastMove ? null : (lastMove ?? this.lastMove),
       lastEventTimestamp: lastEventTimestamp ?? this.lastEventTimestamp,
       pNames: pNames ?? this.pNames,
+      gameLog: gameLog ?? this.gameLog,
     );
   }
 
@@ -112,5 +119,6 @@ class SessionBlocState extends Equatable {
     lastMove,
     lastEventTimestamp,
     pNames,
+    gameLog,
   ];
 }
