@@ -1,6 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_native_splash/flutter_native_splash.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
 import '../../../core/navigation/fade_route.dart';
+import '../bloc/auth_bloc.dart';
+import '../bloc/auth_event.dart';
+import '../bloc/auth_state.dart';
+import '../repositories/onboarding_repository.dart';
 import 'intro_screen.dart';
 
 class SplashScreen extends StatefulWidget {
@@ -14,20 +19,57 @@ class _SplashScreenState extends State<SplashScreen> {
   @override
   void initState() {
     super.initState();
-    _navigateToIntro();
+    _initApp();
   }
 
-  void _navigateToIntro() async {
+  Future<void> _initApp() async {
     // Wait for the splash duration (500-700ms)
-    await Future.delayed(const Duration(milliseconds: 600));
+    await Future.delayed(const Duration(milliseconds: 700));
+
+    if (!mounted) return;
+
+    final authBloc = context.read<AuthBloc>();
+    final onboardingRepo = context.read<OnboardingRepository>();
+
+    // 1. If currently Unauthenticated or AuthInitial, attempt silent sign-in
+    if (authBloc.state is Unauthenticated || authBloc.state is AuthInitial) {
+      authBloc.add(AuthSilentSignInRequested());
+
+      // Wait for AuthBloc to resolve (timeout after 2s for safety)
+      try {
+        await authBloc.stream
+            .firstWhere(
+              (state) => state is! AuthLoading && state is! AuthInitial,
+            )
+            .timeout(const Duration(seconds: 2));
+      } catch (e) {
+        // Log or handle timeout
+        debugPrint('Silent sign-in timed out or failed: $e');
+      }
+    }
+
+    if (!mounted) return;
 
     // Remove native splash just before transitioning
     FlutterNativeSplash.remove();
 
-    if (!mounted) return;
+    final state = authBloc.state;
 
-    // Direct cross-fade to Intro Screen
-    Navigator.of(context).pushReplacement(FadeRoute(page: const IntroScreen()));
+    if (state is Authenticated) {
+      Navigator.of(context).pushReplacementNamed('/home');
+    } else {
+      final hasSeenIntro = onboardingRepo.hasSeenIntro();
+      if (!hasSeenIntro) {
+        Navigator.of(
+          context,
+        ).pushReplacement(FadeRoute(page: const IntroScreen(initialPage: 0)));
+      } else {
+        // Go straight to sign-in page (last page of IntroScreen)
+        Navigator.of(
+          context,
+        ).pushReplacement(FadeRoute(page: const IntroScreen(initialPage: 2)));
+      }
+    }
   }
 
   @override

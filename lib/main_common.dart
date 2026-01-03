@@ -24,6 +24,8 @@ import 'features/session/ui/screens/bot_settings_screen.dart';
 import 'features/auth/ui/splash_screen.dart';
 import 'features/auth/ui/intro_screen.dart';
 import 'features/auth/ui/court_entry_screen.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import 'features/auth/repositories/onboarding_repository.dart';
 import 'package:flutter_native_splash/flutter_native_splash.dart';
 
 import 'package:firebase_core/firebase_core.dart';
@@ -34,6 +36,8 @@ import 'config/firebase_options_prod.dart' as prod;
 Future<void> mainCommon(AppConfig config) async {
   WidgetsBinding widgetsBinding = WidgetsFlutterBinding.ensureInitialized();
   FlutterNativeSplash.preserve(widgetsBinding: widgetsBinding);
+
+  final prefs = await SharedPreferences.getInstance();
 
   final options = config.environment == Environment.prod
       ? prod.DefaultFirebaseOptions.currentPlatform
@@ -49,12 +53,13 @@ Future<void> mainCommon(AppConfig config) async {
     providerApple: const AppleDeviceCheckProvider(),
   );
 
-  runApp(VeilApp(config: config));
+  runApp(VeilApp(config: config, prefs: prefs));
 }
 
 class VeilApp extends StatelessWidget {
   final AppConfig config;
-  const VeilApp({super.key, required this.config});
+  final SharedPreferences prefs;
+  const VeilApp({super.key, required this.config, required this.prefs});
 
   @override
   Widget build(BuildContext context) {
@@ -62,6 +67,7 @@ class VeilApp extends StatelessWidget {
       providers: [
         RepositoryProvider(create: (_) => AuthRepository()),
         RepositoryProvider(create: (_) => UserRepository()),
+        RepositoryProvider(create: (_) => OnboardingRepository(prefs)),
         RepositoryProvider.value(value: config),
       ],
       child: MultiBlocProvider(
@@ -91,7 +97,7 @@ class VeilApp extends StatelessWidget {
               initialRoute: '/splash',
               routes: {
                 '/splash': (context) => const SplashScreen(),
-                '/intro': (context) => const IntroScreen(),
+                '/intro': (context) => const IntroScreen(initialPage: 0),
                 '/court_entry': (context) => const CourtEntryScreen(),
                 '/home': (context) => const HomeScreen(),
                 '/create_room': (context) => const CreateRoomScreen(),

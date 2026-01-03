@@ -36,6 +36,25 @@ class AuthRepository {
     }
   }
 
+  Future<UserCredential?> signInSilently() async {
+    try {
+      final GoogleSignInAccount? googleUser = await _googleSignIn
+          .signInSilently();
+      if (googleUser == null) return null;
+
+      final GoogleSignInAuthentication googleAuth =
+          await googleUser.authentication;
+      final AuthCredential credential = GoogleAuthProvider.credential(
+        accessToken: googleAuth.accessToken,
+        idToken: googleAuth.idToken,
+      );
+
+      return await _firebaseAuth.signInWithCredential(credential);
+    } catch (e) {
+      return null;
+    }
+  }
+
   Future<void> signOut() async {
     await Future.wait([_firebaseAuth.signOut(), _googleSignIn.signOut()]);
   }

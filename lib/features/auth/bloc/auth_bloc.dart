@@ -21,6 +21,7 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
     on<AuthCheckRequested>(_onAuthCheckRequested);
     on<GoogleSignInRequested>(_onGoogleSignInRequested);
     on<SignOutRequested>(_onSignOutRequested);
+    on<AuthSilentSignInRequested>(_onAuthSilentSignInRequested);
 
     _authStateSubscription = _authRepository.authStateChanges.listen((user) {
       if (user != null) {
@@ -77,6 +78,24 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
       emit(AuthFailure(message));
     } catch (e) {
       emit(AuthFailure(ErrorMessages.getFromException(e)));
+    }
+  }
+
+  Future<void> _onAuthSilentSignInRequested(
+    AuthSilentSignInRequested event,
+    Emitter<AuthState> emit,
+  ) async {
+    emit(AuthLoading());
+    try {
+      final userCredential = await _authRepository.signInSilently();
+      if (userCredential?.user != null) {
+        await _userRepository.syncUser(userCredential!.user!);
+        emit(Authenticated(userCredential.user!));
+      } else {
+        emit(Unauthenticated());
+      }
+    } catch (e) {
+      emit(Unauthenticated());
     }
   }
 

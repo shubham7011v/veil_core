@@ -40,7 +40,49 @@ class _HomeScreenState extends State<HomeScreen> {
             builder: (context, state) {
               if (state is ProfileLoading) {
                 return const Center(
-                  child: CircularProgressIndicator(color: Color(0xFFE5A043)),
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      CircularProgressIndicator(color: Color(0xFFE5A043)),
+                      SizedBox(height: 16),
+                      Text(
+                        'Entering the Court...',
+                        style: TextStyle(color: Colors.white54, fontSize: 12),
+                      ),
+                    ],
+                  ),
+                );
+              }
+
+              if (state is ProfileError) {
+                return Center(
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      const Icon(
+                        Icons.error_outline,
+                        color: Colors.redAccent,
+                        size: 48,
+                      ),
+                      const SizedBox(height: 16),
+                      Text(
+                        state.message,
+                        style: const TextStyle(color: Colors.white70),
+                      ),
+                      const SizedBox(height: 24),
+                      ElevatedButton(
+                        onPressed: () {
+                          final authState = context.read<AuthBloc>().state;
+                          if (authState is Authenticated) {
+                            context.read<ProfileBloc>().add(
+                              ProfileLoadRequested(authState.user.uid),
+                            );
+                          }
+                        },
+                        child: const Text('RETRY'),
+                      ),
+                    ],
+                  ),
                 );
               }
 

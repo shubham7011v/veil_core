@@ -5,6 +5,8 @@ import '../../../../core/theme/bloc/theme_state.dart';
 import '../../../../core/theme/bloc/theme_event.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import '../../../../core/constants/dimens.dart';
+import '../../auth/bloc/auth_bloc.dart';
+import '../../auth/bloc/auth_event.dart';
 
 class SettingsScreen extends StatefulWidget {
   const SettingsScreen({super.key});
@@ -299,7 +301,12 @@ class _SettingsScreenState extends State<SettingsScreen> {
                         borderRadius: BorderRadius.circular(AppDimens.radiusM),
                       ),
                     ),
-                    onPressed: () {},
+                    onPressed: () {
+                      context.read<AuthBloc>().add(SignOutRequested());
+                      Navigator.of(
+                        context,
+                      ).pushNamedAndRemoveUntil('/splash', (route) => false);
+                    },
                     icon: const Icon(Icons.logout, size: 20),
                     label: const Text('Sign Out'),
                   ),

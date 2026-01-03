@@ -5,21 +5,26 @@ import 'intro_hint_page.dart';
 import 'intro_entry_page.dart';
 
 class IntroScreen extends StatefulWidget {
-  const IntroScreen({super.key});
+  final int initialPage;
+  const IntroScreen({super.key, this.initialPage = 0});
 
   @override
   State<IntroScreen> createState() => _IntroScreenState();
 }
 
 class _IntroScreenState extends State<IntroScreen> {
-  final PageController _pageController = PageController();
+  late final PageController _pageController;
   Timer? _autoAdvanceTimer;
-  int _currentPage = 0;
+  late int _currentPage;
 
   @override
   void initState() {
     super.initState();
-    _startAutoAdvance();
+    _currentPage = widget.initialPage;
+    _pageController = PageController(initialPage: widget.initialPage);
+    if (_currentPage < 2) {
+      _startAutoAdvance();
+    }
   }
 
   void _startAutoAdvance() {

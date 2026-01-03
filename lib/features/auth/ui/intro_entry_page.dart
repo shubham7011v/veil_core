@@ -4,6 +4,7 @@ import 'package:google_fonts/google_fonts.dart';
 import '../bloc/auth_bloc.dart';
 import '../bloc/auth_event.dart';
 import '../bloc/auth_state.dart';
+import '../repositories/onboarding_repository.dart';
 
 class IntroEntryPage extends StatefulWidget {
   const IntroEntryPage({super.key});
@@ -41,6 +42,7 @@ class _IntroEntryPageState extends State<IntroEntryPage>
     return BlocListener<AuthBloc, AuthState>(
       listener: (context, state) {
         if (state is Authenticated) {
+          context.read<OnboardingRepository>().markIntroAsSeen();
           Navigator.of(context).pushReplacementNamed('/court_entry');
         } else if (state is AuthFailure) {
           ScaffoldMessenger.of(context).showSnackBar(

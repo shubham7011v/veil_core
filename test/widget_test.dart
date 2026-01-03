@@ -1,16 +1,14 @@
-// This is a basic Flutter widget test.
-//
-// To perform an interaction with a widget in your test, use the WidgetTester
-// utility in the flutter_test package. For example, you can send tap and scroll
-// gestures. You can also use WidgetTester to find child widgets in the widget
-// tree, read text, and verify that the values of widget properties are correct.
-
 import 'package:flutter_test/flutter_test.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:veil_core/config/app_config.dart';
 import 'package:veil_core/main_common.dart';
+import 'package:veil_core/features/auth/ui/splash_screen.dart';
 
 void main() {
-  testWidgets('Login screen smoke test', (WidgetTester tester) async {
+  testWidgets('App launch smoke test', (WidgetTester tester) async {
+    SharedPreferences.setMockInitialValues({});
+    final prefs = await SharedPreferences.getInstance();
+
     final testConfig = AppConfig(
       environment: Environment.dev,
       appName: 'Veil Test',
@@ -19,10 +17,9 @@ void main() {
     );
 
     // Build our app and trigger a frame.
-    await tester.pumpWidget(VeilApp(config: testConfig));
+    await tester.pumpWidget(VeilApp(config: testConfig, prefs: prefs));
 
-    // Verify that the login screen is displayed.
-    expect(find.text('Welcome to the\nRoyal Court'), findsOneWidget);
-    expect(find.text('LOGIN'), findsOneWidget);
+    // Initially should show splash screen
+    expect(find.byType(SplashScreen), findsOneWidget);
   });
 }
