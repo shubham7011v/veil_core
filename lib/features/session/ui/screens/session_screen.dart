@@ -251,7 +251,7 @@ class _SessionScreenState extends State<SessionScreen>
                           ),
                         ),
                       ),
-                      const SizedBox(height: 8),
+                      const SizedBox(height: 16),
 
                       // Staging Area (0.4 - 0.8)
                       SlideTransition(
