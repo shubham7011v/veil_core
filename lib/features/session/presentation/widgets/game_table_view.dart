@@ -35,10 +35,7 @@ class GameTableView extends StatelessWidget {
 
   Widget _buildCenterPile(BuildContext context, double width, double height) {
     final bloc = context.read<SessionBloc>();
-    final currentRank = state.lastMove?.declaredRank ?? state.stagedRank;
-    final rankName = currentRank?.name.toUpperCase() ?? "???";
-    final isRoundSet = state.isRoundSet;
-    final roundStatus = isRoundSet ? "${rankName}S" : "WAITING";
+    final roundStatus = state.roundStatus;
 
     final isShuffling =
         state.engineState.currentPhase == SessionPhase.thinking &&
@@ -53,7 +50,7 @@ class GameTableView extends StatelessWidget {
       width: width,
       height: height,
       onTap: () {
-        if (!isRoundSet && state.isMyTurn) {
+        if (!state.isRoundSet && state.isMyTurn) {
           bloc.add(RankSelectionToggleRequested());
         }
       },

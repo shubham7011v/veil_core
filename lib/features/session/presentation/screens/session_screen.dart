@@ -145,9 +145,8 @@ class _SessionScreenState extends State<SessionScreen>
   Widget build(BuildContext context) {
     return BlocListener<SessionBloc, SessionBlocState>(
       listenWhen: (prev, curr) =>
-          prev.lastEvent != curr.lastEvent ||
-          (curr.lastEvent != engine.SessionEventType.none &&
-              prev.lastEventActorId != curr.lastEventActorId),
+          curr.lastEvent != engine.SessionEventType.none &&
+          prev.lastEventTimestamp != curr.lastEventTimestamp,
       listener: (context, state) {
         if (state.lastEvent != engine.SessionEventType.none) {
           _handleGameEvents(state.lastEvent, state);

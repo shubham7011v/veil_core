@@ -41,6 +41,7 @@ class SessionBloc extends Bloc<SessionEvent, SessionBlocState> {
           lastEvent: event.type,
           lastEventActorId: event.actorId,
           lastEventCardCount: event.cardCount,
+          lastEventTimestamp: DateTime.now().millisecondsSinceEpoch,
           isRevealingBluff: _handler.isRevealingBluff,
           lastMove: _handler.lastMove,
         ),

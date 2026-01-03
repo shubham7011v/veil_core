@@ -15,6 +15,8 @@ class SessionBlocState extends Equatable {
   final int lastEventCardCount;
   final bool isRevealingBluff;
   final engine.GameMove? lastMove;
+  final int
+  lastEventTimestamp; // Used to trigger animations on same-type events
 
   // -- Player Info --
   final Map<String, String> pNames;
@@ -29,6 +31,7 @@ class SessionBlocState extends Equatable {
     this.lastEventCardCount = 0,
     required this.isRevealingBluff,
     this.lastMove,
+    this.lastEventTimestamp = 0,
     required this.pNames,
   });
 
@@ -38,6 +41,7 @@ class SessionBlocState extends Equatable {
     isSelectingRank: false,
     lastEvent: engine.SessionEventType.none,
     isRevealingBluff: false,
+    lastEventTimestamp: 0,
     pNames: const {},
   );
 
@@ -51,6 +55,7 @@ class SessionBlocState extends Equatable {
     int? lastEventCardCount,
     bool? isRevealingBluff,
     engine.GameMove? lastMove,
+    int? lastEventTimestamp,
     Map<String, String>? pNames,
     bool clearStagedRank = false,
   }) {
@@ -64,6 +69,7 @@ class SessionBlocState extends Equatable {
       lastEventCardCount: lastEventCardCount ?? this.lastEventCardCount,
       isRevealingBluff: isRevealingBluff ?? this.isRevealingBluff,
       lastMove: lastMove ?? this.lastMove,
+      lastEventTimestamp: lastEventTimestamp ?? this.lastEventTimestamp,
       pNames: pNames ?? this.pNames,
     );
   }
@@ -77,6 +83,11 @@ class SessionBlocState extends Equatable {
   bool get isRoundSet => lastMove != null;
 
   int get pileCount => engineState.pileCount;
+
+  String get roundStatus {
+    if (isRoundSet) return "${lastMove!.declaredRank.name.toUpperCase()}S";
+    return stagedRank?.name.toUpperCase() ?? "WAITING";
+  }
 
   String getPlayerName(String id) => pNames[id] ?? id;
 
@@ -98,6 +109,7 @@ class SessionBlocState extends Equatable {
     lastEventCardCount,
     isRevealingBluff,
     lastMove,
+    lastEventTimestamp,
     pNames,
   ];
 }
