@@ -509,10 +509,7 @@ abstract class BaseAuthoritativeHandler implements GameSessionHandler {
         : "FALSE ALARM! ${pNames[challengerId] ?? challengerId} picks up ${_pile.length} cards.";
     final winnerId = wasBluff ? challengerId : blufferId;
 
-    _activeEventActorId = loserId;
-    _lastCountClaimed = _pile.length;
-    _eventController.add(SessionEventType.bluffResolved);
-
+    // Note: distributePileTo will handle emitting the event and setting actor/count
     Future.delayed(const Duration(milliseconds: 1000), () {
       distributePileTo(loserId);
       resetRoundState(winnerId, wasDiscarded: false, winnerId: winnerId);

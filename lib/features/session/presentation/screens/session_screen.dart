@@ -167,7 +167,6 @@ class _SessionScreenState extends State<SessionScreen>
           );
         }
         break;
-      case engine.SessionEventType.bluffResolved:
       case engine.SessionEventType.cardsPickedUp:
         if (state.lastEventActorId != null) {
           _triggerCardAnimation(
