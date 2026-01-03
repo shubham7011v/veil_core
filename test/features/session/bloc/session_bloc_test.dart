@@ -2,24 +2,19 @@ import 'dart:async';
 import 'package:bloc_test/bloc_test.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mocktail/mocktail.dart';
-import 'package:veil_core/features/session/bloc/session_bloc.dart';
-import 'package:veil_core/features/session/bloc/session_event.dart';
-import 'package:veil_core/features/session/bloc/session_state.dart';
-import 'package:veil_core/features/session/logic/game_session_handler.dart';
-import 'package:veil_core/features/session/models/session_enums.dart';
-import 'package:veil_core/features/session/models/session_state.dart' as model;
-import 'package:veil_core/features/session/models/unit.dart';
+import 'package:veil_core/features/session/session.dart';
+import 'package:veil_core/core/engine/engine.dart';
 
 class MockGameSessionHandler extends Mock implements GameSessionHandler {}
 
 void main() {
   late MockGameSessionHandler mockHandler;
-  late StreamController<model.SessionState> stateController;
+  late StreamController<SessionState> stateController;
   late StreamController<SessionEventType> eventController;
 
   setUp(() {
     mockHandler = MockGameSessionHandler();
-    stateController = StreamController<model.SessionState>.broadcast();
+    stateController = StreamController<SessionState>.broadcast();
     eventController = StreamController<SessionEventType>.broadcast();
 
     when(
@@ -49,7 +44,7 @@ void main() {
       'emits updated engine state when EngineStateUpdated is added',
       build: () => SessionBloc(handler: mockHandler),
       act: (bloc) {
-        final newState = model.SessionState.initial().copyWith(roomId: '999');
+        final newState = SessionState.initial().copyWith(roomId: '999');
         stateController.add(newState);
       },
       expect: () => [
