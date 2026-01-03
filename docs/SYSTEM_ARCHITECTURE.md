@@ -11,13 +11,13 @@ The project uses a tag-based CI/CD pipeline defined in [deploy.yml](file:///c:/U
 ### Trigger Logic
 Deployment is triggered by pushing a version tag (e.g., `v1.0.0-dev`).
 
-| Tag Pattern | Build Type | Target Env | Play Store Track | Main Branch Required? |
+| Tag Pattern | Build Type | Target Env | Play Store Track | Branch Required |
 | :--- | :--- | :--- | :--- | :--- |
-| `v*-dev` | APK | Dev | **None** (Local Artifact) | No |
-| `v*-internal` | AAB | Prod | Internal Testing | No |
-| `v*-alpha` | AAB | Prod | Open Testing | No |
-| `v*-beta` | AAB | Prod | Closed Testing | **Yes** |
-| `v*-prod` | AAB | Prod | Production | **Yes** |
+| `v*-dev` | APK | Dev | **None** | `dev` |
+| `v*-internal` | APK | Dev | **None** | `dev` |
+| `v*-alpha` | AAB | Prod | Open Testing | `dev` |
+| `v*-beta` | AAB | Prod | Closed Testing | `main` |
+| `v*-prod` | AAB | Prod | Production | `main` |
 
 ### Required GitHub Secrets
 To make the pipeline work, the following secrets must be set in GitHub:

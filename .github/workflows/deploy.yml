@@ -53,42 +53,49 @@ jobs:
           VERSION_NAME=$(echo $TAG | cut -d'-' -f1)
           echo "version_name=$VERSION_NAME" >> $GITHUB_OUTPUT
           
-          if [[ $TAG == *"dev"* ]]; then
-            # PURE DEV: APK + Dev Rules. No Play Store.
+          if [[ $TAG == *"dev"* || $TAG == *"internal"* ]]; then
+            # SIMPLE DEV & INTERNAL: APK + Dev Rules. No Play Store.
             echo "env=dev" >> $GITHUB_OUTPUT
             echo "flavor=dev" >> $GITHUB_OUTPUT
             echo "entry=lib/main_dev.dart" >> $GITHUB_OUTPUT
             echo "build_type=apk" >> $GITHUB_OUTPUT
-            echo "is_on_main=true" >> $GITHUB_OUTPUT
+            
+            # Dev & Internal REQUIRE dev branch
+            if git branch -r --contains HEAD | grep -q "origin/dev"; then
+              echo "is_on_correct_branch=true" >> $GITHUB_OUTPUT
+            else
+              echo "is_on_correct_branch=false" >> $GITHUB_OUTPUT
+            fi
           else
-            # PROD (Internal, Alpha, Beta, Prod): AAB + Prod Rules + Play Store.
+            # PROD STORE PIPELINE (Alpha, Beta, Prod)
             echo "env=prod" >> $GITHUB_OUTPUT
             echo "flavor=prod" >> $GITHUB_OUTPUT
             echo "entry=lib/main_prod.dart" >> $GITHUB_OUTPUT
             echo "build_type=appbundle" >> $GITHUB_OUTPUT
             
-            # Set Track
-            if [[ $TAG == *"internal"* ]]; then 
-              echo "track=internal" >> $GITHUB_OUTPUT
-              echo "is_on_main=true" >> $GITHUB_OUTPUT # Internal doesn't require main
-            elif [[ $TAG == *"alpha"* ]]; then 
+            if [[ $TAG == *"alpha"* ]]; then 
               echo "track=alpha" >> $GITHUB_OUTPUT
-              echo "is_on_main=true" >> $GITHUB_OUTPUT # Open testing (Alpha) doesn't require main
+              # Open testing (Alpha) REQUIRES dev branch
+              if git branch -r --contains HEAD | grep -q "origin/dev"; then
+                echo "is_on_correct_branch=true" >> $GITHUB_OUTPUT
+              else
+                echo "is_on_correct_branch=false" >> $GITHUB_OUTPUT
+              fi
             elif [[ $TAG == *"beta"* ]]; then 
               echo "track=beta" >> $GITHUB_OUTPUT
-              # Closed testing (Beta) REQUIRES main
+              # Closed testing (Beta) REQUIRES main branch
               if git branch -r --contains HEAD | grep -q "origin/main"; then
-                echo "is_on_main=true" >> $GITHUB_OUTPUT
+                echo "is_on_correct_branch=true" >> $GITHUB_OUTPUT
               else
-                echo "is_on_main=false" >> $GITHUB_OUTPUT
+                echo "is_on_correct_branch=false" >> $GITHUB_OUTPUT
               fi
             else 
               echo "track=production" >> $GITHUB_OUTPUT
-              # Production REQUIRES main
+              # Production REQUIRES main branch
               if git branch -r --contains HEAD | grep -q "origin/main"; then
-                echo "is_on_main=true" >> $GITHUB_OUTPUT
+                echo "is_on_correct_branch=true" >> $GITHUB_OUTPUT
               else
-                echo "is_on_main=false" >> $GITHUB_OUTPUT
+                echo "is_on_correct_branch=false" >> $GITHUB_OUTPUT
               fi
             fi
           fi
@@ -115,6 +122,7 @@ jobs:
           echo "keyAlias=${{ secrets.ANDROID_KEY_ALIAS }}" >> android/key.properties
 
       - name: Build App
+        if: steps.vars.outputs.is_on_correct_branch == 'true'
         run: |
           flutter build ${{ steps.vars.outputs.build_type }} \
             --flavor ${{ steps.vars.outputs.flavor }} \
@@ -123,15 +131,15 @@ jobs:
             --build-number=${{ github.run_number }} \
             --release
 
-      - name: Upload APK (Dev only)
-        if: steps.vars.outputs.env == 'dev'
+      - name: Upload APK (Dev/Internal only)
+        if: steps.vars.outputs.env == 'dev' && steps.vars.outputs.is_on_correct_branch == 'true'
         uses: actions/upload-artifact@v4
         with:
           name: dev-release-apk
           path: build/app/outputs/flutter-apk/app-dev-release.apk
 
       - name: Deploy Firebase Rules (Dev)
-        if: steps.vars.outputs.env == 'dev'
+        if: steps.vars.outputs.env == 'dev' && steps.vars.outputs.is_on_correct_branch == 'true'
         uses: w9jds/firebase-action@master
         with:
           args: deploy --only firestore:rules,storage:rules
@@ -140,7 +148,7 @@ jobs:
           PROJECT_ID: "veil-dev-shubham"
 
       - name: Deploy Firebase Rules (Prod)
-        if: steps.vars.outputs.env == 'prod' && steps.vars.outputs.is_on_main == 'true'
+        if: steps.vars.outputs.env == 'prod' && steps.vars.outputs.is_on_correct_branch == 'true'
         uses: w9jds/firebase-action@master
         with:
           args: deploy --only firestore:rules,storage:rules
@@ -149,7 +157,7 @@ jobs:
           PROJECT_ID: "veil-prod-shubham"
 
       - name: Deploy to Play Store (Prod only)
-        if: steps.vars.outputs.env == 'prod' && steps.vars.outputs.is_on_main == 'true'
+        if: steps.vars.outputs.env == 'prod' && steps.vars.outputs.is_on_correct_branch == 'true'
         uses: r0adkll/upload-google-play@v1
         with:
           serviceAccountJson: ${{ secrets.PLAY_STORE_SERVICE_ACCOUNT_JSON }}
