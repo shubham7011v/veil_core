@@ -229,30 +229,29 @@ class _SessionScreenState extends State<SessionScreen>
                       // Center Pile + Claim Badge
                       Expanded(
                         child: Center(
-                          child: SingleChildScrollView(
-                            child: Stack(
-                              clipBehavior: Clip.none,
-                              alignment: Alignment.center,
-                              children: [
-                                ScaleTransition(
-                                  scale: CurvedAnimation(
-                                    parent: _entryController,
-                                    curve: const Interval(
-                                      0.2,
-                                      0.7,
-                                      curve: Curves.elasticOut,
-                                    ),
-                                  ),
-                                  child: GameTableView(
-                                    state: state,
-                                    pileKey: _pileKey,
+                          child: Stack(
+                            clipBehavior: Clip.none,
+                            alignment: Alignment.center,
+                            children: [
+                              ScaleTransition(
+                                scale: CurvedAnimation(
+                                  parent: _entryController,
+                                  curve: const Interval(
+                                    0.2,
+                                    0.7,
+                                    curve: Curves.elasticOut,
                                   ),
                                 ),
-                              ],
-                            ),
+                                child: GameTableView(
+                                  state: state,
+                                  pileKey: _pileKey,
+                                ),
+                              ),
+                            ],
                           ),
                         ),
                       ),
+                      const SizedBox(height: 8),
 
                       // Staging Area (0.4 - 0.8)
                       SlideTransition(
@@ -285,7 +284,7 @@ class _SessionScreenState extends State<SessionScreen>
                           ),
                         ),
                       ),
-                      const SizedBox(height: 4),
+                      const SizedBox(height: 2),
 
                       // Bottom Controls (0.5 - 1.0)
                       SlideTransition(
