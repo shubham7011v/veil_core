@@ -329,21 +329,24 @@ abstract class BaseAuthoritativeHandler implements GameSessionHandler {
       actualUnits: units,
     );
 
-    if (GameRules.hasPlayerWon(
-      playerId: playerId,
-      potentialWinnerId: _potentialWinnerId,
-      passCount: _passCount,
-      participantCount: _currentState.participants.length,
-      isNextPlayerStartingRound: true,
-    )) {
-      _currentState = _currentState.copyWith(
-        lastActionText:
-            "${pNames[_potentialWinnerId] ?? _potentialWinnerId} WINS!",
-        currentPhase: SessionPhase.finished,
-        winnerId: _potentialWinnerId,
-      );
-      emitState();
-      return;
+    // Check if the potential winner should win because someone just played
+    if (_potentialWinnerId != null && _potentialWinnerId != playerId) {
+      final winnerId = _potentialWinnerId!;
+      if (GameRules.hasPlayerWon(
+        playerId: winnerId,
+        potentialWinnerId: winnerId,
+        passCount: _passCount,
+        participantCount: _currentState.participants.length,
+        isNextPlayerStartingRound: true,
+      )) {
+        _currentState = _currentState.copyWith(
+          lastActionText: "${pNames[winnerId] ?? winnerId} WINS!",
+          currentPhase: SessionPhase.finished,
+          winnerId: winnerId,
+        );
+        emitState();
+        return;
+      }
     }
 
     _hands[playerId]!.removeWhere((u) => units.contains(u));
@@ -466,13 +469,15 @@ abstract class BaseAuthoritativeHandler implements GameSessionHandler {
     _lastBluffLoserId = loserId;
     _isBluffSuccessful = wasBluff;
 
-    if (GameRules.hasPlayerWon(
-      playerId: blufferId,
-      potentialWinnerId: _potentialWinnerId,
-      passCount: 0,
-      participantCount: 0,
-      isNextPlayerStartingRound: !wasBluff,
-    )) {
+    // Only check bluffer win if they WEREN'T bluffing
+    if (!wasBluff &&
+        GameRules.hasPlayerWon(
+          playerId: blufferId,
+          potentialWinnerId: _potentialWinnerId,
+          passCount: 0,
+          participantCount: 1,
+          isNextPlayerStartingRound: true,
+        )) {
       _currentState = _currentState.copyWith(
         lastActionText: "${pNames[blufferId] ?? blufferId} WINS!",
         currentPhase: SessionPhase.finished,
