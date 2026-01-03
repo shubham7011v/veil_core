@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 
 class AnimatedPileView extends StatelessWidget {
-  final GlobalKey pileKey;
+  final GlobalKey? pileKey;
   final int pileCount;
   final String roundStatus;
   final bool isShuffling;
@@ -11,7 +11,7 @@ class AnimatedPileView extends StatelessWidget {
 
   const AnimatedPileView({
     super.key,
-    required this.pileKey,
+    this.pileKey,
     required this.pileCount,
     required this.roundStatus,
     required this.isShuffling,

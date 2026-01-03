@@ -31,38 +31,58 @@ class SessionBloc extends Bloc<SessionEvent, SessionBlocState> {
       final isNewRound = _handler.lastMove == null;
       final hasCards = event.state.myHand.isNotEmpty;
       final hadNoCards = state.engineState.myHand.isEmpty;
-
-      // Determine if we should trigger the one-shot auto-flip
-      // Trigger if: it's a new round AND active participant is 'me'
-      // AND (it just became my turn OR we just got our initial cards)
-      final wasNotMyTurn = state.engineState.activeParticipantId != 'me';
       final isNowMyTurn = event.state.activeParticipantId == 'me';
+      final wasInRound = state.lastMove != null;
 
-      final shouldTriggerFlip =
-          isNewRound && isNowMyTurn && (wasNotMyTurn || hadNoCards) && hasCards;
+      // Detect round reset transition OR initial game start
+      final roundJustReset = wasInRound && isNewRound;
+      final gameJustStarted = hadNoCards && hasCards && isNewRound;
+
+      // Show rank selector when: new round + my turn + have cards
+      // Trigger when round just reset OR on initial game start
+      final shouldShowRankSelector =
+          isNewRound &&
+          isNowMyTurn &&
+          hasCards &&
+          (roundJustReset || gameJustStarted);
 
       emit(
         state.copyWith(
           engineState: event.state,
           isRevealingBluff: _handler.isRevealingBluff,
           lastMove: _handler.lastMove,
+          clearLastMove: _handler.lastMove == null,
           pNames: _handler.pNames,
-          isSelectingRank: shouldTriggerFlip ? true : state.isSelectingRank,
+          // Clear stagedRank on round reset or game start, show selector
+          clearStagedRank: roundJustReset || gameJustStarted,
+          isSelectingRank: shouldShowRankSelector
+              ? true
+              : state.isSelectingRank,
         ),
       );
     });
-    on<EngineEventReceived>(
-      (event, emit) => emit(
+    on<EngineEventReceived>((event, emit) {
+      // Only sync lastMove if it's NOT null.
+      // If it IS null (round reset), we wait for EngineStateUpdated to clear it.
+      // This preserves state.lastMove so EngineStateUpdated can detect the transition
+      // (wasInRound -> isNewRound) and trigger the rank selector auto-flip.
+      final shouldSync = _handler.lastMove != null;
+
+      emit(
         state.copyWith(
           lastEvent: event.type,
           lastEventActorId: event.actorId,
           lastEventCardCount: event.cardCount,
           lastEventTimestamp: DateTime.now().millisecondsSinceEpoch,
           isRevealingBluff: _handler.isRevealingBluff,
-          lastMove: _handler.lastMove,
+          lastMove: shouldSync
+              ? _handler.lastMove
+              : null, // keep existing if null
+          // IMPORTANT: Never clearLastMove here. Let EngineStateUpdated do it.
+          clearLastMove: false,
         ),
-      ),
-    );
+      );
+    });
 
     _initHandler();
     add(const HandlerSyncRequested());
@@ -194,6 +214,7 @@ class SessionBloc extends Bloc<SessionEvent, SessionBlocState> {
         pNames: _handler.pNames,
         isRevealingBluff: _handler.isRevealingBluff,
         lastMove: _handler.lastMove,
+        clearLastMove: _handler.lastMove == null,
       ),
     );
   }

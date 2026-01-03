@@ -58,6 +58,7 @@ class SessionBlocState extends Equatable {
     int? lastEventTimestamp,
     Map<String, String>? pNames,
     bool clearStagedRank = false,
+    bool clearLastMove = false,
   }) {
     return SessionBlocState(
       engineState: engineState ?? this.engineState,
@@ -68,7 +69,7 @@ class SessionBlocState extends Equatable {
       lastEventActorId: lastEventActorId ?? this.lastEventActorId,
       lastEventCardCount: lastEventCardCount ?? this.lastEventCardCount,
       isRevealingBluff: isRevealingBluff ?? this.isRevealingBluff,
-      lastMove: lastMove ?? this.lastMove,
+      lastMove: clearLastMove ? null : (lastMove ?? this.lastMove),
       lastEventTimestamp: lastEventTimestamp ?? this.lastEventTimestamp,
       pNames: pNames ?? this.pNames,
     );

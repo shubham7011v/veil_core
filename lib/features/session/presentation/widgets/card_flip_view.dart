@@ -15,6 +15,7 @@ class CardFlipView extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    debugPrint("CardFlipView build: isFlipped=$isFlipped");
     return AnimatedSwitcher(
       duration: const Duration(milliseconds: 600),
       transitionBuilder: (Widget child, Animation<double> animation) {

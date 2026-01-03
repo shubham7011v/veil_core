@@ -15,6 +15,9 @@ class GameTableView extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    debugPrint(
+      "GameTableView build: shouldShowRankSelector=${state.shouldShowRankSelector}, isRoundSet=${state.isRoundSet}, isSelectingRank=${state.isSelectingRank}",
+    );
     return LayoutBuilder(
       builder: (context, constraints) {
         final double finalWidth =
@@ -41,11 +44,14 @@ class GameTableView extends StatelessWidget {
         state.engineState.currentPhase == SessionPhase.thinking &&
         (state.engineState.lastActionText?.contains("Shuffling") ?? false);
 
+    // Don't use pileKey when flipped to avoid duplicate GlobalKey during animation
+    final effectivePileKey = state.shouldShowRankSelector ? null : pileKey;
+
     return Stack(
       alignment: Alignment.bottomCenter,
       children: [
         AnimatedPileView(
-          pileKey: pileKey,
+          pileKey: effectivePileKey,
           pileCount: state.engineState.pileCount,
           roundStatus: roundStatus,
           isShuffling: isShuffling,

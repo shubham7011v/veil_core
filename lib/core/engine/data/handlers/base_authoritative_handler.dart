@@ -427,11 +427,7 @@ abstract class BaseAuthoritativeHandler implements GameSessionHandler {
     onTurnActive(nextId);
   }
 
-  void resetRoundState(
-    String startId, {
-    required bool wasDiscarded,
-    String? winnerId,
-  }) {
+  void resetRoundState(String startId, {required bool wasDiscarded}) {
     _currentRank = null;
     _lastMove = null;
     _lastPlayedById = null;
@@ -512,7 +508,7 @@ abstract class BaseAuthoritativeHandler implements GameSessionHandler {
     // Note: distributePileTo will handle emitting the event and setting actor/count
     Future.delayed(const Duration(milliseconds: 1000), () {
       distributePileTo(loserId);
-      resetRoundState(winnerId, wasDiscarded: false, winnerId: winnerId);
+      resetRoundState(winnerId, wasDiscarded: false);
       _currentState = _currentState.copyWith(lastActionText: resultText);
       emitState();
     });
