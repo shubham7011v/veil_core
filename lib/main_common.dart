@@ -24,6 +24,7 @@ import 'features/session/ui/screens/bot_settings_screen.dart';
 import 'features/auth/ui/splash_screen.dart';
 import 'features/auth/ui/intro_screen.dart';
 import 'features/auth/ui/court_entry_screen.dart';
+import 'features/matchmaking/ui/matchmaking_screen.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'features/auth/repositories/onboarding_repository.dart';
 import 'package:flutter_native_splash/flutter_native_splash.dart';
@@ -108,6 +109,7 @@ class VeilApp extends StatelessWidget {
                     const LobbyWrapper(), // Wrapped to inject real data if needed
                 '/session': (context) => const SessionScreen(),
                 '/bot_settings': (context) => const BotSettingsScreen(),
+                '/matchmaking': (context) => const MatchmakingScreen(),
               },
             );
           },

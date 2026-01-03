@@ -18,31 +18,17 @@ class GameTableView extends StatelessWidget {
   Widget build(BuildContext context) {
     return LayoutBuilder(
       builder: (context, constraints) {
-        // Responsible sizing: use the smaller of (width) or (height/aspectRatio)
-        const double targetAspectRatio = 1.2;
-        final double maxAvailableWidth = (constraints.maxWidth - 32).clamp(
-          0.0,
-          double.infinity,
-        );
-        final double maxAvailableHeight = (constraints.maxHeight - 20).clamp(
-          0.0,
-          double.infinity,
-        );
+        final double finalWidth =
+            constraints.maxWidth - 32; // Account for 16px padding on each side
+        final double finalHeight = constraints.maxHeight;
 
-        // Calculate theoretical width based on height constraint
-        final double widthFromHeight = maxAvailableHeight / targetAspectRatio;
-
-        // Final width is the smaller of available width, widthFromHeight, or a reasonable max
-        final double finalWidth = widthFromHeight < maxAvailableWidth
-            ? widthFromHeight.clamp(120.0, 400.0)
-            : maxAvailableWidth.clamp(120.0, 400.0);
-
-        final double finalHeight = finalWidth * targetAspectRatio;
-
-        return CardFlipView(
-          isFlipped: state.shouldShowRankSelector,
-          front: _buildCenterPile(context, finalWidth, finalHeight),
-          back: _buildRankSelector(context, finalWidth, finalHeight),
+        return Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16.0),
+          child: CardFlipView(
+            isFlipped: state.shouldShowRankSelector,
+            front: _buildCenterPile(context, finalWidth, finalHeight),
+            back: _buildRankSelector(context, finalWidth, finalHeight),
+          ),
         );
       },
     );
@@ -91,32 +77,35 @@ class GameTableView extends StatelessWidget {
         case UnitRank.king:
           return "K";
         default:
-          return (rank.index + 1).toString();
+          return (rank.index + 2).toString();
       }
     }
 
-    // Scale buttons based on the smallest dimension to ensure they fit
-    final buttonSize = (width / 5.5).clamp(24.0, 48.0);
-    final spacing = (width * 0.03).clamp(4.0, 12.0);
+    // Scale spacing based on width to ensure they fit
+    final spacing = (width * 0.03).clamp(8.0, 16.0);
 
     return GestureDetector(
       onTap: () => bloc.add(RankSelectionToggleRequested()),
       child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
         width: width,
         height: height,
         decoration: BoxDecoration(
-          color: const Color(0xFF1A1A1A),
-          borderRadius: BorderRadius.circular(12),
+          gradient: LinearGradient(
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+            colors: [const Color(0xFF1E1E1E), const Color(0xFF121212)],
+          ),
+          borderRadius: BorderRadius.circular(20),
           border: Border.all(
-            color: const Color(0xFFFFD700).withValues(alpha: 0.5),
-            width: 2,
+            color: const Color(0xFFE5A043).withValues(alpha: 0.3),
+            width: 1.5,
           ),
           boxShadow: [
             BoxShadow(
-              color: Colors.black.withValues(alpha: 0.5),
-              blurRadius: 15,
-              spreadRadius: 2,
+              color: Colors.black.withValues(alpha: 0.8),
+              blurRadius: 20,
+              spreadRadius: 5,
             ),
           ],
         ),
@@ -127,63 +116,83 @@ class GameTableView extends StatelessWidget {
             Text(
               "SELECT RANK",
               style: TextStyle(
-                color: const Color(0xFFFFD700),
-                fontSize: (height * 0.06).clamp(10.0, 14.0),
-                fontWeight: FontWeight.w900,
-                letterSpacing: 2,
+                color: const Color(0xFFE5A043),
+                fontSize: 14,
+                fontWeight: FontWeight.bold,
+                letterSpacing: 3,
               ),
             ),
-            SizedBox(height: height * 0.03),
-            Expanded(
-              child: Center(
-                child: Wrap(
-                  spacing: spacing,
-                  runSpacing: spacing,
-                  alignment: WrapAlignment.center,
-                  children: ranks.map((rank) {
-                    final isStaged = state.stagedRank == rank;
-                    return GestureDetector(
-                      onTap: () => bloc.add(RankStaged(rank)),
-                      child: AnimatedContainer(
-                        duration: const Duration(milliseconds: 200),
-                        width: buttonSize,
-                        height: buttonSize,
-                        decoration: BoxDecoration(
-                          color: isStaged
-                              ? const Color(0xFFFFD700)
-                              : Colors.white.withValues(alpha: 0.05),
-                          borderRadius: BorderRadius.circular(8),
-                          border: Border.all(
-                            color: isStaged ? Colors.white : Colors.white12,
-                            width: 1.0,
-                          ),
-                        ),
-                        child: Center(
-                          child: Text(
-                            getRankSymbol(rank),
-                            style: TextStyle(
-                              color: isStaged
-                                  ? Colors.black
-                                  : Colors.white.withValues(alpha: 0.7),
-                              fontSize: buttonSize * 0.45,
-                              fontWeight: FontWeight.w900,
+            const SizedBox(height: 20),
+            Wrap(
+              spacing: spacing,
+              runSpacing: spacing,
+              alignment: WrapAlignment.center,
+              children: ranks.map((rank) {
+                final isStaged = state.stagedRank == rank;
+                return GestureDetector(
+                  onTap: () => bloc.add(RankStaged(rank)),
+                  child: AnimatedContainer(
+                    duration: const Duration(milliseconds: 200),
+                    width:
+                        (width - 64 - (spacing * 4)) /
+                        5, // Calculate width to fit 5 per row
+                    height: ((width - 64 - (spacing * 4)) / 5) * 1.2,
+                    decoration: BoxDecoration(
+                      gradient: isStaged
+                          ? const LinearGradient(
+                              begin: Alignment.topLeft,
+                              end: Alignment.bottomRight,
+                              colors: [Color(0xFFE5A043), Color(0xFFC48B30)],
+                            )
+                          : LinearGradient(
+                              begin: Alignment.topLeft,
+                              end: Alignment.bottomRight,
+                              colors: [
+                                Colors.white.withValues(alpha: 0.05),
+                                Colors.white.withValues(alpha: 0.02),
+                              ],
                             ),
-                          ),
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(
+                        color: isStaged
+                            ? Colors.white.withValues(alpha: 0.5)
+                            : Colors.white.withValues(alpha: 0.1),
+                        width: 1.5,
+                      ),
+                      boxShadow: isStaged
+                          ? [
+                              BoxShadow(
+                                color: const Color(
+                                  0xFFE5A043,
+                                ).withValues(alpha: 0.4),
+                                blurRadius: 10,
+                                spreadRadius: 1,
+                              ),
+                            ]
+                          : [],
+                    ),
+                    child: Center(
+                      child: Text(
+                        getRankSymbol(rank),
+                        style: TextStyle(
+                          color: isStaged ? Colors.black : Colors.white70,
+                          fontSize: 18,
+                          fontWeight: FontWeight.w900,
                         ),
                       ),
-                    );
-                  }).toList(),
-                ),
-              ),
+                    ),
+                  ),
+                );
+              }).toList(),
             ),
-            SizedBox(height: height * 0.02),
+            const SizedBox(height: 12),
             Text(
-              "TAP TO FLIP BACK",
+              "TAP TO DISMISS",
               style: TextStyle(
                 color: Colors.white24,
-                fontSize: (height * 0.04).clamp(8.0, 10.0),
+                fontSize: 10,
                 fontWeight: FontWeight.bold,
-                letterSpacing: 1,
+                letterSpacing: 1.5,
               ),
             ),
           ],

@@ -248,7 +248,7 @@ class _HomeScreenState extends State<HomeScreen> {
       child: Material(
         color: Colors.transparent,
         child: InkWell(
-          onTap: () {},
+          onTap: () => Navigator.pushNamed(context, '/matchmaking'),
           borderRadius: BorderRadius.circular(16),
           child: Center(
             child: Text(
