@@ -38,26 +38,24 @@ class SessionHandView extends StatelessWidget {
       child: LayoutBuilder(
         builder: (context, constraints) {
           final double width = constraints.maxWidth;
-          if (displayHand.length <= 10) {
-            return _buildRowContent(context, displayHand, state, width);
-          } else {
-            final int mid = (displayHand.length / 2).ceil();
-            final backRow = displayHand.sublist(0, mid);
-            final frontRow = displayHand.sublist(mid);
-            return Stack(
-              alignment: Alignment.bottomCenter,
-              children: [
+          final int mid = (displayHand.length / 2).floor();
+          final backRow = displayHand.sublist(0, mid);
+          final frontRow = displayHand.sublist(mid);
+
+          return Stack(
+            alignment: Alignment.bottomCenter,
+            children: [
+              if (backRow.isNotEmpty)
                 Positioned(
                   bottom: 35,
                   child: _buildRowContent(context, backRow, state, width),
                 ),
-                Positioned(
-                  bottom: 0,
-                  child: _buildRowContent(context, frontRow, state, width),
-                ),
-              ],
-            );
-          }
+              Positioned(
+                bottom: 0,
+                child: _buildRowContent(context, frontRow, state, width),
+              ),
+            ],
+          );
         },
       ),
     );
