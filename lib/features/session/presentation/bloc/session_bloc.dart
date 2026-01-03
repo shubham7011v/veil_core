@@ -3,6 +3,7 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import '../../../../core/engine/engine.dart';
 import 'session_event.dart';
 import 'session_state.dart';
+import '../../../../core/di/service_locator.dart' as di;
 
 class SessionBloc extends Bloc<SessionEvent, SessionBlocState> {
   final GameSessionHandler _handler;
@@ -10,7 +11,7 @@ class SessionBloc extends Bloc<SessionEvent, SessionBlocState> {
   StreamSubscription? _eventSub;
 
   SessionBloc({GameSessionHandler? handler})
-    : _handler = handler ?? LocalBotSessionHandler(),
+    : _handler = handler ?? di.sl.gameSessionHandler,
       super(SessionBlocState.initial()) {
     // Action handlers
     on<SessionStartRequested>(_onStartRequested);

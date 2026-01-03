@@ -1,6 +1,7 @@
 import 'package:shared_preferences/shared_preferences.dart';
 import '../data/data.dart';
 import '../services/services.dart';
+import '../engine/engine.dart';
 
 class ServiceLocator {
   static final ServiceLocator _instance = ServiceLocator._internal();
@@ -12,6 +13,7 @@ class ServiceLocator {
   late final AuthRepository authRepository;
   late final UserRepository userRepository;
   late final OnboardingRepository onboardingRepository;
+  late final GameSessionHandler gameSessionHandler;
 
   Future<void> setup() async {
     final prefs = await SharedPreferences.getInstance();
@@ -22,6 +24,7 @@ class ServiceLocator {
     authRepository = AuthRepository();
     userRepository = UserRepository();
     onboardingRepository = OnboardingRepository(prefs);
+    gameSessionHandler = LocalBotSessionHandler();
   }
 }
 

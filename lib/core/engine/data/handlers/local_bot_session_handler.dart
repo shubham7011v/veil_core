@@ -7,6 +7,7 @@ import '../../domain/models/unit.dart';
 import '../../domain/models/session_enums.dart';
 import '../../domain/models/game_move.dart';
 import '../../domain/handlers/game_session_handler.dart';
+import '../../domain/logic/game_rules.dart';
 
 class LocalBotSessionHandler implements GameSessionHandler {
   // Streams
@@ -404,13 +405,14 @@ class LocalBotSessionHandler implements GameSessionHandler {
   }
 
   void _advanceTurn() {
-    final pIds = _currentState.participants.map((p) => p.id).toList();
-    final currentIdx = pIds.indexOf(_currentState.activeParticipantId ?? 'me');
-    final nextIdx = (currentIdx + 1) % pIds.length;
-    final nextId = pIds[nextIdx];
+    final participants = _currentState.participants;
+    final nextId = GameRules.getNextParticipantId(
+      _currentState.activeParticipantId ?? 'me',
+      participants,
+    );
 
     // Round End Check
-    if (nextId == _lastPlayedById && _passCount >= pIds.length - 1) {
+    if (nextId == _lastPlayedById && _passCount >= participants.length - 1) {
       _resetRoundState(nextId, wasDiscarded: true);
       _currentState = _currentState.copyWith(
         lastActionText:
@@ -475,7 +477,7 @@ class LocalBotSessionHandler implements GameSessionHandler {
 
   void _finalizeChallenge(String blufferId, String challengerId) {
     _isRevealingBluff = false;
-    final wasBluff = _checkIfBluff(_lastMove!);
+    final wasBluff = GameRules.isBluff(_lastMove!);
     _isBluffSuccessful = wasBluff;
 
     String resultText;
@@ -539,9 +541,7 @@ class LocalBotSessionHandler implements GameSessionHandler {
     _pile.clear();
   }
 
-  bool _checkIfBluff(GameMove move) {
-    return move.actualUnits.any((u) => u.rank != move.declaredRank);
-  }
+  // Removed _checkIfBluff as it's now in GameRules
 
   void _addToLog(String message) {
     _gameLog.insert(0, message);
