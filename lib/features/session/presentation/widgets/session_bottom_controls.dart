@@ -3,8 +3,7 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import '../bloc/session_bloc.dart';
 import '../bloc/session_event.dart';
 import '../bloc/session_state.dart';
-import '../../../../core/engine/engine.dart';
-import 'unit_card.dart';
+import 'session_hand_view.dart';
 
 class SessionBottomControls extends StatelessWidget {
   final SessionBlocState state;
@@ -42,18 +41,12 @@ class SessionBottomControls extends StatelessWidget {
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          // Anchor for flying cards animation
-          SizedBox(
-            height: 130,
-            child: _buildHandArea(
-              context,
-              state.engineState.myHand
-                  .where((u) => !state.selectedUnitIds.contains(u.id))
-                  .toList(),
-              state,
-            ),
-          ),
+          // The "Deck" View
+          SessionHandView(state: state),
+
           const SizedBox(height: 8),
+
+          // Action Buttons View
           Row(
             children: [
               Expanded(
@@ -148,132 +141,6 @@ class SessionBottomControls extends StatelessWidget {
             ],
           ),
         ],
-      ),
-    );
-  }
-
-  Widget _buildHandArea(
-    BuildContext context,
-    List<Unit> hand,
-    SessionBlocState state,
-  ) {
-    if (hand.isEmpty) {
-      return const Center(
-        child: Text("EMPTY HAND", style: TextStyle(color: Colors.white24)),
-      );
-    }
-
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        final double width = constraints.maxWidth;
-        const double cardWidth = 70;
-        const double overlap = 25;
-
-        if (hand.length <= 10) {
-          return _buildRowContent(
-            context,
-            hand,
-            state,
-            width,
-            cardWidth,
-            overlap,
-          );
-        } else {
-          final int mid = (hand.length / 2).ceil();
-          final backRow = hand.sublist(0, mid);
-          final frontRow = hand.sublist(mid);
-          return Stack(
-            alignment: Alignment.bottomCenter,
-            children: [
-              Positioned(
-                bottom: 30,
-                child: _buildRowContent(
-                  context,
-                  backRow,
-                  state,
-                  width,
-                  cardWidth,
-                  overlap,
-                ),
-              ),
-              Positioned(
-                bottom: 0,
-                child: _buildRowContent(
-                  context,
-                  frontRow,
-                  state,
-                  width,
-                  cardWidth,
-                  overlap,
-                ),
-              ),
-            ],
-          );
-        }
-      },
-    );
-  }
-
-  Widget _buildRowContent(
-    BuildContext context,
-    List<Unit> handSlice,
-    SessionBlocState state,
-    double maxWidth,
-    double cardWidth,
-    double overlap,
-  ) {
-    final bloc = context.read<SessionBloc>();
-    final double scrollWidth = cardWidth + (handSlice.length - 1) * overlap;
-
-    return SizedBox(
-      height: 100,
-      width: maxWidth,
-      child: Center(
-        child: SingleChildScrollView(
-          scrollDirection: Axis.horizontal,
-          child: SizedBox(
-            width: scrollWidth + 40, // padding for drag
-            child: ReorderableListView.builder(
-              scrollDirection: Axis.horizontal,
-              buildDefaultDragHandles: true,
-              itemCount: handSlice.length,
-              onReorder: (oldIndex, newIndex) {
-                bloc.add(HandReorderRequested(oldIndex, newIndex));
-              },
-              proxyDecorator: (child, index, animation) {
-                return AnimatedBuilder(
-                  animation: animation,
-                  builder: (context, child) {
-                    return Transform.scale(
-                      scale: 1.0 + (animation.value * 0.1),
-                      child: Material(color: Colors.transparent, child: child),
-                    );
-                  },
-                  child: child,
-                );
-              },
-              itemBuilder: (context, index) {
-                final unit = handSlice[index];
-                return SizedBox(
-                  key: ValueKey(unit.id),
-                  width: index == handSlice.length - 1 ? cardWidth : overlap,
-                  child: OverflowBox(
-                    maxWidth: cardWidth,
-                    minWidth: cardWidth,
-                    alignment: Alignment.centerLeft,
-                    child: UnitCard(
-                      unit: unit,
-                      isSelected: false,
-                      onTap: () => bloc.add(UnitToggled(unit.id)),
-                      width: cardWidth,
-                      height: 100,
-                    ),
-                  ),
-                );
-              },
-            ),
-          ),
-        ),
       ),
     );
   }

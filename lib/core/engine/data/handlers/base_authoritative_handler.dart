@@ -241,11 +241,22 @@ abstract class BaseAuthoritativeHandler implements GameSessionHandler {
 
   @override
   void reorderHand(int oldIndex, int newIndex) {
+    // We treat the indices as absolute to the hand for now.
+    // However, if the UI passes relative indices, we should fix that in the BLoC/UI.
     final myCards = _hands['me'];
     if (myCards == null) return;
-    if (oldIndex < newIndex) newIndex -= 1;
+
+    if (oldIndex < 0 || oldIndex >= myCards.length) return;
+
+    // Correcting newIndex for removeAt logic
+    if (oldIndex < newIndex) {
+      newIndex -= 1;
+    }
+    newIndex = newIndex.clamp(0, myCards.length - 1);
+
     final item = myCards.removeAt(oldIndex);
     myCards.insert(newIndex, item);
+
     _currentState = _currentState.copyWith(myHand: List.from(myCards));
     emitState();
   }
