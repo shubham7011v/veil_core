@@ -25,9 +25,23 @@ class SessionBloc extends Bloc<SessionEvent, SessionBlocState> {
     on<HandReorderRequested>(_onHandReorderRequested);
 
     // Engine update handlers
-    on<EngineStateUpdated>(
-      (event, emit) => emit(state.copyWith(engineState: event.state)),
-    );
+    on<EngineStateUpdated>((event, emit) {
+      final bool itIsMyTurn = event.state.activeParticipantId == 'me';
+      final bool isNewRound = _handler.lastMove == null;
+      final bool hasCards = event.state.myHand.isNotEmpty;
+
+      // Auto-show rank selector if it's my turn to start a round and I haven't picked one yet
+      // Crucially, wait until I actually have cards (after deal/shuffle)
+      final bool shouldAutoShowRank =
+          itIsMyTurn && isNewRound && state.stagedRank == null && hasCards;
+
+      emit(
+        state.copyWith(
+          engineState: event.state,
+          isSelectingRank: shouldAutoShowRank ? true : state.isSelectingRank,
+        ),
+      );
+    });
     on<EngineEventReceived>(
       (event, emit) => emit(
         state.copyWith(

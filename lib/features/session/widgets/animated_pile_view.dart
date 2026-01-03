@@ -6,6 +6,9 @@ class AnimatedPileView extends StatefulWidget {
   final String roundStatus;
   final VoidCallback onTap;
   final GlobalKey? pileKey;
+  final bool isShuffling;
+  final double width;
+  final double? height;
 
   const AnimatedPileView({
     super.key,
@@ -13,6 +16,9 @@ class AnimatedPileView extends StatefulWidget {
     required this.roundStatus,
     required this.onTap,
     this.pileKey,
+    this.isShuffling = false,
+    this.width = 160,
+    this.height,
   });
 
   @override
@@ -23,8 +29,10 @@ class _AnimatedPileViewState extends State<AnimatedPileView>
     with TickerProviderStateMixin {
   late AnimationController _controller;
   late AnimationController _pressureController;
+  late AnimationController _shuffleController;
   late Animation<double> _scaleAnimation;
   late Animation<double> _pressureAnimation;
+  late Animation<double> _shuffleAnimation;
   int _prevCount = 0;
 
   @override
@@ -50,6 +58,18 @@ class _AnimatedPileViewState extends State<AnimatedPileView>
     ).animate(_pressureController);
     _pressureController.repeat();
     _updatePressureSpeed();
+
+    _shuffleController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 400),
+    );
+    _shuffleAnimation = Tween<double>(begin: -1.0, end: 1.0).animate(
+      CurvedAnimation(parent: _shuffleController, curve: Curves.easeInOut),
+    );
+
+    if (widget.isShuffling) {
+      _shuffleController.repeat(reverse: true);
+    }
   }
 
   void _updatePressureSpeed() {
@@ -68,12 +88,22 @@ class _AnimatedPileViewState extends State<AnimatedPileView>
       _updatePressureSpeed();
     }
     _prevCount = widget.pileCount;
+
+    if (widget.isShuffling != oldWidget.isShuffling) {
+      if (widget.isShuffling) {
+        _shuffleController.repeat(reverse: true);
+      } else {
+        _shuffleController.stop();
+        _shuffleController.value = 0;
+      }
+    }
   }
 
   @override
   void dispose() {
     _controller.dispose();
     _pressureController.dispose();
+    _shuffleController.dispose();
     super.dispose();
   }
 
@@ -85,19 +115,23 @@ class _AnimatedPileViewState extends State<AnimatedPileView>
       (widget.pileCount / 30).clamp(0.0, 1.0),
     )!;
 
+    final cardWidth = widget.width;
+    final cardHeight = widget.height ?? (cardWidth * 1.3);
+    final pressureBaseSize = cardHeight;
+
     return GestureDetector(
       onTap: widget.onTap,
       child: Stack(
         key: widget.pileKey,
         alignment: Alignment.center,
         children: [
-          if (widget.pileCount > 0)
+          if (widget.pileCount > 0 || widget.isShuffling)
             AnimatedBuilder(
               animation: _pressureAnimation,
               builder: (context, child) {
                 return Container(
-                  width: 190 + (20 * _pressureAnimation.value),
-                  height: 190 + (20 * _pressureAnimation.value),
+                  width: pressureBaseSize + (20 * _pressureAnimation.value),
+                  height: pressureBaseSize + (20 * _pressureAnimation.value),
                   decoration: BoxDecoration(
                     shape: BoxShape.circle,
                     border: Border.all(
@@ -115,54 +149,67 @@ class _AnimatedPileViewState extends State<AnimatedPileView>
             child: Stack(
               alignment: Alignment.center,
               children: [
-                Container(
-                  width: 140,
-                  height: 180,
-                  decoration: BoxDecoration(
-                    color: Colors.white10,
-                    borderRadius: BorderRadius.circular(12),
-                    border: Border.all(
-                      color: widget.pileCount > 0
-                          ? pressureColor
-                          : Colors.white24,
-                      width: 2,
-                    ),
-                    boxShadow: [
-                      BoxShadow(
-                        color: pressureColor.withValues(alpha: 0.2),
-                        blurRadius: 15,
-                        spreadRadius: 2,
-                      ),
-                    ],
-                  ),
-                  child: Center(
-                    child: Padding(
-                      padding: const EdgeInsets.only(top: 8),
-                      child: Icon(
-                        Icons.style,
-                        size: 60,
-                        color: Colors.white.withValues(alpha: 0.1),
-                      ),
-                    ),
-                  ),
+                // Base Card Back
+                _buildCardLayer(
+                  width: cardWidth,
+                  height: cardHeight,
+                  color: Colors.white10,
+                  borderColor: widget.pileCount > 0
+                      ? pressureColor
+                      : Colors.white24,
+                  showIcon: true,
                 ),
+
+                // Shuffling Animation Layers
+                if (widget.isShuffling)
+                  AnimatedBuilder(
+                    animation: _shuffleAnimation,
+                    builder: (context, child) {
+                      return Stack(
+                        alignment: Alignment.center,
+                        children: [
+                          Transform.translate(
+                            offset: Offset(_shuffleAnimation.value * 20, 0),
+                            child: Transform.rotate(
+                              angle: _shuffleAnimation.value * 0.1,
+                              child: _buildCardLayer(
+                                width: cardWidth,
+                                height: cardHeight,
+                                color: Colors.white.withValues(alpha: 0.1),
+                              ),
+                            ),
+                          ),
+                          Transform.translate(
+                            offset: Offset(-_shuffleAnimation.value * 15, 5),
+                            child: Transform.rotate(
+                              angle: -_shuffleAnimation.value * 0.15,
+                              child: _buildCardLayer(
+                                width: cardWidth,
+                                height: cardHeight,
+                                color: Colors.white.withValues(alpha: 0.05),
+                              ),
+                            ),
+                          ),
+                        ],
+                      );
+                    },
+                  ),
+
+                // Existing Pile Stack
                 if (widget.pileCount > 1)
                   ...List.generate(
                     dart_math.min(widget.pileCount, 5),
                     (i) => Positioned(
                       top: i * 2.0,
                       left: i * 2.0,
-                      child: Container(
-                        width: 140,
-                        height: 180,
-                        decoration: BoxDecoration(
-                          color: Colors.white.withValues(alpha: 0.05),
-                          borderRadius: BorderRadius.circular(12),
-                          border: Border.all(color: Colors.white10, width: 1),
-                        ),
+                      child: _buildCardLayer(
+                        width: cardWidth,
+                        height: cardHeight,
+                        color: Colors.white.withValues(alpha: 0.05),
                       ),
                     ),
                   ),
+
                 Positioned(
                   top: 20,
                   child: ShaderMask(
@@ -174,7 +221,8 @@ class _AnimatedPileViewState extends State<AnimatedPileView>
                       ],
                     ).createShader(bounds),
                     child: Text(
-                      widget.roundStatus.toUpperCase(),
+                      (widget.isShuffling ? "SHUFFLING" : widget.roundStatus)
+                          .toUpperCase(),
                       style: const TextStyle(
                         color: Colors.white,
                         fontSize: 16,
@@ -233,6 +281,45 @@ class _AnimatedPileViewState extends State<AnimatedPileView>
           ),
         ],
       ),
+    );
+  }
+
+  Widget _buildCardLayer({
+    required double width,
+    required double height,
+    required Color color,
+    Color borderColor = Colors.white10,
+    bool showIcon = false,
+  }) {
+    return Container(
+      width: width,
+      height: height,
+      decoration: BoxDecoration(
+        color: color,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: borderColor, width: showIcon ? 2 : 1),
+        boxShadow: showIcon
+            ? [
+                BoxShadow(
+                  color: borderColor.withValues(alpha: 0.2),
+                  blurRadius: 15,
+                  spreadRadius: 2,
+                ),
+              ]
+            : null,
+      ),
+      child: showIcon
+          ? Center(
+              child: Padding(
+                padding: const EdgeInsets.only(top: 8),
+                child: Icon(
+                  Icons.style,
+                  size: width * 0.4,
+                  color: Colors.white.withValues(alpha: 0.1),
+                ),
+              ),
+            )
+          : null,
     );
   }
 }
