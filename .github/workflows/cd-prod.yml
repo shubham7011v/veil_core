@@ -53,6 +53,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Authenticate to Google Cloud
+        id: auth
         uses: google-github-actions/auth@v2
         with:
           credentials_json: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_PROD }}
@@ -62,6 +63,8 @@ jobs:
 
       - name: Deploy Firebase Rules
         run: firebase deploy --only firestore:rules,storage:rules --project "veil-prod-shubham"
+        env:
+          GOOGLE_APPLICATION_CREDENTIALS: ${{ steps.auth.outputs.credentials_file_path }}
 
   deploy_play_store:
     name: Deploy to Play Store
