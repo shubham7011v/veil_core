@@ -161,20 +161,22 @@ abstract class BaseAuthoritativeHandler implements GameSessionHandler {
       myHand: [],
       currentPhase: SessionPhase.thinking,
       activeParticipantId: 'me',
-      pileCount: 0,
+      pileCount: deck.length, // START WITH FULL DECK
       lastActionText: 'Shuffling deck...',
     );
     emitState();
 
-    // Phase 2: Dealing
-    Future.delayed(const Duration(milliseconds: 1500), () {
-      _activeEventActorId = 'pile';
-      _lastCountClaimed = 0;
-      _eventController.add(SessionEventType.cardsDealt);
+    // Phase 1.5: Shuffling (delayed slightly to ensure UI is ready)
+    Future.delayed(const Duration(milliseconds: 500), () {
+      _eventController.add(SessionEventType.shuffling);
+    });
 
+    // Phase 2: Update state after shuffle completes (no separate deal event)
+    Future.delayed(const Duration(milliseconds: 1800), () {
       _currentState = _currentState.copyWith(
         participants: participants,
         myHand: _hands['me']!,
+        pileCount: 0, // PILE GOES TO 0 AFTER DEALING
         lastActionText: 'Game Started! Select a rank to begin.',
       );
       emitState();

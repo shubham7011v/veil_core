@@ -8,8 +8,13 @@ import 'unit_card.dart';
 
 class SessionHandView extends StatelessWidget {
   final SessionBlocState state;
+  final GlobalKey myAvatarKey;
 
-  const SessionHandView({super.key, required this.state});
+  const SessionHandView({
+    super.key,
+    required this.state,
+    required this.myAvatarKey,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -18,15 +23,17 @@ class SessionHandView extends StatelessWidget {
         .toList();
 
     if (displayHand.isEmpty) {
-      return const SizedBox(
+      return SizedBox(
+        key: myAvatarKey,
         height: 150,
-        child: Center(
+        child: const Center(
           child: Text("EMPTY HAND", style: TextStyle(color: Colors.white24)),
         ),
       );
     }
 
     return SizedBox(
+      key: myAvatarKey,
       height: 150,
       child: LayoutBuilder(
         builder: (context, constraints) {

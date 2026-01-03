@@ -42,7 +42,7 @@ class SessionBottomControls extends StatelessWidget {
         mainAxisSize: MainAxisSize.min,
         children: [
           // The "Deck" View
-          SessionHandView(state: state),
+          SessionHandView(state: state, myAvatarKey: myAvatarKey),
 
           const SizedBox(height: 8),
 

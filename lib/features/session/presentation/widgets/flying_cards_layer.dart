@@ -85,19 +85,25 @@ class _FlyingCardItemState extends State<_FlyingCardItem>
     return AnimatedBuilder(
       animation: _controller,
       builder: (context, child) {
+        final progress = _controller.value;
+        // Natural arc: reaches peak height at middle of flight
+        final arcHeight =
+            sin(progress * pi) *
+            100 *
+            (widget.anim.id.hashCode % 10 < 5 ? 1 : -1);
+
         return Stack(
           children: _offsets.map((idx) {
             // Apply a slight spread for multiple cards
             final double spreadX =
-                (idx - (_offsets.length / 2)) * 10 * _controller.value;
-            final double spreadY =
-                (idx - (_offsets.length / 2)) * 5 * _controller.value;
+                (idx - (_offsets.length / 2)) * 12 * progress;
+            final double spreadY = (idx - (_offsets.length / 2)) * 6 * progress;
 
             return Positioned(
-              left: _posAnim.value.dx - 25 + spreadX,
-              top: _posAnim.value.dy - 35 + spreadY,
+              left: _posAnim.value.dx - 25 + spreadX + (arcHeight * 0.2),
+              top: _posAnim.value.dy - 35 + spreadY - arcHeight,
               child: Transform.rotate(
-                angle: _rotAnim.value + (idx * 0.1),
+                angle: _rotAnim.value + (idx * 0.1) + (progress * 0.5),
                 child: Transform.scale(
                   scale: _scaleAnim.value,
                   child: Container(
@@ -105,21 +111,25 @@ class _FlyingCardItemState extends State<_FlyingCardItem>
                     height: 70,
                     decoration: BoxDecoration(
                       color: const Color(0xFF1E1E1E),
-                      borderRadius: BorderRadius.circular(4),
-                      border: Border.all(color: Colors.white24, width: 1),
+                      borderRadius: BorderRadius.circular(6),
+                      border: Border.all(
+                        color: Colors.white.withValues(alpha: 0.2),
+                        width: 1.5,
+                      ),
                       boxShadow: [
                         BoxShadow(
-                          color: Colors.black.withValues(alpha: 0.5),
-                          blurRadius: 10 * _controller.value,
-                          offset: const Offset(0, 5),
+                          color: Colors.black.withValues(alpha: 0.6),
+                          blurRadius: 12 * progress,
+                          spreadRadius: 2 * progress,
+                          offset: Offset(0, 10 * progress),
                         ),
                       ],
                     ),
-                    child: const Center(
+                    child: Center(
                       child: Icon(
                         Icons.auto_awesome,
-                        color: Colors.white12,
-                        size: 20,
+                        color: Colors.white.withValues(alpha: 0.1),
+                        size: 24,
                       ),
                     ),
                   ),

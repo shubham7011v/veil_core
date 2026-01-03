@@ -24,12 +24,22 @@ class SessionBloc extends Bloc<SessionEvent, SessionBlocState> {
     on<HandSortRequested>(_onHandSortRequested);
     on<HandReorderRequested>(_onHandReorderRequested);
     on<HandlerSyncRequested>(_onHandlerSync);
+    on<SessionResetRequested>(_onResetRequested);
 
     // Engine update handlers
     on<EngineStateUpdated>((event, emit) {
       final isNewRound = _handler.lastMove == null;
-      final shouldForceRankSelector =
-          isNewRound && event.state.activeParticipantId == 'me';
+      final hasCards = event.state.myHand.isNotEmpty;
+      final hadNoCards = state.engineState.myHand.isEmpty;
+
+      // Determine if we should trigger the one-shot auto-flip
+      // Trigger if: it's a new round AND active participant is 'me'
+      // AND (it just became my turn OR we just got our initial cards)
+      final wasNotMyTurn = state.engineState.activeParticipantId != 'me';
+      final isNowMyTurn = event.state.activeParticipantId == 'me';
+
+      final shouldTriggerFlip =
+          isNewRound && isNowMyTurn && (wasNotMyTurn || hadNoCards) && hasCards;
 
       emit(
         state.copyWith(
@@ -37,9 +47,7 @@ class SessionBloc extends Bloc<SessionEvent, SessionBlocState> {
           isRevealingBluff: _handler.isRevealingBluff,
           lastMove: _handler.lastMove,
           pNames: _handler.pNames,
-          isSelectingRank: shouldForceRankSelector
-              ? true
-              : state.isSelectingRank,
+          isSelectingRank: shouldTriggerFlip ? true : state.isSelectingRank,
         ),
       );
     });
@@ -81,10 +89,21 @@ class SessionBloc extends Bloc<SessionEvent, SessionBlocState> {
     SessionStartRequested event,
     Emitter<SessionBlocState> emit,
   ) {
+    // Reset state before starting to ensure clean UI
+    emit(SessionBlocState.initial());
+
     _handler.startGame(
       playerCount: event.playerCount,
       thinkingTimeS: event.thinkingTimeS,
     );
+  }
+
+  void _onResetRequested(
+    SessionResetRequested event,
+    Emitter<SessionBlocState> emit,
+  ) {
+    emit(SessionBlocState.initial());
+    add(const HandlerSyncRequested());
   }
 
   void _onUnitToggled(UnitToggled event, Emitter<SessionBlocState> emit) {

@@ -19,6 +19,10 @@ class SessionStartRequested extends SessionEvent {
   List<Object?> get props => [playerCount, thinkingTimeS];
 }
 
+class SessionResetRequested extends SessionEvent {
+  const SessionResetRequested();
+}
+
 class UnitToggled extends SessionEvent {
   final String unitId;
   const UnitToggled(this.unitId);

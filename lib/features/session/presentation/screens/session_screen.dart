@@ -1,7 +1,9 @@
+import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import '../bloc/session_bloc.dart';
 import '../bloc/session_state.dart';
+import '../bloc/session_event.dart';
 import '../../../../core/engine/engine.dart' as engine;
 import '../widgets/bluff_reveal_overlay.dart';
 import '../widgets/flying_cards_layer.dart';
@@ -68,6 +70,10 @@ class _SessionScreenState extends State<SessionScreen>
     required String sourceId,
     required String targetId,
     int count = 1,
+    int retryCount = 0,
+    bool randomOffset = false,
+    Offset? customStartOffset,
+    Offset? customEndOffset,
   }) {
     if (!mounted) return;
 
@@ -78,18 +84,55 @@ class _SessionScreenState extends State<SessionScreen>
         ? _pileKey
         : (targetId == 'staging' ? _stagingKey : _avatarKeys[targetId]);
 
-    if (sourceKey == null || targetKey == null) return;
+    // Allow null keys if custom offsets are provided
+    if ((sourceKey == null && customStartOffset == null) ||
+        (targetKey == null && customEndOffset == null)) {
+      return;
+    }
 
     // Use addPostFrameCallback to ensure keys are rendered
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
-      final start = _getCenterOffset(sourceKey);
-      final end = _getCenterOffset(targetKey);
 
-      if (start == Offset.zero || end == Offset.zero) return;
+      Offset start =
+          customStartOffset ??
+          (sourceKey != null ? _getCenterOffset(sourceKey) : Offset.zero);
+      Offset end =
+          customEndOffset ??
+          (targetKey != null ? _getCenterOffset(targetKey) : Offset.zero);
+
+      if (randomOffset &&
+          customStartOffset == null &&
+          customEndOffset == null) {
+        final rnd = math.Random();
+        // Wider range for more messy "shuffle" look
+        start += Offset(
+          rnd.nextDouble() * 200 - 100,
+          rnd.nextDouble() * 200 - 100,
+        );
+        end += Offset(rnd.nextDouble() * 80 - 40, rnd.nextDouble() * 80 - 40);
+      }
+
+      if (start == Offset.zero || end == Offset.zero) {
+        if (retryCount < 15) {
+          // Retry more times if the layout isn't ready
+          Future.delayed(const Duration(milliseconds: 100), () {
+            _triggerCardAnimation(
+              sourceId: sourceId,
+              targetId: targetId,
+              count: count,
+              retryCount: retryCount + 1,
+              randomOffset: randomOffset,
+              customStartOffset: customStartOffset,
+              customEndOffset: customEndOffset,
+            );
+          });
+        }
+        return;
+      }
 
       final id =
-          DateTime.now().millisecondsSinceEpoch.toString() +
+          DateTime.now().microsecondsSinceEpoch.toString() +
           sourceId +
           targetId;
       setState(() {
@@ -134,18 +177,47 @@ class _SessionScreenState extends State<SessionScreen>
           );
         }
         break;
-      case engine.SessionEventType.cardsDealt:
-        for (var p in state.engineState.participants) {
+      case engine.SessionEventType.shuffling:
+        // Clean distribution: Fly cards from pile directly to each player
+        final participants = state.engineState.participants;
+        if (participants.isEmpty) return;
+
+        final totalCards = 52;
+        final cardsPerPlayer = totalCards ~/ participants.length;
+
+        // Distribute cards to all players simultaneously
+        for (var participant in participants) {
           _triggerCardAnimation(
             sourceId: 'pile',
-            targetId: p.id,
-            count: 4, // Visual representation of deal
+            targetId: participant.id,
+            count: cardsPerPlayer,
           );
         }
         break;
       case engine.SessionEventType.cardStaged:
-        if (state.lastEventActorId == 'me') {
-          _triggerCardAnimation(sourceId: 'me', targetId: 'staging', count: 1);
+        // No animation - cards instantly appear in staging area
+        break;
+      case engine.SessionEventType.pileDiscarded:
+        // Fly cards off-screen in random horizontal directions
+        final rnd = math.Random();
+        final size = MediaQuery.of(context).size;
+        final pileOffset = _getCenterOffset(_pileKey);
+
+        if (pileOffset == Offset.zero) return;
+
+        for (int i = 0; i < 12; i++) {
+          final targetPoint = Offset(
+            rnd.nextDouble() < 0.5 ? -150 : size.width + 150,
+            rnd.nextDouble() * size.height,
+          );
+          Future.delayed(Duration(milliseconds: i * 40), () {
+            _triggerCardAnimation(
+              sourceId: 'pile',
+              targetId: 'offscreen',
+              customStartOffset: pileOffset,
+              customEndOffset: targetPoint,
+            );
+          });
         }
         break;
       default:
@@ -166,200 +238,210 @@ class _SessionScreenState extends State<SessionScreen>
       },
       child: BlocBuilder<SessionBloc, SessionBlocState>(
         builder: (context, state) {
-          // Removed direct handler access to enforce reactivity through state
-
-          return Scaffold(
-            backgroundColor: const Color(0xFF121212),
-            body: Stack(
-              children: [
-                const SessionBackground(),
-                SafeArea(
-                  child: Column(
-                    children: [
-                      // Top Bar (0.0 - 0.4)
-                      SlideTransition(
-                        position:
-                            Tween<Offset>(
-                              begin: const Offset(0, -0.5),
-                              end: Offset.zero,
-                            ).animate(
-                              CurvedAnimation(
-                                parent: _entryController,
-                                curve: const Interval(
-                                  0.0,
-                                  0.4,
-                                  curve: Curves.easeOutCubic,
-                                ),
-                              ),
-                            ),
-                        child: FadeTransition(
-                          opacity: CurvedAnimation(
-                            parent: _entryController,
-                            curve: const Interval(
-                              0.0,
-                              0.4,
-                              curve: Curves.easeOut,
-                            ),
-                          ),
-                          child: SessionTopBar(state: state),
-                        ),
-                      ),
-
-                      // Opponents (0.1 - 0.5)
-                      SlideTransition(
-                        position:
-                            Tween<Offset>(
-                              begin: const Offset(0, -0.2),
-                              end: Offset.zero,
-                            ).animate(
-                              CurvedAnimation(
-                                parent: _entryController,
-                                curve: const Interval(
-                                  0.1,
-                                  0.5,
-                                  curve: Curves.easeOutCubic,
-                                ),
-                              ),
-                            ),
-                        child: FadeTransition(
-                          opacity: CurvedAnimation(
-                            parent: _entryController,
-                            curve: const Interval(
-                              0.1,
-                              0.5,
-                              curve: Curves.easeOut,
-                            ),
-                          ),
-                          child: OpponentCarousel(
-                            state: state,
-                            avatarKeys: _avatarKeys,
-                          ),
-                        ),
-                      ),
-                      const SizedBox(height: 10),
-
-                      // Center Pile + Claim Badge
-                      Expanded(
-                        child: Center(
-                          child: Stack(
-                            clipBehavior: Clip.none,
-                            alignment: Alignment.center,
-                            children: [
-                              ScaleTransition(
-                                scale: CurvedAnimation(
+          return PopScope(
+            onPopInvokedWithResult: (didPop, result) {
+              if (didPop) {
+                context.read<SessionBloc>().add(const SessionResetRequested());
+              }
+            },
+            child: Scaffold(
+              backgroundColor: const Color(0xFF121212),
+              body: Stack(
+                children: [
+                  const SessionBackground(),
+                  SafeArea(
+                    child: Column(
+                      children: [
+                        // Top Bar (0.0 - 0.4)
+                        SlideTransition(
+                          position:
+                              Tween<Offset>(
+                                begin: const Offset(0, -0.5),
+                                end: Offset.zero,
+                              ).animate(
+                                CurvedAnimation(
                                   parent: _entryController,
                                   curve: const Interval(
-                                    0.2,
-                                    0.7,
-                                    curve: Curves.elasticOut,
+                                    0.0,
+                                    0.4,
+                                    curve: Curves.easeOutCubic,
                                   ),
                                 ),
-                                child: GameTableView(
-                                  state: state,
-                                  pileKey: _pileKey,
-                                ),
                               ),
-                            ],
-                          ),
-                        ),
-                      ),
-                      const SizedBox(height: 16),
-
-                      // Staging Area (0.4 - 0.8)
-                      SlideTransition(
-                        position:
-                            Tween<Offset>(
-                              begin: const Offset(0, 0.2),
-                              end: Offset.zero,
-                            ).animate(
-                              CurvedAnimation(
-                                parent: _entryController,
-                                curve: const Interval(
-                                  0.4,
-                                  0.8,
-                                  curve: Curves.easeOutCubic,
-                                ),
+                          child: FadeTransition(
+                            opacity: CurvedAnimation(
+                              parent: _entryController,
+                              curve: const Interval(
+                                0.0,
+                                0.4,
+                                curve: Curves.easeOut,
                               ),
                             ),
-                        child: FadeTransition(
-                          opacity: CurvedAnimation(
-                            parent: _entryController,
-                            curve: const Interval(
-                              0.4,
-                              0.8,
-                              curve: Curves.easeOut,
-                            ),
-                          ),
-                          child: SessionStagingArea(
-                            key: _stagingKey,
-                            state: state,
-                            myAvatarKey: _avatarKeys['me']!,
+                            child: SessionTopBar(state: state),
                           ),
                         ),
-                      ),
-                      const SizedBox(height: 2),
 
-                      // Bottom Controls (0.5 - 1.0)
-                      SlideTransition(
-                        position:
-                            Tween<Offset>(
-                              begin: const Offset(0, 0.5),
-                              end: Offset.zero,
-                            ).animate(
-                              CurvedAnimation(
-                                parent: _entryController,
-                                curve: const Interval(
-                                  0.5,
-                                  1.0,
-                                  curve: Curves.easeOutCubic,
+                        // Opponents (0.1 - 0.5)
+                        SlideTransition(
+                          position:
+                              Tween<Offset>(
+                                begin: const Offset(0, -0.2),
+                                end: Offset.zero,
+                              ).animate(
+                                CurvedAnimation(
+                                  parent: _entryController,
+                                  curve: const Interval(
+                                    0.1,
+                                    0.5,
+                                    curve: Curves.easeOutCubic,
+                                  ),
                                 ),
                               ),
+                          child: FadeTransition(
+                            opacity: CurvedAnimation(
+                              parent: _entryController,
+                              curve: const Interval(
+                                0.1,
+                                0.5,
+                                curve: Curves.easeOut,
+                              ),
                             ),
-                        child: FadeTransition(
-                          opacity: CurvedAnimation(
-                            parent: _entryController,
-                            curve: const Interval(
-                              0.5,
-                              1.0,
-                              curve: Curves.easeOut,
+                            child: OpponentCarousel(
+                              state: state,
+                              avatarKeys: _avatarKeys,
                             ),
-                          ),
-                          child: SessionBottomControls(
-                            state: state,
-                            myAvatarKey: _avatarKeys['me']!,
                           ),
                         ),
-                      ),
-                    ],
-                  ),
-                ),
+                        const SizedBox(height: 10),
 
-                if (state.engineState.currentPhase ==
-                        engine.SessionPhase.finished &&
-                    state.engineState.winnerId != null)
-                  GameWinOverlay(
-                    winnerId: state.engineState.winnerId!,
-                    winnerName: state.getPlayerName(
-                      state.engineState.winnerId!,
+                        // Center Pile + Claim Badge
+                        Expanded(
+                          child: Center(
+                            child: Stack(
+                              clipBehavior: Clip.none,
+                              alignment: Alignment.center,
+                              children: [
+                                ScaleTransition(
+                                  scale: CurvedAnimation(
+                                    parent: _entryController,
+                                    curve: const Interval(
+                                      0.2,
+                                      0.7,
+                                      curve: Curves.elasticOut,
+                                    ),
+                                  ),
+                                  child: GameTableView(
+                                    state: state,
+                                    pileKey: _pileKey,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                        const SizedBox(height: 16),
+
+                        // Staging Area (0.4 - 0.8)
+                        SlideTransition(
+                          position:
+                              Tween<Offset>(
+                                begin: const Offset(0, 0.2),
+                                end: Offset.zero,
+                              ).animate(
+                                CurvedAnimation(
+                                  parent: _entryController,
+                                  curve: const Interval(
+                                    0.4,
+                                    0.8,
+                                    curve: Curves.easeOutCubic,
+                                  ),
+                                ),
+                              ),
+                          child: FadeTransition(
+                            opacity: CurvedAnimation(
+                              parent: _entryController,
+                              curve: const Interval(
+                                0.4,
+                                0.8,
+                                curve: Curves.easeOut,
+                              ),
+                            ),
+                            child: SessionStagingArea(
+                              key: _stagingKey,
+                              state: state,
+                              myAvatarKey: _avatarKeys['me']!,
+                            ),
+                          ),
+                        ),
+                        const SizedBox(height: 2),
+
+                        // Bottom Controls (0.5 - 1.0)
+                        SlideTransition(
+                          position:
+                              Tween<Offset>(
+                                begin: const Offset(0, 0.5),
+                                end: Offset.zero,
+                              ).animate(
+                                CurvedAnimation(
+                                  parent: _entryController,
+                                  curve: const Interval(
+                                    0.5,
+                                    1.0,
+                                    curve: Curves.easeOutCubic,
+                                  ),
+                                ),
+                              ),
+                          child: FadeTransition(
+                            opacity: CurvedAnimation(
+                              parent: _entryController,
+                              curve: const Interval(
+                                0.5,
+                                1.0,
+                                curve: Curves.easeOut,
+                              ),
+                            ),
+                            child: SessionBottomControls(
+                              state: state,
+                              myAvatarKey: _avatarKeys['me']!,
+                            ),
+                          ),
+                        ),
+                      ],
                     ),
-                    onBackToHome: () => Navigator.of(
-                      context,
-                    ).pushNamedAndRemoveUntil('/home', (route) => false),
                   ),
 
-                // Action Overlays (Flying Cards, Badges)
-                Positioned.fill(
-                  child: IgnorePointer(
-                    child: FlyingCardsLayer(activeAnimations: _flyingCards),
-                  ),
-                ),
+                  if (state.engineState.currentPhase ==
+                          engine.SessionPhase.finished &&
+                      state.engineState.winnerId != null)
+                    GameWinOverlay(
+                      winnerId: state.engineState.winnerId!,
+                      winnerName: state.getPlayerName(
+                        state.engineState.winnerId!,
+                      ),
+                      onBackToHome: () {
+                        context.read<SessionBloc>().add(
+                          const SessionResetRequested(),
+                        );
+                        Navigator.of(
+                          context,
+                        ).pushNamedAndRemoveUntil('/home', (route) => false);
+                      },
+                    ),
 
-                if (state.isRevealingBluff && state.lastMove != null)
-                  BluffRevealOverlay(
-                    cards: state.lastMove!.actualUnits,
-                    declaredRank: state.lastMove!.declaredRank,
+                  if (state.isRevealingBluff && state.lastMove != null)
+                    BluffRevealOverlay(
+                      cards: state.lastMove!.actualUnits,
+                      declaredRank: state.lastMove!.declaredRank,
+                    ),
+
+                  // Action Overlays (Flying Cards, Badges) - MUST BE ON TOP
+                  Positioned.fill(
+                    child: IgnorePointer(
+                      child: FlyingCardsLayer(activeAnimations: _flyingCards),
+                    ),
                   ),
-              ],
+                ],
+              ),
             ),
           );
         },

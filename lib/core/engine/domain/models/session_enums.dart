@@ -12,4 +12,5 @@ enum SessionEventType {
   cardsPickedUp,
   pileDiscarded,
   cardStaged,
+  shuffling,
 }

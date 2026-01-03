@@ -39,21 +39,58 @@ class GameTableView extends StatelessWidget {
 
     final isShuffling =
         state.engineState.currentPhase == SessionPhase.thinking &&
-        state.engineState.pileCount == 0 &&
         (state.engineState.lastActionText?.contains("Shuffling") ?? false);
 
-    return AnimatedPileView(
-      pileKey: pileKey,
-      pileCount: state.engineState.pileCount,
-      roundStatus: roundStatus,
-      isShuffling: isShuffling,
-      width: width,
-      height: height,
-      onTap: () {
-        if (!state.isRoundSet && state.isMyTurn) {
-          bloc.add(RankSelectionToggleRequested());
-        }
-      },
+    return Stack(
+      alignment: Alignment.bottomCenter,
+      children: [
+        AnimatedPileView(
+          pileKey: pileKey,
+          pileCount: state.engineState.pileCount,
+          roundStatus: roundStatus,
+          isShuffling: isShuffling,
+          width: width,
+          height: height,
+          onTap: () {
+            if (!state.isRoundSet && state.isMyTurn) {
+              bloc.add(RankSelectionToggleRequested());
+            }
+          },
+        ),
+        if (state.stagedRank != null && !state.isRoundSet)
+          Positioned(
+            bottom: 20,
+            child: GestureDetector(
+              onTap: () => bloc.add(RankSelectionToggleRequested()),
+              child: Container(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 12,
+                  vertical: 4,
+                ),
+                decoration: BoxDecoration(
+                  color: Colors.black54,
+                  borderRadius: BorderRadius.circular(20),
+                  border: Border.all(color: Colors.white10),
+                ),
+                child: const Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(Icons.swipe_vertical, size: 12, color: Colors.white54),
+                    SizedBox(width: 4),
+                    Text(
+                      "TAP TO FLIP",
+                      style: TextStyle(
+                        color: Colors.white54,
+                        fontSize: 10,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+      ],
     );
   }
 
@@ -186,15 +223,11 @@ class GameTableView extends StatelessWidget {
                 }).toList(),
               ),
               const SizedBox(height: 8),
-              Text(
-                (state.stagedRank == null &&
-                        state.isMyTurn &&
-                        !state.isRoundSet)
-                    ? "CHOOSE A RANK TO PROCEED"
-                    : "TAP TO DISMISS",
-                style: const TextStyle(
-                  color: Colors.white24,
-                  fontSize: 9,
+              const Text(
+                "SELECT TO PROCEED",
+                style: TextStyle(
+                  color: Colors.white10,
+                  fontSize: 8,
                   fontWeight: FontWeight.bold,
                   letterSpacing: 1.2,
                 ),
