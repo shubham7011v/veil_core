@@ -16,18 +16,24 @@ type Manager struct {
 	Unregister chan *Client
 
 	Rooms map[string]*Room
+	Queue *MatchmakingQueue
 }
 
 func NewManager() *Manager {
-	return &Manager{
+	m := &Manager{
 		Clients:    make(map[*Client]bool),
 		Register:   make(chan *Client),
 		Unregister: make(chan *Client),
 		Rooms:      make(map[string]*Room),
 	}
+	m.Queue = NewMatchmakingQueue()
+	return m
 }
 
 func (m *Manager) Run() {
+	ticker := time.NewTicker(1 * time.Second)
+	defer ticker.Stop()
+
 	for {
 		select {
 		case client := <-m.Register:
@@ -37,16 +43,52 @@ func (m *Manager) Run() {
 		case client := <-m.Unregister:
 			if _, ok := m.Clients[client]; ok {
 				delete(m.Clients, client)
+				m.Queue.Remove(client) // Remove from queue if waiting
 				if client.CurrentRoom != nil {
 					client.CurrentRoom.Unregister <- client
 				}
-				close(client.Send)
+				if !client.IsBot {
+					close(client.Send)
+				}
 				log.Println("Connection Unregistered")
 			}
 
-			// We could add a global broadcast channel if needed
+		case <-ticker.C:
+			// Process Matchmaking Queue safely in this thread
+			clients, matchType := m.Queue.Tick()
+			if clients != nil {
+				if matchType == "BOT" {
+					// Spawn Bot
+					bot := NewBot(m)
+					clients = append(clients, bot.Client)
+					log.Println("Spawning Bot for timeout match")
+				}
+				m.createMatchRoom(clients)
+			}
 		}
 	}
+}
+
+func (m *Manager) createMatchRoom(clients []*Client) {
+	roomID := fmt.Sprintf("match_%d", time.Now().UnixNano())
+	room := NewRoom(roomID)
+	m.Rooms[roomID] = room
+	go room.Run()
+
+	log.Printf("Starting Match Room %s with %d players", roomID, len(clients))
+
+	for _, c := range clients {
+		c.CurrentRoom = room
+		room.Register <- c
+	}
+
+	// Wait briefly for registers then start
+	go func() {
+		time.Sleep(500 * time.Millisecond)
+		startMsg := protocol.BaseMessage{Type: protocol.MsgTypeStartGame}
+		// Send start triggering via first client
+		room.Actions <- GameAction{Client: clients[0], Message: startMsg}
+	}()
 }
 
 // HandleMessage routes incoming messages from clients
@@ -58,7 +100,7 @@ func (m *Manager) HandleMessage(c *Client, message []byte) {
 		return
 	}
 
-	log.Printf("Msg Type: %s from Client %v", baseMsg.Type, c.ID)
+	// log.Printf("Msg Type: %s from Client %v", baseMsg.Type, c.ID)
 
 	// 2. Global Handlers (Auth, Join Room)
 	switch baseMsg.Type {
@@ -69,8 +111,6 @@ func (m *Manager) HandleMessage(c *Client, message []byte) {
 			return
 		}
 
-		// TEMP: Use token as UserID until we have real Firebase verification
-		// Adding nano suffix ONLY if it's "mock_token" to keep useful real logins consistent
 		userID := authData.Token
 		// Simplified mock detection
 		if len(userID) > 20 && userID[:5] == "mock_" {
@@ -83,14 +123,9 @@ func (m *Manager) HandleMessage(c *Client, message []byte) {
 		stats, err := db.GetOrCreateUser(c.ID, "Player "+c.ID[:4])
 		if err != nil {
 			log.Printf("DB Error: %v", err)
-			// Proceed anyway but with empty stats? Or fail?
-			// Let's proceed with empty stats for resilience
 			stats = &db.UserStats{UserID: c.ID, Name: "Unknown", Rank: "Novice"}
 		}
 
-		// Return AUTH_OK with Stats
-		// We need to update protocol package to support stats field first?
-		// Or just use a map for flexible JSON
 		responseMap := map[string]interface{}{
 			"playerId":   c.ID,
 			"stats":      stats,
@@ -103,24 +138,55 @@ func (m *Manager) HandleMessage(c *Client, message []byte) {
 
 		return // Handled
 
-	case "JOIN_ROOM": // Custom internal message for now
-		// Logic to find/create room and add client
-		// Mock:
-		roomID := "demo"
-		room, ok := m.Rooms[roomID]
-		if !ok {
-			room = NewRoom(roomID)
-			m.Rooms[roomID] = room
-			go room.Run()
+	case protocol.MsgTypeLeaderboardGet:
+		leaderboard, err := db.GetLeaderboard()
+		if err != nil {
+			log.Printf("Leaderboard error: %v", err)
+			return
 		}
-		c.CurrentRoom = room
-		room.Register <- c
+
+		response := protocol.NewMessage(protocol.MsgTypeLeaderboardData, leaderboard)
+		bytes, _ := json.Marshal(response)
+		c.Send <- bytes
+		return
+
+	case protocol.MsgTypeFriendRequest:
+		var targetID string // Simple data, could wrap in struct
+		json.Unmarshal(baseMsg.Data, &targetID)
+		if err := db.AddFriend(c.ID, targetID); err != nil {
+			log.Printf("Friend request error: %v", err)
+			return
+		}
+		return
+
+	case protocol.MsgTypeFriendAccept:
+		var targetID string
+		json.Unmarshal(baseMsg.Data, &targetID)
+		if err := db.AcceptFriend(c.ID, targetID); err != nil {
+			log.Printf("Friend accept error: %v", err)
+			return
+		}
+		addFriendListResponse(c)
+		return
+
+	case protocol.MsgTypeFriendList:
+		addFriendListResponse(c)
+		return
+
+	case "JOIN_ROOM":
+		// Add to Matchmaking Queue
+		// (Ignore payload for now, assume auto-match)
+		if c.CurrentRoom == nil {
+			m.Queue.Add(c)
+		} else {
+			// Already in room? Re-send state?
+			c.CurrentRoom.BroadcastState()
+		}
 		return
 	}
 
 	// 3. Room-scoped Handlers (Play, Pass, etc)
 	if c.CurrentRoom != nil {
-		// NEW: Send to action channel for game processing
 		c.CurrentRoom.Actions <- GameAction{
 			Client:  c,
 			Message: baseMsg,
@@ -133,4 +199,16 @@ func (m *Manager) HandleMessage(c *Client, message []byte) {
 		}))
 		c.Send <- errBytes
 	}
+}
+
+func addFriendListResponse(c *Client) {
+	friends, err := db.GetFriends(c.ID)
+	if err != nil {
+		log.Printf("Friend list error: %v", err)
+		return
+	}
+
+	msg := protocol.NewMessage(protocol.MsgTypeFriendList, friends)
+	bytes, _ := json.Marshal(msg)
+	c.Send <- bytes
 }

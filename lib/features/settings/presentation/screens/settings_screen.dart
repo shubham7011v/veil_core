@@ -8,7 +8,8 @@ import '../../../../core/constants/dimens.dart';
 import '../../../auth/auth.dart';
 
 class SettingsScreen extends StatefulWidget {
-  const SettingsScreen({super.key});
+  final VoidCallback? onBack;
+  const SettingsScreen({super.key, this.onBack});
 
   @override
   State<SettingsScreen> createState() => _SettingsScreenState();
@@ -43,12 +44,24 @@ class _SettingsScreenState extends State<SettingsScreen> {
             backgroundColor: Colors.transparent,
             elevation: 0,
             leading: IconButton(
-              icon: const Icon(Icons.arrow_back),
-              onPressed: () => Navigator.pop(context),
+              icon: Icon(Icons.arrow_back, color: palette.textSecondary),
+              onPressed: () {
+                if (widget.onBack != null) {
+                  widget.onBack!();
+                } else {
+                  Navigator.pop(context);
+                }
+              },
             ),
             actions: [
               TextButton(
-                onPressed: () => Navigator.pop(context),
+                onPressed: () {
+                  if (widget.onBack != null) {
+                    widget.onBack!();
+                  } else {
+                    Navigator.pop(context);
+                  }
+                },
                 child: Text(
                   'Done',
                   style: TextStyle(

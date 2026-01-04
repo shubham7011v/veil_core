@@ -67,10 +67,23 @@ func createTables() error {
 		winner_id TEXT
 	);`
 
+	// Friends Table
+	queryFriends := `
+	CREATE TABLE IF NOT EXISTS friends (
+		user_id TEXT,
+		friend_id TEXT,
+		status TEXT, --- 'pending', 'accepted'
+		created_at TIMESTAMP,
+		PRIMARY KEY (user_id, friend_id)
+	);`
+
 	if _, err := DB.Exec(queryUsers); err != nil {
 		return err
 	}
 	if _, err := DB.Exec(queryMatches); err != nil {
+		return err
+	}
+	if _, err := DB.Exec(queryFriends); err != nil {
 		return err
 	}
 
@@ -153,6 +166,115 @@ func RecordGameResult(matchID string, playerIDs []string, winnerID string, durat
 	}
 
 	return tx.Commit()
+}
+
+// GetLeaderboard fetches top 50 players by wins
+func GetLeaderboard() ([]UserStats, error) {
+	query := `
+		SELECT user_id, name, games_played, wins, losses 
+		FROM users 
+		ORDER BY wins DESC 
+		LIMIT 50`
+
+	rows, err := DB.Query(query)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var leaderboard []UserStats
+	for rows.Next() {
+		var u UserStats
+		if err := rows.Scan(&u.UserID, &u.Name, &u.GamesPlayed, &u.Wins, &u.Losses); err != nil {
+			return nil, err
+		}
+		u.Rank = CalculateRank(u.Wins)
+		leaderboard = append(leaderboard, u)
+	}
+
+	return leaderboard, nil
+}
+
+// -- Social / Friends --
+
+type FriendRecord struct {
+	UserID   string    `json:"userId"`
+	FriendID string    `json:"friendId"`
+	Status   string    `json:"status"`
+	Name     string    `json:"name"`
+	Rank     string    `json:"rank"`
+	LastSeen time.Time `json:"lastSeen"`
+	IsOnline bool      `json:"isOnline"`
+}
+
+// AddFriend creates a pending friend request
+func AddFriend(userID, friendID string) error {
+	_, err := DB.Exec(`
+		INSERT INTO friends (user_id, friend_id, status, created_at)
+		VALUES (?, ?, 'pending', ?)
+		ON CONFLICT DO NOTHING`,
+		userID, friendID, time.Now())
+	return err
+}
+
+// AcceptFriend accepts a pending friend request (bidirectional)
+func AcceptFriend(userID, friendID string) error {
+	tx, err := DB.Begin()
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+
+	// Update the request
+	_, err = tx.Exec("UPDATE friends SET status = 'accepted' WHERE user_id = ? AND friend_id = ?", friendID, userID)
+	if err != nil {
+		return err
+	}
+
+	// Create the reciprocal link
+	_, err = tx.Exec(`
+		INSERT INTO friends (user_id, friend_id, status, created_at)
+		VALUES (?, ?, 'accepted', ?)
+		ON CONFLICT(user_id, friend_id) DO UPDATE SET status = 'accepted'`,
+		userID, friendID, time.Now())
+	if err != nil {
+		return err
+	}
+
+	return tx.Commit()
+}
+
+// GetFriends returns the list of friends for a user
+func GetFriends(userID string) ([]FriendRecord, error) {
+	query := `
+		SELECT f.friend_id, f.status, u.name, u.wins, u.last_seen
+		FROM friends f
+		JOIN users u ON f.friend_id = u.user_id
+		WHERE f.user_id = ?`
+
+	rows, err := DB.Query(query, userID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var friends []FriendRecord
+	for rows.Next() {
+		var f FriendRecord
+		var wins int
+		var ls time.Time
+		if err := rows.Scan(&f.FriendID, &f.Status, &f.Name, &wins, &ls); err != nil {
+			return nil, err
+		}
+		f.UserID = userID
+		f.Rank = CalculateRank(wins)
+		f.LastSeen = ls
+		// Online if last seen in last 5 minutes
+		f.IsOnline = time.Since(ls) < 5*time.Minute
+		friends = append(friends, f)
+	}
+
+	return friends, nil
 }
 
 func CalculateRank(wins int) string {
