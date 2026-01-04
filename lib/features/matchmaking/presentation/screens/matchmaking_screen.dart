@@ -71,11 +71,16 @@ class _MatchmakingScreenState extends State<MatchmakingScreen>
         context.read<SessionBloc>().add(SessionHandlerSwapped(handler));
 
         handler.sessionStateStream.listen((state) {
+          if (mounted) {
+            setState(() {
+              _playersFound = state.participants.length;
+            });
+          }
+
           if (state.currentPhase == SessionPhase.thinking && !_isMatchFound) {
             if (mounted) {
               setState(() {
                 _isMatchFound = true;
-                _playersFound = state.participants.length;
               });
               _onMatchFound();
             }

@@ -9,10 +9,10 @@ import (
 )
 
 const (
-	writeWait = 10 * time.Second
-	pongWait = 60 * time.Second
-	pingPeriod = (pongWait * 9) / 10
-	maxMessageSize = 512
+	writeWait      = 10 * time.Second
+	pongWait       = 60 * time.Second
+	pingPeriod     = (pongWait * 9) / 10
+	maxMessageSize = 8192
 )
 
 var upgrader = websocket.Upgrader{
@@ -21,11 +21,11 @@ var upgrader = websocket.Upgrader{
 
 // Client represents a connected websocket user
 type Client struct {
-	Hub      *Manager // Reference to the global manager (or specific room later)
-	Conn     *websocket.Conn
-	Send     chan []byte
-	ID       string // PlayerID (after auth)
-	CurrentRoom *Room // Pointer to room they are in, if any
+	Hub         *Manager // Reference to the global manager (or specific room later)
+	Conn        *websocket.Conn
+	Send        chan []byte
+	ID          string // PlayerID (after auth)
+	CurrentRoom *Room  // Pointer to room they are in, if any
 }
 
 // readPump pumps messages from the websocket connection to the hub.
@@ -37,21 +37,19 @@ func (c *Client) ReadPump() {
 	c.Conn.SetReadLimit(maxMessageSize)
 	c.Conn.SetReadDeadline(time.Now().Add(pongWait))
 	c.Conn.SetPongHandler(func(string) error { c.Conn.SetReadDeadline(time.Now().Add(pongWait)); return nil })
-	
+
 	for {
 		_, message, err := c.Conn.ReadMessage()
 		if err != nil {
-			if websocket.IsUnexpectedCloseError(err, websocket.CloseGoingAway, websocket.CloseAbnormalClosure) {
-				log.Printf("error: %v", err)
-			}
+			log.Printf("Read error for Client %s: %v", c.ID, err)
 			break
 		}
-		
+
 		// Handle message via the Manager
 		// (We wrap it in a struct or just pass bytes? Let's decode partially here or pass to Hub)
-		// For now, pass to Hub for "Global" messages (like Join/Auth), 
+		// For now, pass to Hub for "Global" messages (like Join/Auth),
 		// or pass to Room if CurrentRoom is set.
-		
+
 		// NOTE: In a real app we might decode here to route better.
 		// For now simple router:
 		c.Hub.HandleMessage(c, message)

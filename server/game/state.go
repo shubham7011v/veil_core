@@ -16,21 +16,21 @@ type LastMove struct {
 type Game struct {
 	Phase Phase `json:"phase"`
 
-	Players    []*Player `json:"-"` // Internal use
-	PlayerMap  map[string]*Player `json:"-"`
-	
+	Players   []*Player          `json:"-"` // Internal use
+	PlayerMap map[string]*Player `json:"-"`
+
 	// Public View for Clients
 	Participants []PublicParticipant `json:"participants"`
 
 	TurnOrder []string `json:"turnOrder"`
 	ActiveIdx int      `json:"activeIdx"`
 
-	Pile       []Card    `json:"-"` // Server-only
-	PileCount  int       `json:"pileCount"`
-	
-	LastMove     *LastMove `json:"-"` // Server-only (contains truth)
+	Pile      []Card `json:"-"` // Server-only
+	PileCount int    `json:"pileCount"`
+
+	LastMove     *LastMove `json:"-"`            // Server-only (contains truth)
 	DeclaredRank *Rank     `json:"declaredRank"` // Current round rank (visible)
-	
+
 	WinnerID string `json:"winnerId,omitempty"`
 }
 
@@ -66,7 +66,24 @@ func (g *Game) AddPlayer(id, name string) error {
 	p := NewPlayer(id, name)
 	g.Players = append(g.Players, p)
 	g.PlayerMap[id] = p
+	g.SyncParticipants()
 	return nil
+}
+
+func (g *Game) RemovePlayer(id string) {
+	if _, exists := g.PlayerMap[id]; !exists {
+		return
+	}
+	delete(g.PlayerMap, id)
+
+	newPlayers := make([]*Player, 0)
+	for _, p := range g.Players {
+		if p.ID != id {
+			newPlayers = append(newPlayers, p)
+		}
+	}
+	g.Players = newPlayers
+	g.SyncParticipants()
 }
 
 func (g *Game) Start() error {
@@ -86,7 +103,7 @@ func (g *Game) Start() error {
 	// 2. Deal Cards
 	deck := NewDeck()
 	cardsPerPlayer := len(deck) / len(g.Players)
-	
+
 	// Deal equally
 	cursor := 0
 	for _, p := range g.Players {
@@ -105,7 +122,7 @@ func (g *Game) Start() error {
 
 	g.Phase = PhaseThinking
 	g.SyncParticipants()
-	
+
 	return nil
 }
 
@@ -118,9 +135,9 @@ func (g *Game) SyncParticipants() {
 	}
 
 	// Maintain order based on TurnOrder if game started, else join order
-	// Actually, let's just use g.Players list order for display, 
+	// Actually, let's just use g.Players list order for display,
 	// but mark IsActive based on ID match.
-	
+
 	for i, p := range g.Players {
 		g.Participants[i] = PublicParticipant{
 			ID:        p.ID,

@@ -21,14 +21,18 @@ flowchart LR
     FA -->|ID Token| WSH
     WSH <-->|WebSocket| WS
     WS --> TV -->|Verify| FA
-    WS --> RM --> GE
-```
+    WS --># Veil: Full App Production Roadmap
 
-| Component | Technology | Responsibility |
-|:----------|:-----------|:---------------|
-| Auth | Firebase Auth | Google Sign-In, token generation |
-| Gameplay | Go WebSocket | Rooms, turns, validation, anti-cheat |
-| Hosting | Vultr Mumbai | Single VPS (~₹500/mo) |
+A comprehensive plan to build, test, and launch the complete Veil (Bluff) experience, including Social, Progression, and Scalable Multiplayer.
+
+---
+
+## The "Full App" Vision
+The goal is to move beyond a simple card game engine into a complete social ecosystem. The "Full App" being tested locally will include:
+- **Social**: Friends list, online status, private invites.
+- **Progression**: Levels, XP, Ranks, and detailed Player Statistics.
+- **Ecosphere**: Global leaderboards and a cosmetics shop.
+- **Multiplayer**: Robust, server-authoritative WebSocket engine.
 
 ---
 

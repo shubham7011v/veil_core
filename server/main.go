@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"os"
 
+	"veil_server/db"
 	"veil_server/room"
 )
 
@@ -12,6 +13,14 @@ func main() {
 	port := os.Getenv("PORT")
 	if port == "" {
 		port = "8080"
+	}
+
+	// Initialize Database
+	if err := db.InitDB("/app/data/veil.db"); err != nil {
+		// Fallback for local dev if /app/data doesn't exist
+		if err := db.InitDB("./veil.db"); err != nil {
+			log.Fatal("Failed to init DB:", err)
+		}
 	}
 
 	// Initialize the Room Manager
