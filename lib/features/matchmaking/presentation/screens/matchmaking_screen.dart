@@ -22,9 +22,10 @@ class _MatchmakingScreenState extends State<MatchmakingScreen>
   int _playersFound = 1;
   bool _isMatchFound = false;
   bool _isConnecting = false;
+  WebSocketSessionHandler? _handler;
 
   final TextEditingController _urlController = TextEditingController(
-    text: 'ws://localhost:8080/ws',
+    text: 'wss://rebelliously-unforgone-mandie.ngrok-free.dev/ws',
   );
   bool _showDebugInput = false;
 
@@ -58,6 +59,8 @@ class _MatchmakingScreenState extends State<MatchmakingScreen>
 
       // Use controller text
       await handler.connect(_urlController.text, token!);
+
+      _handler = handler; // Store handler for manual start
 
       // 3. Update SessionBloc
       if (mounted) {
@@ -121,6 +124,10 @@ class _MatchmakingScreenState extends State<MatchmakingScreen>
                 _buildAnimatedCards(),
                 const Spacer(),
                 _buildStatusInfo(),
+                if (_playersFound >= 2 && !_isMatchFound) ...[
+                  const SizedBox(height: 24),
+                  _buildStartNowButton(),
+                ],
                 const SizedBox(height: 48),
                 _buildCancelButton(),
                 const SizedBox(height: 32),
@@ -303,6 +310,37 @@ class _MatchmakingScreenState extends State<MatchmakingScreen>
           color: Colors.white54,
           fontSize: 14,
           decoration: TextDecoration.underline,
+        ),
+      ),
+    );
+  }
+
+  Widget _buildStartNowButton() {
+    return InkWell(
+      onTap: () {
+        _handler?.startGame();
+      },
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 40, vertical: 16),
+        decoration: BoxDecoration(
+          color: const Color(0xFFE5A043),
+          borderRadius: BorderRadius.circular(30),
+          boxShadow: [
+            BoxShadow(
+              color: const Color(0xFFE5A043).withValues(alpha: 0.3),
+              blurRadius: 20,
+              offset: const Offset(0, 4),
+            ),
+          ],
+        ),
+        child: Text(
+          'START MATCH',
+          style: GoogleFonts.cinzel(
+            color: Colors.black,
+            fontSize: 16,
+            fontWeight: FontWeight.bold,
+            letterSpacing: 1.5,
+          ),
         ),
       ),
     );

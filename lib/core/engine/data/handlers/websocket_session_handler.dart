@@ -184,8 +184,7 @@ class WebSocketSessionHandler implements GameSessionHandler {
 
   @override
   Future<void> startGame({int playerCount = 5, int thinkingTimeS = 10}) async {
-    // Not applicable for online - server controls game start
-    debugPrint('startGame called but server controls game lifecycle');
+    _send({'type': 'START_GAME'});
   }
 
   @override

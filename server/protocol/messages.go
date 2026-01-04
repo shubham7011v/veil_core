@@ -9,6 +9,7 @@ const (
 	MsgTypePlayCards  = "PLAY_CARDS"
 	MsgTypePass       = "PASS"
 	MsgTypeChallenge  = "CHALLENGE"
+	MsgTypeStartGame  = "START_GAME"
 
 	// Server -> Client
 	MsgTypeAuthOk         = "AUTH_OK"
