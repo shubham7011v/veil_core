@@ -7,7 +7,6 @@ import '../../../social/social.dart';
 import '../../../collection/collection.dart';
 import '../../../settings/settings.dart';
 import '../widgets/royal_name_modal.dart';
-import '../widgets/profile_bottom_sheet.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -66,82 +65,169 @@ class _HomeScreenState extends State<HomeScreen> {
 
         final user = (state is ProfileLoaded) ? state.user : null;
 
-        return Column(
-          children: [
-            _buildTopBar(context, user),
-            Expanded(
-              child: SingleChildScrollView(
-                padding: const EdgeInsets.symmetric(horizontal: 24),
-                child: Column(
-                  children: [
-                    const SizedBox(height: 40),
-                    _buildPlayOnlineCTA(context),
-                    const SizedBox(height: 24),
-                    _buildPrivateRoomButton(context),
-                    const SizedBox(height: 48),
-                    Row(
+        return BlocBuilder<AuthBloc, AuthState>(
+          builder: (context, authState) {
+            final stats = (authState is Authenticated) ? authState.stats : null;
+
+            return Column(
+              children: [
+                _buildTopBar(context, user, authState),
+                Expanded(
+                  child: SingleChildScrollView(
+                    padding: const EdgeInsets.symmetric(horizontal: 24),
+                    child: Column(
                       children: [
-                        Expanded(
-                          child: _buildMatchCard(
-                            context,
-                            'FRIENDS\nMATCH',
-                            Icons.people_outline,
-                            () {},
-                          ),
+                        const SizedBox(height: 24),
+                        // Stats Grid (Embedded from Profile)
+                        Row(
+                          children: [
+                            Expanded(
+                              child: _buildStatItem(
+                                'Wins',
+                                '${stats?.wins ?? 0}',
+                                const Color(0xFF4CAF50),
+                              ),
+                            ),
+                            const SizedBox(width: 16),
+                            Expanded(
+                              child: _buildStatItem(
+                                'Losses',
+                                '${stats?.losses ?? 0}',
+                                const Color(0xFFE57373),
+                              ),
+                            ),
+                          ],
                         ),
-                        const SizedBox(width: 16),
-                        Expanded(
-                          child: _buildMatchCard(
-                            context,
-                            'BOT\nMATCH',
-                            Icons.smart_toy_outlined,
-                            () => Navigator.pushNamed(context, '/bot_settings'),
-                          ),
+                        const SizedBox(height: 16),
+                        Row(
+                          children: [
+                            Expanded(
+                              child: _buildStatItem(
+                                'Total Games',
+                                '${stats?.gamesPlayed ?? 0}',
+                                Colors.blueAccent,
+                              ),
+                            ),
+                            const SizedBox(width: 16),
+                            Expanded(
+                              child: _buildStatItem(
+                                'Win Rate',
+                                '${stats?.winRate.toStringAsFixed(1) ?? '0.0'}%',
+                                const Color(0xFFE5A043),
+                              ),
+                            ),
+                          ],
                         ),
+
+                        const SizedBox(height: 40),
+                        _buildPlayOnlineCTA(context),
+                        const SizedBox(height: 24),
+                        _buildPrivateRoomButton(context),
+                        const SizedBox(height: 48),
+                        Row(
+                          children: [
+                            Expanded(
+                              child: _buildMatchCard(
+                                context,
+                                'FRIENDS\nMATCH',
+                                Icons.people_outline,
+                                () {},
+                              ),
+                            ),
+                            const SizedBox(width: 16),
+                            Expanded(
+                              child: _buildMatchCard(
+                                context,
+                                'BOT\nMATCH',
+                                Icons.smart_toy_outlined,
+                                () => Navigator.pushNamed(
+                                  context,
+                                  '/bot_settings',
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 32),
+                        _buildDailyChallenge(),
+                        const SizedBox(height: 32),
                       ],
                     ),
-                    const SizedBox(height: 32),
-                    _buildDailyChallenge(),
-                  ],
+                  ),
                 ),
-              ),
-            ),
-          ],
+              ],
+            );
+          },
         );
       },
     );
   }
 
-  Widget _buildTopBar(BuildContext context, dynamic user) {
+  Widget _buildTopBar(BuildContext context, dynamic user, AuthState authState) {
+    String? photoUrl;
+    String displayName = 'Mysterious Player';
+    String rank = 'Novice';
+
+    if (authState is Authenticated) {
+      photoUrl = authState.user.photoURL;
+      displayName = authState.user.displayName ?? displayName;
+      rank = authState.stats?.rank ?? rank;
+    } else if (user != null) {
+      rank = user.rank;
+    }
+
+    String greeting = _getGreeting();
+
     return Container(
       padding: const EdgeInsets.all(24),
       child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Text(
-                'BLUFF',
-                style: GoogleFonts.cinzel(
-                  color: const Color(0xFFE5A043),
-                  fontSize: 24,
-                  fontWeight: FontWeight.bold,
-                  letterSpacing: 2,
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      greeting.toUpperCase(),
+                      style: GoogleFonts.inter(
+                        color: Colors.white38,
+                        fontSize: 14,
+                        fontWeight: FontWeight.w600,
+                        letterSpacing: 1.5,
+                      ),
+                    ),
+                    Text(
+                      displayName,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: GoogleFonts.cinzel(
+                        color: const Color(0xFFE5A043),
+                        fontSize: 24,
+                        fontWeight: FontWeight.bold,
+                        letterSpacing: 1,
+                      ),
+                    ),
+                  ],
                 ),
               ),
-              IconButton(
-                icon: const Icon(
-                  Icons.account_circle_outlined,
-                  color: Colors.white70,
-                ),
-                onPressed: () {
-                  showModalBottomSheet(
-                    context: context,
-                    backgroundColor: Colors.transparent,
-                    isScrollControlled: true,
-                    builder: (context) => const ProfileBottomSheet(),
-                  );
-                },
+              const SizedBox(width: 16),
+              // Non-tappable profile pic
+              CircleAvatar(
+                radius: 20,
+                backgroundColor: const Color(0xFFE5A043).withValues(alpha: 0.1),
+                backgroundImage: photoUrl != null
+                    ? NetworkImage(photoUrl)
+                    : null,
+                child: photoUrl == null
+                    ? const Icon(
+                        Icons.person,
+                        size: 20,
+                        color: Color(0xFFE5A043),
+                      )
+                    : null,
               ),
             ],
           ),
@@ -149,18 +235,7 @@ class _HomeScreenState extends State<HomeScreen> {
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              BlocBuilder<AuthBloc, AuthState>(
-                builder: (context, authState) {
-                  String rank = 'Novice';
-                  if (authState is Authenticated && authState.stats != null) {
-                    rank = authState.stats!.rank;
-                  } else if (user != null) {
-                    rank = user.rank;
-                  }
-
-                  return _buildInfoChip('Rank', rank, const Color(0xFFE5A043));
-                },
-              ),
+              _buildInfoChip('Rank', rank, const Color(0xFFE5A043)),
               _buildInfoChip(
                 'Coins',
                 '${user?.coins ?? 1000}',
@@ -195,6 +270,40 @@ class _HomeScreenState extends State<HomeScreen> {
           ),
         ),
       ],
+    );
+  }
+
+  Widget _buildStatItem(String label, String value, Color color) {
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: Colors.white.withValues(alpha: 0.03),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: Colors.white.withValues(alpha: 0.05)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            label.toUpperCase(),
+            style: GoogleFonts.inter(
+              color: Colors.white38,
+              fontSize: 9,
+              fontWeight: FontWeight.bold,
+              letterSpacing: 0.5,
+            ),
+          ),
+          const SizedBox(height: 6),
+          Text(
+            value,
+            style: GoogleFonts.cinzel(
+              color: color,
+              fontSize: 18,
+              fontWeight: FontWeight.bold,
+            ),
+          ),
+        ],
+      ),
     );
   }
 
@@ -352,6 +461,13 @@ class _HomeScreenState extends State<HomeScreen> {
         BottomNavigationBarItem(icon: Icon(Icons.settings_outlined), label: ''),
       ],
     );
+  }
+
+  String _getGreeting() {
+    final hour = DateTime.now().hour;
+    if (hour < 12) return 'Good Morning';
+    if (hour < 17) return 'Good Afternoon';
+    return 'Good Evening';
   }
 
   void _showRoyalNameModal(BuildContext context) {
