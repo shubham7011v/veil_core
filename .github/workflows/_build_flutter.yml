@@ -39,7 +39,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      
+
       - name: Setup environment
         uses: ./.github/actions/setup-flutter
 
@@ -52,7 +52,7 @@ jobs:
           key: ${{ runner.os }}-gradle-${{ hashFiles('**/*.gradle*', '**/gradle-wrapper.properties') }}
           restore-keys: |
             ${{ runner.os }}-gradle-
-        
+
       - name: Setup Keystore
         run: |
           echo "${{ secrets.keystore_base64 }}" | base64 --decode > android/app/upload-keystore.jks
@@ -60,7 +60,7 @@ jobs:
           echo "storePassword=${{ secrets.keystore_password }}" >> android/key.properties
           echo "keyPassword=${{ secrets.key_password }}" >> android/key.properties
           echo "keyAlias=${{ secrets.key_alias }}" >> android/key.properties
-          
+
       - name: Build App
         run: |
           flutter build ${{ inputs.build_type }} \
@@ -69,7 +69,7 @@ jobs:
             --build-name=${{ inputs.version_name }} \
             --build-number=${{ inputs.build_number }} \
             --release
-            
+
       - name: Upload Artifact
         uses: actions/upload-artifact@v4
         with:

@@ -50,15 +50,19 @@ class _MatchmakingScreenState extends State<MatchmakingScreen>
     try {
       // 1. Get fresh Firebase token
       final user = FirebaseAuth.instance.currentUser;
-      if (user == null) throw Exception('User not authenticated');
-      final token = await user.getIdToken();
+      // If bypassed login, use a mock token
+      final token = user != null
+          ? await user.getIdToken()
+          : 'mock_token_${DateTime.now().millisecondsSinceEpoch}';
+
+      if (token == null) throw Exception('Failed to get token');
 
       // 2. Connect
       final handler =
           di.sl.createSessionHandler(online: true) as WebSocketSessionHandler;
 
       // Use controller text
-      await handler.connect(_urlController.text, token!);
+      await handler.connect(_urlController.text, token);
 
       _handler = handler; // Store handler for manual start
 

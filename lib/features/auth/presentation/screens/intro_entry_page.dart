@@ -71,14 +71,22 @@ class _IntroEntryPageState extends State<IntroEntryPage>
               child: Column(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  Text(
-                    'Play with real players.',
-                    textAlign: TextAlign.center,
-                    style: GoogleFonts.cinzel(
-                      color: const Color(0xFFE5A043),
-                      fontSize: 28,
-                      fontWeight: FontWeight.w500,
-                      height: 1.4,
+                  GestureDetector(
+                    onLongPress: () {
+                      // Bypass to home for testing
+                      Navigator.of(
+                        context,
+                      ).pushReplacementNamed('/court_entry');
+                    },
+                    child: Text(
+                      'Play with real players.',
+                      textAlign: TextAlign.center,
+                      style: GoogleFonts.cinzel(
+                        color: const Color(0xFFE5A043),
+                        fontSize: 28,
+                        fontWeight: FontWeight.w500,
+                        height: 1.4,
+                      ),
                     ),
                   ),
                   const SizedBox(height: 16),

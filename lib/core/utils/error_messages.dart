@@ -1,4 +1,5 @@
 import 'package:firebase_core/firebase_core.dart';
+import 'package:flutter/foundation.dart';
 
 class ErrorMessages {
   static String getFromException(dynamic e) {
@@ -15,11 +16,7 @@ class ErrorMessages {
       }
     }
 
-    final message = e.toString().toLowerCase();
-    if (message.contains('network')) {
-      return 'The connection to the Court is weak. Check your internet.';
-    }
-
-    return 'The Royal Court is currently busy. Please try again later.';
+    final detail = kDebugMode ? ': $e' : '';
+    return 'The Royal Court is currently busy. Please try again later.$detail';
   }
 }
