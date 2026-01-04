@@ -1,10 +1,14 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
 import '../../../../core/theme/colors.dart';
+import '../../../../core/theme/bloc/theme_bloc.dart';
+import '../../../../core/theme/bloc/theme_state.dart';
 import '../../../../core/constants/dimens.dart';
 import '../../../../shared/components/primary_button.dart';
 
 class DeckCollectionScreen extends StatefulWidget {
-  const DeckCollectionScreen({super.key});
+  final VoidCallback? onBack;
+  const DeckCollectionScreen({super.key, this.onBack});
 
   @override
   State<DeckCollectionScreen> createState() => _DeckCollectionScreenState();
@@ -15,116 +19,135 @@ class _DeckCollectionScreenState extends State<DeckCollectionScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: AppColors.background,
-      appBar: AppBar(
-        title: const Text(
-          'Royal Deck Collection',
-          style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
-        ),
-        centerTitle: true,
-        backgroundColor: Colors.transparent,
-        elevation: 0,
-        leading: IconButton(
-          icon: const Icon(Icons.arrow_back),
-          onPressed: () => Navigator.pop(context),
-        ),
-        actions: [
-          IconButton(icon: const Icon(Icons.help_outline), onPressed: () {}),
-        ],
-      ),
-      body: SafeArea(
-        child: Column(
-          children: [
-            // Header / Reward Info
-            Padding(
-              padding: const EdgeInsets.all(AppDimens.paddingM),
-              child: Column(
-                children: [
-                  const Text(
-                    'SEASON 4 REWARDS',
-                    style: TextStyle(
-                      color: AppColors.primary,
-                      fontSize: 10,
-                      letterSpacing: 1.5,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                  const SizedBox(height: 4),
-                  const Text(
-                    'Unified Bluff Series',
-                    style: TextStyle(
-                      color: AppColors.textPrimary,
-                      fontSize: 24,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                  const SizedBox(height: 8),
-                  const Text(
-                    'Semi-realistic Indian royalty theme with premium finishes.',
-                    textAlign: TextAlign.center,
-                    style: TextStyle(
-                      color: AppColors.textSecondary,
-                      fontSize: 12,
-                    ),
-                  ),
-                ],
+    return BlocBuilder<ThemeBloc, ThemeState>(
+      builder: (context, themeState) {
+        final palette = AppColors.getPalette(themeState.mode);
+
+        return Scaffold(
+          backgroundColor: palette.background,
+          appBar: AppBar(
+            title: Text(
+              'Royal Deck Collection',
+              style: TextStyle(
+                fontWeight: FontWeight.bold,
+                fontSize: 16,
+                color: palette.textPrimary,
               ),
             ),
-
-            // Tabs
-            Container(
-              margin: const EdgeInsets.symmetric(
-                horizontal: AppDimens.paddingM,
-              ),
-              padding: const EdgeInsets.all(4),
-              decoration: BoxDecoration(
-                color: AppColors.surface,
-                borderRadius: BorderRadius.circular(AppDimens.radiusM),
-                border: Border.all(color: AppColors.divider),
-              ),
-              child: Row(
-                children: [
-                  Expanded(child: _buildTab('Face Cards', 0)),
-                  Expanded(child: _buildTab('Number', 1)),
-                  Expanded(child: _buildTab('Backs', 2)),
-                ],
-              ),
+            centerTitle: true,
+            backgroundColor: Colors.transparent,
+            elevation: 0,
+            leading: IconButton(
+              icon: Icon(Icons.arrow_back, color: palette.textSecondary),
+              onPressed: () {
+                if (widget.onBack != null) {
+                  widget.onBack!();
+                } else {
+                  Navigator.pop(context);
+                }
+              },
             ),
-
-            const SizedBox(height: AppDimens.paddingL),
-
-            // Grid
-            Expanded(
-              child: _selectedTabIndex == 2
-                  ? _buildBacksGrid()
-                  : _buildFacesGrid(),
-            ),
-
-            const SizedBox(height: AppDimens.paddingM),
-
-            // Bottom Action
-            Padding(
-              padding: const EdgeInsets.all(AppDimens.paddingM),
-              child: SizedBox(
-                width: double.infinity,
-                child: PrimaryButton(
-                  label: 'Equip This Deck',
-                  icon: Icons.style,
-                  type: ButtonType.danger, // Using red button as per mock
-                  onPressed: () {
-                    // Equip logic
-                  },
+            actions: [
+              IconButton(
+                icon: Icon(Icons.help_outline, color: palette.textSecondary),
+                onPressed: () {},
+              ),
+            ],
+          ),
+          body: SafeArea(
+            child: Column(
+              children: [
+                // Header / Reward Info
+                Padding(
+                  padding: const EdgeInsets.all(AppDimens.paddingM),
+                  child: Column(
+                    children: [
+                      Text(
+                        'SEASON 4 REWARDS',
+                        style: TextStyle(
+                          color: palette.primary,
+                          fontSize: 10,
+                          letterSpacing: 1.5,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        'Unified Bluff Series',
+                        style: TextStyle(
+                          color: palette.textPrimary,
+                          fontSize: 24,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      Text(
+                        'Semi-realistic Indian royalty theme with premium finishes.',
+                        textAlign: TextAlign.center,
+                        style: TextStyle(
+                          color: palette.textSecondary,
+                          fontSize: 12,
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
-              ),
+
+                // Tabs
+                Container(
+                  margin: const EdgeInsets.symmetric(
+                    horizontal: AppDimens.paddingM,
+                  ),
+                  padding: const EdgeInsets.all(4),
+                  decoration: BoxDecoration(
+                    color: palette.surface,
+                    borderRadius: BorderRadius.circular(AppDimens.radiusM),
+                    border: Border.all(color: palette.divider),
+                  ),
+                  child: Row(
+                    children: [
+                      Expanded(child: _buildTab('Face Cards', 0, palette)),
+                      Expanded(child: _buildTab('Number', 1, palette)),
+                      Expanded(child: _buildTab('Backs', 2, palette)),
+                    ],
+                  ),
+                ),
+
+                const SizedBox(height: AppDimens.paddingL),
+
+                // Grid
+                Expanded(
+                  child: _selectedTabIndex == 2
+                      ? _buildBacksGrid(palette)
+                      : _buildFacesGrid(palette),
+                ),
+
+                const SizedBox(height: AppDimens.paddingM),
+
+                // Bottom Action
+                Padding(
+                  padding: const EdgeInsets.all(AppDimens.paddingM),
+                  child: SizedBox(
+                    width: double.infinity,
+                    child: PrimaryButton(
+                      label: 'Equip This Deck',
+                      icon: Icons.style,
+                      type: ButtonType.danger, // Using red button as per mock
+                      onPressed: () {
+                        // Equip logic
+                      },
+                    ),
+                  ),
+                ),
+              ],
             ),
-          ],
-        ),
-      ),
+          ),
+        );
+      },
     );
   }
 
-  Widget _buildTab(String label, int index) {
+  Widget _buildTab(String label, int index, AppColorPalette palette) {
     final isSelected = _selectedTabIndex == index;
     return GestureDetector(
       onTap: () => setState(() => _selectedTabIndex = index),
@@ -132,7 +155,7 @@ class _DeckCollectionScreenState extends State<DeckCollectionScreen> {
         padding: const EdgeInsets.symmetric(vertical: 8),
         decoration: BoxDecoration(
           color: isSelected
-              ? AppColors.danger
+              ? palette.danger
               : Colors.transparent, // Red for active tab
           borderRadius: BorderRadius.circular(AppDimens.radiusS),
         ),
@@ -140,7 +163,7 @@ class _DeckCollectionScreenState extends State<DeckCollectionScreen> {
         child: Text(
           label,
           style: TextStyle(
-            color: isSelected ? Colors.white : AppColors.textSecondary,
+            color: isSelected ? Colors.white : palette.textSecondary,
             fontWeight: FontWeight.bold,
             fontSize: 12,
           ),
@@ -149,7 +172,7 @@ class _DeckCollectionScreenState extends State<DeckCollectionScreen> {
     );
   }
 
-  Widget _buildFacesGrid() {
+  Widget _buildFacesGrid(AppColorPalette palette) {
     // Mock 4 card showcase
     return GridView.count(
       crossAxisCount: 2,
@@ -163,38 +186,42 @@ class _DeckCollectionScreenState extends State<DeckCollectionScreen> {
           'hearts',
           'assets/king.png',
           true,
+          palette,
         ), // King of Hearts
         _buildCardPreview(
           'A',
           'spades',
           'assets/ace.png',
           false,
+          palette,
         ), // Ace of Spades
         _buildCardPreview(
           'Q',
           'diamonds',
           'assets/queen.png',
           true,
+          palette,
         ), // Queen of Diamonds
         _buildCardPreview(
           '10',
           'clubs',
           'assets/ten.png',
           false,
+          palette,
         ), // 10 of Clubs
       ],
     );
   }
 
-  Widget _buildBacksGrid() {
+  Widget _buildBacksGrid(AppColorPalette palette) {
     return ListView(
       padding: const EdgeInsets.symmetric(horizontal: AppDimens.paddingM),
       children: [
-        const Center(
+        Center(
           child: Text(
             'AVAILABLE BACKS',
             style: TextStyle(
-              color: AppColors.primary,
+              color: palette.primary,
               fontSize: 10,
               letterSpacing: 1.5,
               fontWeight: FontWeight.bold,
@@ -208,11 +235,21 @@ class _DeckCollectionScreenState extends State<DeckCollectionScreen> {
           child: Row(
             children: [
               Expanded(
-                child: _buildBackCard('Royal Mandala', 'Standard', false),
+                child: _buildBackCard(
+                  'Royal Mandala',
+                  'Standard',
+                  false,
+                  palette,
+                ),
               ),
               const SizedBox(width: 16),
               Expanded(
-                child: _buildBackCard('Midnight Velvet', 'Premium', true),
+                child: _buildBackCard(
+                  'Midnight Velvet',
+                  'Premium',
+                  true,
+                  palette,
+                ),
               ),
             ],
           ),
@@ -226,10 +263,11 @@ class _DeckCollectionScreenState extends State<DeckCollectionScreen> {
     String suit,
     String assetPath,
     bool isRed,
+    AppColorPalette palette,
   ) {
     return Container(
       decoration: BoxDecoration(
-        color: const Color(0xFFF5E6CC), // Vintage paper color
+        color: const Color(0xFFF5E6CC), // Vintage paper color - Keep constant
         borderRadius: BorderRadius.circular(AppDimens.radiusM),
       ),
       child: Stack(
@@ -240,7 +278,7 @@ class _DeckCollectionScreenState extends State<DeckCollectionScreen> {
             child: Text(
               rank,
               style: TextStyle(
-                color: isRed ? AppColors.danger : Colors.black,
+                color: isRed ? palette.danger : Colors.black,
                 fontWeight: FontWeight.bold,
                 fontSize: 24,
               ),
@@ -252,7 +290,7 @@ class _DeckCollectionScreenState extends State<DeckCollectionScreen> {
             child: Icon(
               // Icons are placeholders for suits
               isRed ? Icons.favorite : Icons.eco,
-              color: isRed ? AppColors.danger : Colors.black,
+              color: isRed ? palette.danger : Colors.black,
               size: 16,
             ),
           ),
@@ -264,7 +302,7 @@ class _DeckCollectionScreenState extends State<DeckCollectionScreen> {
               child: Text(
                 rank,
                 style: TextStyle(
-                  color: isRed ? AppColors.danger : Colors.black,
+                  color: isRed ? palette.danger : Colors.black,
                   fontWeight: FontWeight.bold,
                   fontSize: 24,
                 ),
@@ -283,18 +321,23 @@ class _DeckCollectionScreenState extends State<DeckCollectionScreen> {
     );
   }
 
-  Widget _buildBackCard(String name, String tier, bool isEquipped) {
+  Widget _buildBackCard(
+    String name,
+    String tier,
+    bool isEquipped,
+    AppColorPalette palette,
+  ) {
     return Column(
       children: [
         Expanded(
           child: Container(
             decoration: BoxDecoration(
               color: isEquipped
-                  ? const Color(0xFF1E2A38)
-                  : const Color(0xFF3E1E1E), // Blue/Red abstract
+                  ? palette.surfaceLight
+                  : palette.cardBack, // Use palette
               borderRadius: BorderRadius.circular(AppDimens.radiusM),
               border: isEquipped
-                  ? Border.all(color: AppColors.primary, width: 2)
+                  ? Border.all(color: palette.primary, width: 2)
                   : null,
             ),
             child: isEquipped
@@ -308,9 +351,9 @@ class _DeckCollectionScreenState extends State<DeckCollectionScreen> {
                             horizontal: 6,
                             vertical: 2,
                           ),
-                          decoration: const BoxDecoration(
-                            color: AppColors.danger,
-                            borderRadius: BorderRadius.only(
+                          decoration: BoxDecoration(
+                            color: palette.danger,
+                            borderRadius: const BorderRadius.only(
                               bottomLeft: Radius.circular(8),
                             ),
                           ),
@@ -326,10 +369,10 @@ class _DeckCollectionScreenState extends State<DeckCollectionScreen> {
                       ),
                     ],
                   )
-                : const Center(
+                : Center(
                     child: Icon(
                       Icons.local_fire_department,
-                      color: AppColors.primaryDim,
+                      color: palette.primaryDim,
                     ),
                   ),
           ),
@@ -337,15 +380,15 @@ class _DeckCollectionScreenState extends State<DeckCollectionScreen> {
         const SizedBox(height: 8),
         Text(
           name,
-          style: const TextStyle(
-            color: AppColors.textPrimary,
+          style: TextStyle(
+            color: palette.textPrimary,
             fontWeight: FontWeight.bold,
             fontSize: 12,
           ),
         ),
         Text(
           tier,
-          style: const TextStyle(color: AppColors.textSecondary, fontSize: 10),
+          style: TextStyle(color: palette.textSecondary, fontSize: 10),
         ),
       ],
     );

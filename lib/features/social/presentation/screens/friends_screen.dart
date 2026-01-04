@@ -4,9 +4,13 @@ import 'package:google_fonts/google_fonts.dart';
 import '../../../../core/engine/data/handlers/websocket_session_handler.dart';
 import '../../../session/session.dart';
 import '../../domain/models/friend_record.dart';
+import '../../../../core/theme/colors.dart';
+import '../../../../core/theme/bloc/theme_bloc.dart';
+import '../../../../core/theme/bloc/theme_state.dart';
 
 class FriendsScreen extends StatefulWidget {
-  const FriendsScreen({super.key});
+  final VoidCallback? onBack;
+  const FriendsScreen({super.key, this.onBack});
 
   @override
   State<FriendsScreen> createState() => _FriendsScreenState();
@@ -34,91 +38,106 @@ class _FriendsScreenState extends State<FriendsScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: Colors.black,
-      appBar: AppBar(
-        backgroundColor: Colors.transparent,
-        elevation: 0,
-        title: Text(
-          'THE INNER CIRCLE',
-          style: GoogleFonts.cinzel(
-            color: const Color(0xFFE5A043),
-            fontSize: 20,
-            fontWeight: FontWeight.bold,
-            letterSpacing: 2,
-          ),
-        ),
-        leading: IconButton(
-          icon: const Icon(Icons.arrow_back_ios, color: Colors.white70),
-          onPressed: () => Navigator.pop(context),
-        ),
-      ),
-      body: _handler == null
-          ? const Center(
-              child: Text(
-                'Connect to Multiplayer to manage friends',
-                style: TextStyle(color: Colors.white54),
+    return BlocBuilder<ThemeBloc, ThemeState>(
+      builder: (context, themeState) {
+        final palette = AppColors.getPalette(themeState.mode);
+
+        return Scaffold(
+          backgroundColor: palette.background,
+          appBar: AppBar(
+            backgroundColor: Colors.transparent,
+            elevation: 0,
+            title: Text(
+              'THE INNER CIRCLE',
+              style: GoogleFonts.cinzel(
+                color: palette.primary,
+                fontSize: 20,
+                fontWeight: FontWeight.bold,
+                letterSpacing: 2,
               ),
-            )
-          : Column(
-              children: [
-                _buildAddFriendSection(),
-                const Divider(color: Colors.white10, height: 1),
-                Expanded(
-                  child: StreamBuilder<List<FriendRecord>>(
-                    stream: _handler!.friendsStream,
-                    builder: (context, snapshot) {
-                      if (snapshot.connectionState == ConnectionState.waiting &&
-                          !snapshot.hasData) {
-                        return const Center(
-                          child: CircularProgressIndicator(
-                            color: Color(0xFFE5A043),
-                          ),
-                        );
-                      }
-
-                      final friends = snapshot.data ?? [];
-
-                      if (friends.isEmpty) {
-                        return const Center(
-                          child: Column(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            children: [
-                              Icon(
-                                Icons.people_outline,
-                                color: Colors.white24,
-                                size: 64,
-                              ),
-                              SizedBox(height: 16),
-                              Text(
-                                'Your circle is empty\nAdd friends to see their status',
-                                textAlign: TextAlign.center,
-                                style: TextStyle(color: Colors.white38),
-                              ),
-                            ],
-                          ),
-                        );
-                      }
-
-                      return ListView.builder(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 24,
-                          vertical: 24,
-                        ),
-                        itemCount: friends.length,
-                        itemBuilder: (context, index) {
-                          return _buildFriendTile(friends[index]);
-                        },
-                      );
-                    },
-                  ),
-                ),
-              ],
             ),
+            leading: IconButton(
+              icon: Icon(Icons.arrow_back, color: palette.textSecondary),
+              onPressed: () {
+                if (widget.onBack != null) {
+                  widget.onBack!();
+                } else {
+                  Navigator.pop(context);
+                }
+              },
+            ),
+          ),
+          body: _handler == null
+              ? Center(
+                  child: Text(
+                    'Connect to Multiplayer to manage friends',
+                    style: TextStyle(color: palette.textSecondary),
+                  ),
+                )
+              : Column(
+                  children: [
+                    _buildAddFriendSection(palette),
+                    Divider(color: palette.divider, height: 1),
+                    Expanded(
+                      child: StreamBuilder<List<FriendRecord>>(
+                        stream: _handler!.friendsStream,
+                        builder: (context, snapshot) {
+                          if (snapshot.connectionState ==
+                                  ConnectionState.waiting &&
+                              !snapshot.hasData) {
+                            return Center(
+                              child: CircularProgressIndicator(
+                                color: palette.primary,
+                              ),
+                            );
+                          }
+
+                          final friends = snapshot.data ?? [];
+
+                          if (friends.isEmpty) {
+                            return Center(
+                              child: Column(
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                children: [
+                                  Icon(
+                                    Icons.people_outline,
+                                    color: palette.textTertiary,
+                                    size: 64,
+                                  ),
+                                  const SizedBox(height: 16),
+                                  Text(
+                                    'Your circle is empty\nAdd friends to see their status',
+                                    textAlign: TextAlign.center,
+                                    style: TextStyle(
+                                      color: palette.textSecondary,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            );
+                          }
+
+                          return ListView.builder(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 24,
+                              vertical: 24,
+                            ),
+                            itemCount: friends.length,
+                            itemBuilder: (context, index) {
+                              return _buildFriendTile(friends[index], palette);
+                            },
+                          );
+                        },
+                      ),
+                    ),
+                  ],
+                ),
+        );
+      },
     );
   }
 
-  Widget _buildAddFriendSection() {
+  Widget _buildAddFriendSection(AppColorPalette palette) {
     return Padding(
       padding: const EdgeInsets.all(24),
       child: Column(
@@ -127,7 +146,7 @@ class _FriendsScreenState extends State<FriendsScreen> {
           Text(
             'ADD BY PLAYER ID',
             style: GoogleFonts.inter(
-              color: Colors.white38,
+              color: palette.textTertiary,
               fontSize: 10,
               fontWeight: FontWeight.bold,
               letterSpacing: 1,
@@ -139,15 +158,15 @@ class _FriendsScreenState extends State<FriendsScreen> {
               Expanded(
                 child: TextField(
                   controller: _searchController,
-                  style: const TextStyle(color: Colors.white),
+                  style: TextStyle(color: palette.textPrimary),
                   decoration: InputDecoration(
                     hintText: 'user_123...',
-                    hintStyle: const TextStyle(
-                      color: Colors.white24,
+                    hintStyle: TextStyle(
+                      color: palette.textTertiary,
                       fontSize: 14,
                     ),
                     filled: true,
-                    fillColor: Colors.white.withValues(alpha: 0.05),
+                    fillColor: palette.surfaceLight,
                     contentPadding: const EdgeInsets.symmetric(
                       horizontal: 20,
                       vertical: 16,
@@ -176,7 +195,7 @@ class _FriendsScreenState extends State<FriendsScreen> {
                     vertical: 16,
                   ),
                   decoration: BoxDecoration(
-                    color: const Color(0xFFE5A043),
+                    color: palette.primary,
                     borderRadius: BorderRadius.circular(12),
                   ),
                   child: const Icon(
@@ -192,16 +211,16 @@ class _FriendsScreenState extends State<FriendsScreen> {
     );
   }
 
-  Widget _buildFriendTile(FriendRecord friend) {
+  Widget _buildFriendTile(FriendRecord friend, AppColorPalette palette) {
     bool isPending = friend.status == 'pending';
 
     return Container(
       margin: const EdgeInsets.only(bottom: 16),
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: Colors.white.withValues(alpha: 0.03),
+        color: palette.surfaceLight,
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: Colors.white10),
+        border: Border.all(color: palette.divider),
       ),
       child: Row(
         children: [
@@ -209,12 +228,8 @@ class _FriendsScreenState extends State<FriendsScreen> {
             children: [
               CircleAvatar(
                 radius: 24,
-                backgroundColor: const Color(0xFFE5A043).withValues(alpha: 0.1),
-                child: const Icon(
-                  Icons.person,
-                  color: Color(0xFFE5A043),
-                  size: 24,
-                ),
+                backgroundColor: palette.primary.withValues(alpha: 0.1),
+                child: Icon(Icons.person, color: palette.primary, size: 24),
               ),
               if (friend.isOnline)
                 Positioned(
@@ -224,9 +239,9 @@ class _FriendsScreenState extends State<FriendsScreen> {
                     width: 12,
                     height: 12,
                     decoration: BoxDecoration(
-                      color: Colors.green,
+                      color: palette.success,
                       shape: BoxShape.circle,
-                      border: Border.all(color: Colors.black, width: 2),
+                      border: Border.all(color: palette.background, width: 2),
                     ),
                   ),
                 ),
@@ -240,7 +255,7 @@ class _FriendsScreenState extends State<FriendsScreen> {
                 Text(
                   friend.name,
                   style: GoogleFonts.inter(
-                    color: Colors.white,
+                    color: palette.textPrimary,
                     fontSize: 16,
                     fontWeight: FontWeight.bold,
                   ),
@@ -249,8 +264,8 @@ class _FriendsScreenState extends State<FriendsScreen> {
                   friend.rank.toUpperCase(),
                   style: GoogleFonts.inter(
                     color: friend.isOnline
-                        ? const Color(0xFFE5A043)
-                        : Colors.white24,
+                        ? palette.primary
+                        : palette.textTertiary,
                     fontSize: 10,
                     fontWeight: FontWeight.w600,
                   ),
@@ -262,7 +277,7 @@ class _FriendsScreenState extends State<FriendsScreen> {
             ElevatedButton(
               onPressed: () => _handler?.acceptFriend(friend.friendId),
               style: ElevatedButton.styleFrom(
-                backgroundColor: const Color(0xFFE5A043),
+                backgroundColor: palette.primary,
                 foregroundColor: Colors.black,
                 padding: const EdgeInsets.symmetric(horizontal: 16),
                 shape: RoundedRectangleBorder(
@@ -278,7 +293,7 @@ class _FriendsScreenState extends State<FriendsScreen> {
             Text(
               friend.isOnline ? 'ONLINE' : 'AWAY',
               style: GoogleFonts.inter(
-                color: friend.isOnline ? Colors.green : Colors.white10,
+                color: friend.isOnline ? palette.success : palette.textTertiary,
                 fontSize: 10,
                 fontWeight: FontWeight.bold,
               ),

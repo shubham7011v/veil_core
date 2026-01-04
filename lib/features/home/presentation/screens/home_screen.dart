@@ -1,6 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:google_fonts/google_fonts.dart';
+import '../../../../core/theme/colors.dart';
+import '../../../../core/theme/bloc/theme_bloc.dart';
+import '../../../../core/theme/bloc/theme_state.dart';
 import '../../../auth/auth.dart';
 import '../../../profile/profile.dart';
 import '../../../social/social.dart';
@@ -27,6 +30,12 @@ class _HomeScreenState extends State<HomeScreen> {
     }
   }
 
+  void _goHome() {
+    setState(() {
+      _selectedIndex = 0;
+    });
+  }
+
   @override
   Widget build(BuildContext context) {
     return BlocListener<ProfileBloc, ProfileState>(
@@ -35,31 +44,44 @@ class _HomeScreenState extends State<HomeScreen> {
           _showRoyalNameModal(context);
         }
       },
-      child: Scaffold(
-        backgroundColor: Colors.black,
-        body: SafeArea(
-          child: IndexedStack(
-            index: _selectedIndex,
-            children: [
-              _buildHomeDashboard(),
-              const FriendsScreen(),
-              const LeaderboardScreen(),
-              const DeckCollectionScreen(),
-              const SettingsScreen(),
-            ],
-          ),
-        ),
-        bottomNavigationBar: _buildBottomNav(),
+      child: BlocBuilder<ThemeBloc, ThemeState>(
+        builder: (context, themeState) {
+          final palette = AppColors.getPalette(themeState.mode);
+
+          return PopScope(
+            canPop: _selectedIndex == 0,
+            onPopInvokedWithResult: (didPop, result) {
+              if (didPop) return;
+              _goHome();
+            },
+            child: Scaffold(
+              backgroundColor: palette.background,
+              body: SafeArea(
+                child: IndexedStack(
+                  index: _selectedIndex,
+                  children: [
+                    _buildHomeDashboard(palette),
+                    FriendsScreen(onBack: _goHome),
+                    LeaderboardScreen(onBack: _goHome),
+                    DeckCollectionScreen(onBack: _goHome),
+                    SettingsScreen(onBack: _goHome),
+                  ],
+                ),
+              ),
+              bottomNavigationBar: _buildBottomNav(palette),
+            ),
+          );
+        },
       ),
     );
   }
 
-  Widget _buildHomeDashboard() {
+  Widget _buildHomeDashboard(AppColorPalette palette) {
     return BlocBuilder<ProfileBloc, ProfileState>(
       builder: (context, state) {
         if (state is ProfileLoading) {
-          return const Center(
-            child: CircularProgressIndicator(color: Color(0xFFE5A043)),
+          return Center(
+            child: CircularProgressIndicator(color: palette.primary),
           );
         }
 
@@ -71,7 +93,7 @@ class _HomeScreenState extends State<HomeScreen> {
 
             return Column(
               children: [
-                _buildTopBar(context, user, authState),
+                _buildTopBar(context, user, authState, palette),
                 Expanded(
                   child: SingleChildScrollView(
                     padding: const EdgeInsets.symmetric(horizontal: 24),
@@ -86,6 +108,7 @@ class _HomeScreenState extends State<HomeScreen> {
                                 'Wins',
                                 '${stats?.wins ?? 0}',
                                 const Color(0xFF4CAF50),
+                                palette,
                               ),
                             ),
                             const SizedBox(width: 16),
@@ -93,7 +116,8 @@ class _HomeScreenState extends State<HomeScreen> {
                               child: _buildStatItem(
                                 'Losses',
                                 '${stats?.losses ?? 0}',
-                                const Color(0xFFE57373),
+                                palette.danger, // Use theme danger color
+                                palette,
                               ),
                             ),
                           ],
@@ -106,6 +130,7 @@ class _HomeScreenState extends State<HomeScreen> {
                                 'Total Games',
                                 '${stats?.gamesPlayed ?? 0}',
                                 Colors.blueAccent,
+                                palette,
                               ),
                             ),
                             const SizedBox(width: 16),
@@ -113,16 +138,17 @@ class _HomeScreenState extends State<HomeScreen> {
                               child: _buildStatItem(
                                 'Win Rate',
                                 '${stats?.winRate.toStringAsFixed(1) ?? '0.0'}%',
-                                const Color(0xFFE5A043),
+                                palette.primary,
+                                palette,
                               ),
                             ),
                           ],
                         ),
 
                         const SizedBox(height: 40),
-                        _buildPlayOnlineCTA(context),
+                        _buildPlayOnlineCTA(context, palette),
                         const SizedBox(height: 24),
-                        _buildPrivateRoomButton(context),
+                        _buildPrivateRoomButton(context, palette),
                         const SizedBox(height: 48),
                         Row(
                           children: [
@@ -132,6 +158,7 @@ class _HomeScreenState extends State<HomeScreen> {
                                 'FRIENDS\nMATCH',
                                 Icons.people_outline,
                                 () {},
+                                palette,
                               ),
                             ),
                             const SizedBox(width: 16),
@@ -144,12 +171,13 @@ class _HomeScreenState extends State<HomeScreen> {
                                   context,
                                   '/bot_settings',
                                 ),
+                                palette,
                               ),
                             ),
                           ],
                         ),
                         const SizedBox(height: 32),
-                        _buildDailyChallenge(),
+                        _buildDailyChallenge(palette),
                         const SizedBox(height: 32),
                       ],
                     ),
@@ -163,7 +191,12 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  Widget _buildTopBar(BuildContext context, dynamic user, AuthState authState) {
+  Widget _buildTopBar(
+    BuildContext context,
+    dynamic user,
+    AuthState authState,
+    AppColorPalette palette,
+  ) {
     String? photoUrl;
     String displayName = 'Mysterious Player';
     String rank = 'Novice';
@@ -174,6 +207,11 @@ class _HomeScreenState extends State<HomeScreen> {
       rank = authState.stats?.rank ?? rank;
     } else if (user != null) {
       rank = user.rank;
+    }
+
+    // Only display the first name if a full name is provided
+    if (displayName.contains(' ')) {
+      displayName = displayName.split(' ').first;
     }
 
     String greeting = _getGreeting();
@@ -193,7 +231,7 @@ class _HomeScreenState extends State<HomeScreen> {
                     Text(
                       greeting.toUpperCase(),
                       style: GoogleFonts.inter(
-                        color: Colors.white38,
+                        color: palette.textTertiary,
                         fontSize: 14,
                         fontWeight: FontWeight.w600,
                         letterSpacing: 1.5,
@@ -204,7 +242,7 @@ class _HomeScreenState extends State<HomeScreen> {
                       maxLines: 2,
                       overflow: TextOverflow.ellipsis,
                       style: GoogleFonts.cinzel(
-                        color: const Color(0xFFE5A043),
+                        color: palette.primary,
                         fontSize: 24,
                         fontWeight: FontWeight.bold,
                         letterSpacing: 1,
@@ -216,17 +254,13 @@ class _HomeScreenState extends State<HomeScreen> {
               const SizedBox(width: 16),
               // Non-tappable profile pic
               CircleAvatar(
-                radius: 20,
-                backgroundColor: const Color(0xFFE5A043).withValues(alpha: 0.1),
+                radius: 30,
+                backgroundColor: palette.primary.withValues(alpha: 0.1),
                 backgroundImage: photoUrl != null
                     ? NetworkImage(photoUrl)
                     : null,
                 child: photoUrl == null
-                    ? const Icon(
-                        Icons.person,
-                        size: 20,
-                        color: Color(0xFFE5A043),
-                      )
+                    ? Icon(Icons.person, size: 20, color: palette.primary)
                     : null,
               ),
             ],
@@ -235,11 +269,12 @@ class _HomeScreenState extends State<HomeScreen> {
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              _buildInfoChip('Rank', rank, const Color(0xFFE5A043)),
+              _buildInfoChip('Rank', rank, palette.primary, palette),
               _buildInfoChip(
                 'Coins',
                 '${user?.coins ?? 1000}',
-                const Color(0xFFE5A043),
+                palette.primary,
+                palette,
               ),
             ],
           ),
@@ -248,14 +283,19 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  Widget _buildInfoChip(String label, String value, Color color) {
+  Widget _buildInfoChip(
+    String label,
+    String value,
+    Color color,
+    AppColorPalette palette,
+  ) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Text(
           label.toUpperCase(),
           style: GoogleFonts.inter(
-            color: Colors.white38,
+            color: palette.textTertiary,
             fontSize: 10,
             fontWeight: FontWeight.bold,
             letterSpacing: 1,
@@ -273,13 +313,18 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  Widget _buildStatItem(String label, String value, Color color) {
+  Widget _buildStatItem(
+    String label,
+    String value,
+    Color color,
+    AppColorPalette palette,
+  ) {
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: Colors.white.withValues(alpha: 0.03),
+        color: palette.surfaceLight, // Use theme surface
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: Colors.white.withValues(alpha: 0.05)),
+        border: Border.all(color: palette.divider),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -287,7 +332,7 @@ class _HomeScreenState extends State<HomeScreen> {
           Text(
             label.toUpperCase(),
             style: GoogleFonts.inter(
-              color: Colors.white38,
+              color: palette.textSecondary,
               fontSize: 9,
               fontWeight: FontWeight.bold,
               letterSpacing: 0.5,
@@ -307,21 +352,21 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  Widget _buildPlayOnlineCTA(BuildContext context) {
+  Widget _buildPlayOnlineCTA(BuildContext context, AppColorPalette palette) {
     return Container(
       width: double.infinity,
       height: 120,
       decoration: BoxDecoration(
         gradient: LinearGradient(
           colors: [
-            const Color(0xFFE5A043).withValues(alpha: 0.9),
-            const Color(0xFFC48B30).withValues(alpha: 0.9),
+            palette.primary.withValues(alpha: 0.9),
+            palette.primaryDim.withValues(alpha: 0.9),
           ],
         ),
         borderRadius: BorderRadius.circular(16),
         boxShadow: [
           BoxShadow(
-            color: const Color(0xFFE5A043).withValues(alpha: 0.3),
+            color: palette.primary.withValues(alpha: 0.3),
             blurRadius: 20,
             spreadRadius: -5,
             offset: const Offset(0, 10),
@@ -337,7 +382,7 @@ class _HomeScreenState extends State<HomeScreen> {
             child: Text(
               'PLAY ONLINE',
               style: GoogleFonts.cinzel(
-                color: Colors.black,
+                color: Colors.black, // Keep black text on high contrast primary
                 fontSize: 24,
                 fontWeight: FontWeight.bold,
                 letterSpacing: 4,
@@ -349,13 +394,16 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  Widget _buildPrivateRoomButton(BuildContext context) {
+  Widget _buildPrivateRoomButton(
+    BuildContext context,
+    AppColorPalette palette,
+  ) {
     return TextButton(
       onPressed: () => Navigator.pushNamed(context, '/lobby'),
       child: Text(
         'Create or Join Private Room',
         style: GoogleFonts.inter(
-          color: Colors.white54,
+          color: palette.textSecondary,
           fontSize: 14,
           decoration: TextDecoration.underline,
         ),
@@ -368,16 +416,14 @@ class _HomeScreenState extends State<HomeScreen> {
     String title,
     IconData icon,
     VoidCallback onTap,
+    AppColorPalette palette,
   ) {
     return Container(
       height: 160,
       decoration: BoxDecoration(
-        color: const Color(0xFF1E1E1E),
+        color: palette.surface,
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(
-          color: Colors.white.withValues(alpha: 0.05),
-          width: 1,
-        ),
+        border: Border.all(color: palette.divider, width: 1),
       ),
       child: Material(
         color: Colors.transparent,
@@ -390,11 +436,11 @@ class _HomeScreenState extends State<HomeScreen> {
               crossAxisAlignment: CrossAxisAlignment.start,
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                Icon(icon, color: const Color(0xFFE5A043), size: 32),
+                Icon(icon, color: palette.primary, size: 32),
                 Text(
                   title,
                   style: GoogleFonts.cinzel(
-                    color: Colors.white,
+                    color: palette.textPrimary,
                     fontSize: 16,
                     fontWeight: FontWeight.w600,
                     letterSpacing: 1,
@@ -408,22 +454,22 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  Widget _buildDailyChallenge() {
+  Widget _buildDailyChallenge(AppColorPalette palette) {
     return Container(
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
-        color: const Color(0xFF1E1E1E).withValues(alpha: 0.5),
+        color: palette.surfaceLight.withValues(alpha: 0.5),
         borderRadius: BorderRadius.circular(16),
       ),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          const Icon(Icons.track_changes, color: Color(0xFFE5A043), size: 18),
+          Icon(Icons.track_changes, color: palette.primary, size: 18),
           const SizedBox(width: 8),
           Text(
             'Daily Challenge',
             style: GoogleFonts.inter(
-              color: Colors.white70,
+              color: palette.textSecondary,
               fontSize: 14,
               letterSpacing: 0.5,
             ),
@@ -433,7 +479,7 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  Widget _buildBottomNav() {
+  Widget _buildBottomNav(AppColorPalette palette) {
     return BottomNavigationBar(
       currentIndex: _selectedIndex,
       onTap: (index) {
@@ -441,10 +487,10 @@ class _HomeScreenState extends State<HomeScreen> {
           _selectedIndex = index;
         });
       },
-      backgroundColor: Colors.black,
+      backgroundColor: palette.background,
       type: BottomNavigationBarType.fixed,
-      selectedItemColor: const Color(0xFFE5A043),
-      unselectedItemColor: Colors.white30,
+      selectedItemColor: palette.primary,
+      unselectedItemColor: palette.textTertiary,
       showSelectedLabels: false,
       showUnselectedLabels: false,
       items: const [
