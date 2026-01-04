@@ -23,6 +23,14 @@ class SessionResetRequested extends SessionEvent {
   const SessionResetRequested();
 }
 
+class SessionHandlerSwapped extends SessionEvent {
+  final engine.GameSessionHandler newHandler;
+  const SessionHandlerSwapped(this.newHandler);
+
+  @override
+  List<Object?> get props => [newHandler];
+}
+
 class UnitToggled extends SessionEvent {
   final String unitId;
   const UnitToggled(this.unitId);
