@@ -6,7 +6,7 @@ import 'session_state.dart';
 import '../../../../core/di/service_locator.dart' as di;
 
 class SessionBloc extends Bloc<SessionEvent, SessionBlocState> {
-  final GameSessionHandler _handler;
+  GameSessionHandler _handler;
   StreamSubscription? _stateSub;
   StreamSubscription? _eventSub;
 
@@ -25,6 +25,7 @@ class SessionBloc extends Bloc<SessionEvent, SessionBlocState> {
     on<HandReorderRequested>(_onHandReorderRequested);
     on<HandlerSyncRequested>(_onHandlerSync);
     on<SessionResetRequested>(_onResetRequested);
+    on<SessionHandlerSwapped>(_onHandlerSwapped);
 
     // Engine update handlers
     on<EngineStateUpdated>((event, emit) {
@@ -205,6 +206,26 @@ class SessionBloc extends Bloc<SessionEvent, SessionBlocState> {
     Emitter<SessionBlocState> emit,
   ) {
     _handler.reorderHand(event.oldIndex, event.newIndex);
+  }
+
+  void _onHandlerSwapped(
+    SessionHandlerSwapped event,
+    Emitter<SessionBlocState> emit,
+  ) {
+    // 1. Clean up old handler
+    _stateSub?.cancel();
+    _eventSub?.cancel();
+    _handler.dispose();
+
+    // 2. Set new handler
+    _handler = event.newHandler;
+
+    // 3. Initialize new handler
+    _initHandler();
+
+    // 4. Reset state and sync
+    emit(SessionBlocState.initial());
+    add(const HandlerSyncRequested());
   }
 
   void _onHandlerSync(

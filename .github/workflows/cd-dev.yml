@@ -2,7 +2,7 @@ name: Veil CD (Development)
 
 on:
   push:
-    tags: 
+    tags:
       - "v*-dev"
       - "v*-internal"
 
@@ -34,3 +34,25 @@ jobs:
       key_alias: ${{ secrets.ANDROID_KEY_ALIAS }}
       key_password: ${{ secrets.ANDROID_KEY_PASSWORD }}
 
+  release:
+    name: Create GitHub Release
+    needs: [vars, build]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Download Artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: dev-release-apk
+          path: artifacts
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: artifacts/app-dev-release.apk
+          tag_name: ${{ github.ref_name }}
+          name: Dev Release ${{ needs.vars.outputs.version_name }}
+          draft: false
+          prerelease: true
+          generate_release_notes: true

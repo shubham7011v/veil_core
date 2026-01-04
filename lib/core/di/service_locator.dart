@@ -2,6 +2,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../data/data.dart';
 import '../services/services.dart';
 import '../engine/engine.dart';
+import '../engine/data/handlers/websocket_session_handler.dart';
 
 class ServiceLocator {
   static final ServiceLocator _instance = ServiceLocator._internal();
@@ -24,7 +25,15 @@ class ServiceLocator {
     authRepository = AuthRepository();
     userRepository = UserRepository();
     onboardingRepository = OnboardingRepository(prefs);
-    gameSessionHandler = LocalBotSessionHandler();
+    gameSessionHandler = createSessionHandler(online: false);
+  }
+
+  /// Factory method to create session handler based on mode
+  GameSessionHandler createSessionHandler({bool online = false}) {
+    if (online) {
+      return WebSocketSessionHandler();
+    }
+    return LocalBotSessionHandler();
   }
 }
 

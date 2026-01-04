@@ -3,7 +3,11 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import '../../../session/session.dart';
+import '../../../../core/engine/engine.dart';
+import '../../../../core/di/service_locator.dart' as di;
+import '../../../../core/engine/data/handlers/websocket_session_handler.dart';
 
 class MatchmakingScreen extends StatefulWidget {
   const MatchmakingScreen({super.key});
@@ -16,8 +20,14 @@ class _MatchmakingScreenState extends State<MatchmakingScreen>
     with SingleTickerProviderStateMixin {
   late AnimationController _controller;
   int _playersFound = 1;
-  Timer? _timer;
   bool _isMatchFound = false;
+  bool _isConnecting = false;
+  WebSocketSessionHandler? _handler;
+
+  final TextEditingController _urlController = TextEditingController(
+    text: 'wss://rebelliously-unforgone-mandie.ngrok-free.dev/ws',
+  );
+  bool _showDebugInput = false;
 
   @override
   void initState() {
@@ -27,53 +37,66 @@ class _MatchmakingScreenState extends State<MatchmakingScreen>
       vsync: this,
     )..repeat();
 
-    _startMatchmakingSimulation();
-  }
-
-  void _startMatchmakingSimulation() {
-    // 20% chance for an "instant match" skip
-    if (math.Random().nextDouble() < 0.2) {
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (mounted) {
-          context.read<SessionBloc>().add(
-            const SessionStartRequested(playerCount: 4),
-          );
-          Navigator.pushReplacementNamed(context, '/session');
-        }
-      });
-      return;
-    }
-
-    _timer = Timer.periodic(const Duration(seconds: 2), (timer) {
-      if (mounted && _playersFound < 4) {
-        setState(() {
-          _playersFound++;
-          if (_playersFound == 4) {
-            _isMatchFound = true;
-            _onMatchFound();
-          }
-        });
-      }
-
-      // Speed up animation if taking long (10s+)
-      if (timer.tick == 5) {
-        setState(() {
-          _controller.duration = const Duration(seconds: 1);
-          if (_controller.isAnimating) {
-            _controller.repeat();
-          }
-        });
-      }
+    // Delay slightly to allow UI to render before starting (or wait for user input)
+    Future.delayed(Duration.zero, () {
+      if (mounted) _startOnlineMatchmaking();
     });
   }
 
-  void _onMatchFound() {
-    _timer?.cancel();
-    Future.delayed(const Duration(milliseconds: 1500), () {
+  Future<void> _startOnlineMatchmaking() async {
+    if (_isConnecting) return;
+    setState(() => _isConnecting = true);
+
+    try {
+      // 1. Get fresh Firebase token
+      final user = FirebaseAuth.instance.currentUser;
+      if (user == null) throw Exception('User not authenticated');
+      final token = await user.getIdToken();
+
+      // 2. Connect
+      final handler =
+          di.sl.createSessionHandler(online: true) as WebSocketSessionHandler;
+
+      // Use controller text
+      await handler.connect(_urlController.text, token!);
+
+      _handler = handler; // Store handler for manual start
+
+      // 3. Update SessionBloc
       if (mounted) {
-        context.read<SessionBloc>().add(
-          const SessionStartRequested(playerCount: 4),
+        context.read<SessionBloc>().add(SessionHandlerSwapped(handler));
+
+        handler.sessionStateStream.listen((state) {
+          if (state.currentPhase == SessionPhase.thinking && !_isMatchFound) {
+            if (mounted) {
+              setState(() {
+                _isMatchFound = true;
+                _playersFound = state.participants.length;
+              });
+              _onMatchFound();
+            }
+          }
+        });
+      }
+    } catch (e) {
+      if (mounted) {
+        // Show error but stay on screen to allow retry/URL change
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error: $e'),
+            backgroundColor: Colors.red,
+            duration: const Duration(seconds: 5),
+          ),
         );
+        setState(() => _showDebugInput = true); // Auto-show input on error
+      }
+      if (mounted) setState(() => _isConnecting = false);
+    }
+  }
+
+  void _onMatchFound() {
+    Future.delayed(const Duration(milliseconds: 1000), () {
+      if (mounted) {
         Navigator.pushReplacementNamed(context, '/session');
       }
     });
@@ -82,7 +105,7 @@ class _MatchmakingScreenState extends State<MatchmakingScreen>
   @override
   void dispose() {
     _controller.dispose();
-    _timer?.cancel();
+    _urlController.dispose();
     super.dispose();
   }
 
@@ -92,9 +115,7 @@ class _MatchmakingScreenState extends State<MatchmakingScreen>
       backgroundColor: Colors.black,
       body: Stack(
         children: [
-          // Background Backdrop with Vignette
           _buildBackground(),
-
           SafeArea(
             child: Column(
               children: [
@@ -103,6 +124,10 @@ class _MatchmakingScreenState extends State<MatchmakingScreen>
                 _buildAnimatedCards(),
                 const Spacer(),
                 _buildStatusInfo(),
+                if (_playersFound >= 2 && !_isMatchFound) ...[
+                  const SizedBox(height: 24),
+                  _buildStartNowButton(),
+                ],
                 const SizedBox(height: 48),
                 _buildCancelButton(),
                 const SizedBox(height: 32),
@@ -116,11 +141,11 @@ class _MatchmakingScreenState extends State<MatchmakingScreen>
 
   Widget _buildBackground() {
     return Container(
-      decoration: BoxDecoration(
-        gradient: RadialGradient(
-          center: Alignment.center,
-          radius: 1.2,
-          colors: [Colors.grey[900]!.withValues(alpha: 0.2), Colors.black],
+      decoration: const BoxDecoration(
+        gradient: LinearGradient(
+          begin: Alignment.topCenter,
+          end: Alignment.bottomCenter,
+          colors: [Color(0xFF0F0F0F), Colors.black],
         ),
       ),
     );
@@ -129,22 +154,59 @@ class _MatchmakingScreenState extends State<MatchmakingScreen>
   Widget _buildHeader() {
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+      child: Column(
         children: [
-          Text(
-            'Finding a Match',
-            style: GoogleFonts.cinzel(
-              color: Colors.white70,
-              fontSize: 20,
-              fontWeight: FontWeight.bold,
-              letterSpacing: 1.2,
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              GestureDetector(
+                onLongPress: () =>
+                    setState(() => _showDebugInput = !_showDebugInput),
+                child: Text(
+                  'Finding a Match',
+                  style: GoogleFonts.cinzel(
+                    color: Colors.white70,
+                    fontSize: 20,
+                    fontWeight: FontWeight.bold,
+                    letterSpacing: 1.2,
+                  ),
+                ),
+              ),
+              IconButton(
+                icon: const Icon(Icons.close, color: Colors.white54),
+                onPressed: () => Navigator.pop(context),
+              ),
+            ],
+          ),
+          if (_showDebugInput)
+            Padding(
+              padding: const EdgeInsets.only(top: 16),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: TextField(
+                      controller: _urlController,
+                      style: const TextStyle(color: Colors.white),
+                      decoration: const InputDecoration(
+                        labelText: 'Server URL',
+                        labelStyle: TextStyle(color: Colors.white54),
+                        enabledBorder: OutlineInputBorder(
+                          borderSide: BorderSide(color: Colors.white24),
+                        ),
+                        focusedBorder: OutlineInputBorder(
+                          borderSide: BorderSide(color: Color(0xFFE5A043)),
+                        ),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  IconButton(
+                    icon: const Icon(Icons.refresh, color: Color(0xFFE5A043)),
+                    onPressed: _startOnlineMatchmaking,
+                  ),
+                ],
+              ),
             ),
-          ),
-          IconButton(
-            icon: const Icon(Icons.close, color: Colors.white54),
-            onPressed: () => Navigator.pop(context),
-          ),
         ],
       ),
     );
@@ -248,6 +310,37 @@ class _MatchmakingScreenState extends State<MatchmakingScreen>
           color: Colors.white54,
           fontSize: 14,
           decoration: TextDecoration.underline,
+        ),
+      ),
+    );
+  }
+
+  Widget _buildStartNowButton() {
+    return InkWell(
+      onTap: () {
+        _handler?.startGame();
+      },
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 40, vertical: 16),
+        decoration: BoxDecoration(
+          color: const Color(0xFFE5A043),
+          borderRadius: BorderRadius.circular(30),
+          boxShadow: [
+            BoxShadow(
+              color: const Color(0xFFE5A043).withValues(alpha: 0.3),
+              blurRadius: 20,
+              offset: const Offset(0, 4),
+            ),
+          ],
+        ),
+        child: Text(
+          'START MATCH',
+          style: GoogleFonts.cinzel(
+            color: Colors.black,
+            fontSize: 16,
+            fontWeight: FontWeight.bold,
+            letterSpacing: 1.5,
+          ),
         ),
       ),
     );

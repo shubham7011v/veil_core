@@ -1,0 +1,13 @@
+
+# Binaries
+*.exe
+*.test
+*.prof
+
+# Modules
+vendor/
+
+# IDEs
+.idea/
+.vscode/
+
