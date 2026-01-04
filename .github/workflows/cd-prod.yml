@@ -2,7 +2,7 @@ name: Veil CD (Production)
 
 on:
   push:
-    tags: 
+    tags:
       - "v*"
       # Note: We filter in the jobs to avoid double-running if it's a dev tag,
       # but standardizing v* for production-type releases.
@@ -48,7 +48,7 @@ jobs:
         with:
           name: prod-release-bundle
           path: build/app/outputs/bundle/prodRelease/
-          
+
       - name: Deploy to Play Store
         uses: r0adkll/upload-google-play@v1
         with:
@@ -58,3 +58,26 @@ jobs:
           track: ${{ needs.vars.outputs.track }}
           status: completed
           whatsNewDirectory: distribution/whatsnew
+
+  create_release:
+    name: Create GitHub Release
+    needs: [vars, build]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Download Artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: prod-release-bundle
+          path: artifacts
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: artifacts/app-prod-release.aab
+          tag_name: ${{ github.ref_name }}
+          name: Production Release ${{ needs.vars.outputs.version_name }}
+          draft: false
+          prerelease: false
+          generate_release_notes: true
