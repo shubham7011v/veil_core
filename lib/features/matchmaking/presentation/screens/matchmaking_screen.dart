@@ -5,6 +5,7 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import '../../../session/session.dart';
+import '../../../auth/auth.dart';
 import '../../../../core/engine/engine.dart';
 import '../../../../core/di/service_locator.dart' as di;
 import '../../../../core/engine/data/handlers/websocket_session_handler.dart';
@@ -69,6 +70,16 @@ class _MatchmakingScreenState extends State<MatchmakingScreen>
       // 3. Update SessionBloc
       if (mounted) {
         context.read<SessionBloc>().add(SessionHandlerSwapped(handler));
+
+        // Listen for stats updates
+        handler.statsStream.listen((stats) {
+          if (mounted) {
+            final authState = context.read<AuthBloc>().state;
+            if (authState is Authenticated) {
+              context.read<AuthBloc>().add(AuthStatsUpdated(stats));
+            }
+          }
+        });
 
         handler.sessionStateStream.listen((state) {
           if (mounted) {

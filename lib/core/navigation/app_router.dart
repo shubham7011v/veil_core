@@ -7,6 +7,7 @@ import '../../features/rules/rules.dart';
 import '../../features/collection/collection.dart';
 import '../../features/auth/auth.dart';
 import '../../features/matchmaking/matchmaking.dart';
+import '../../features/social/social.dart';
 
 class AppRouter {
   static const String splash = '/splash';
@@ -35,5 +36,7 @@ class AppRouter {
     session: (context) => const SessionScreen(),
     botSettings: (context) => const BotSettingsScreen(),
     matchmaking: (context) => const MatchmakingScreen(),
+    '/leaderboard': (context) => const LeaderboardScreen(),
+    '/friends': (context) => const FriendsScreen(),
   };
 }

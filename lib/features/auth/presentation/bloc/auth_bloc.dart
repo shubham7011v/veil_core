@@ -21,6 +21,7 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
     on<GoogleSignInRequested>(_onGoogleSignInRequested);
     on<SignOutRequested>(_onSignOutRequested);
     on<AuthSilentSignInRequested>(_onAuthSilentSignInRequested);
+    on<AuthStatsUpdated>(_onAuthStatsUpdated);
 
     _authStateSubscription = _authRepository.authStateChanges.listen((user) {
       if (user != null) {
@@ -104,6 +105,13 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
     emit(AuthLoading());
     await _authRepository.signOut();
     emit(Unauthenticated());
+  }
+
+  void _onAuthStatsUpdated(AuthStatsUpdated event, Emitter<AuthState> emit) {
+    if (state is Authenticated) {
+      final currentState = state as Authenticated;
+      emit(currentState.copyWith(stats: event.stats));
+    }
   }
 
   @override

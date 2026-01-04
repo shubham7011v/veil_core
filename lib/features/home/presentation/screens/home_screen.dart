@@ -3,7 +3,11 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../../../auth/auth.dart';
 import '../../../profile/profile.dart';
+import '../../../social/social.dart';
+import '../../../collection/collection.dart';
+import '../../../settings/settings.dart';
 import '../widgets/royal_name_modal.dart';
+import '../widgets/profile_bottom_sheet.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -13,6 +17,8 @@ class HomeScreen extends StatefulWidget {
 }
 
 class _HomeScreenState extends State<HomeScreen> {
+  int _selectedIndex = 0;
+
   @override
   void initState() {
     super.initState();
@@ -33,105 +39,76 @@ class _HomeScreenState extends State<HomeScreen> {
       child: Scaffold(
         backgroundColor: Colors.black,
         body: SafeArea(
-          child: BlocBuilder<ProfileBloc, ProfileState>(
-            builder: (context, state) {
-              if (state is ProfileLoading) {
-                return const Center(
-                  child: Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      CircularProgressIndicator(color: Color(0xFFE5A043)),
-                      SizedBox(height: 16),
-                      Text(
-                        'Entering the Court...',
-                        style: TextStyle(color: Colors.white54, fontSize: 12),
-                      ),
-                    ],
-                  ),
-                );
-              }
-
-              if (state is ProfileFailure) {
-                return Center(
-                  child: Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      const Icon(
-                        Icons.error_outline,
-                        color: Colors.redAccent,
-                        size: 48,
-                      ),
-                      const SizedBox(height: 16),
-                      Text(
-                        state.message,
-                        style: const TextStyle(color: Colors.white70),
-                      ),
-                      const SizedBox(height: 24),
-                      ElevatedButton(
-                        onPressed: () {
-                          context.read<ProfileBloc>().add(
-                            ProfileLoadRequested(),
-                          );
-                        },
-                        child: const Text('RETRY'),
-                      ),
-                    ],
-                  ),
-                );
-              }
-
-              final user = (state is ProfileLoaded) ? state.user : null;
-
-              return Column(
-                children: [
-                  _buildTopBar(context, user),
-                  Expanded(
-                    child: SingleChildScrollView(
-                      padding: const EdgeInsets.symmetric(horizontal: 24),
-                      child: Column(
-                        children: [
-                          const SizedBox(height: 40),
-                          _buildPlayOnlineCTA(context),
-                          const SizedBox(height: 24),
-                          _buildPrivateRoomButton(context),
-                          const SizedBox(height: 48),
-                          Row(
-                            children: [
-                              Expanded(
-                                child: _buildMatchCard(
-                                  context,
-                                  'FRIENDS\nMATCH',
-                                  Icons.people_outline,
-                                  () {},
-                                ),
-                              ),
-                              const SizedBox(width: 16),
-                              Expanded(
-                                child: _buildMatchCard(
-                                  context,
-                                  'BOT\nMATCH',
-                                  Icons.smart_toy_outlined,
-                                  () => Navigator.pushNamed(
-                                    context,
-                                    '/bot_settings',
-                                  ),
-                                ),
-                              ),
-                            ],
-                          ),
-                          const SizedBox(height: 32),
-                          _buildDailyChallenge(),
-                        ],
-                      ),
-                    ),
-                  ),
-                ],
-              );
-            },
+          child: IndexedStack(
+            index: _selectedIndex,
+            children: [
+              _buildHomeDashboard(),
+              const FriendsScreen(),
+              const LeaderboardScreen(),
+              const DeckCollectionScreen(),
+              const SettingsScreen(),
+            ],
           ),
         ),
         bottomNavigationBar: _buildBottomNav(),
       ),
+    );
+  }
+
+  Widget _buildHomeDashboard() {
+    return BlocBuilder<ProfileBloc, ProfileState>(
+      builder: (context, state) {
+        if (state is ProfileLoading) {
+          return const Center(
+            child: CircularProgressIndicator(color: Color(0xFFE5A043)),
+          );
+        }
+
+        final user = (state is ProfileLoaded) ? state.user : null;
+
+        return Column(
+          children: [
+            _buildTopBar(context, user),
+            Expanded(
+              child: SingleChildScrollView(
+                padding: const EdgeInsets.symmetric(horizontal: 24),
+                child: Column(
+                  children: [
+                    const SizedBox(height: 40),
+                    _buildPlayOnlineCTA(context),
+                    const SizedBox(height: 24),
+                    _buildPrivateRoomButton(context),
+                    const SizedBox(height: 48),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: _buildMatchCard(
+                            context,
+                            'FRIENDS\nMATCH',
+                            Icons.people_outline,
+                            () {},
+                          ),
+                        ),
+                        const SizedBox(width: 16),
+                        Expanded(
+                          child: _buildMatchCard(
+                            context,
+                            'BOT\nMATCH',
+                            Icons.smart_toy_outlined,
+                            () => Navigator.pushNamed(context, '/bot_settings'),
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 32),
+                    _buildDailyChallenge(),
+                  ],
+                ),
+              ),
+            ),
+          ],
+        );
+      },
     );
   }
 
@@ -152,23 +129,19 @@ class _HomeScreenState extends State<HomeScreen> {
                   letterSpacing: 2,
                 ),
               ),
-              Row(
-                children: [
-                  IconButton(
-                    icon: const Icon(
-                      Icons.account_circle_outlined,
-                      color: Colors.white70,
-                    ),
-                    onPressed: () {},
-                  ),
-                  IconButton(
-                    icon: const Icon(
-                      Icons.settings_outlined,
-                      color: Colors.white70,
-                    ),
-                    onPressed: () => Navigator.pushNamed(context, '/settings'),
-                  ),
-                ],
+              IconButton(
+                icon: const Icon(
+                  Icons.account_circle_outlined,
+                  color: Colors.white70,
+                ),
+                onPressed: () {
+                  showModalBottomSheet(
+                    context: context,
+                    backgroundColor: Colors.transparent,
+                    isScrollControlled: true,
+                    builder: (context) => const ProfileBottomSheet(),
+                  );
+                },
               ),
             ],
           ),
@@ -176,10 +149,17 @@ class _HomeScreenState extends State<HomeScreen> {
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              _buildInfoChip(
-                'Rank',
-                user?.rank ?? 'Novice',
-                const Color(0xFFE5A043),
+              BlocBuilder<AuthBloc, AuthState>(
+                builder: (context, authState) {
+                  String rank = 'Novice';
+                  if (authState is Authenticated && authState.stats != null) {
+                    rank = authState.stats!.rank;
+                  } else if (user != null) {
+                    rank = user.rank;
+                  }
+
+                  return _buildInfoChip('Rank', rank, const Color(0xFFE5A043));
+                },
               ),
               _buildInfoChip(
                 'Coins',
@@ -346,6 +326,12 @@ class _HomeScreenState extends State<HomeScreen> {
 
   Widget _buildBottomNav() {
     return BottomNavigationBar(
+      currentIndex: _selectedIndex,
+      onTap: (index) {
+        setState(() {
+          _selectedIndex = index;
+        });
+      },
       backgroundColor: Colors.black,
       type: BottomNavigationBarType.fixed,
       selectedItemColor: const Color(0xFFE5A043),

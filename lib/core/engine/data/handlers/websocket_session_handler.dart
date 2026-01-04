@@ -8,12 +8,17 @@ import '../../domain/models/session_enums.dart';
 import '../../domain/models/unit.dart';
 import '../../domain/models/participant.dart';
 import '../../domain/models/game_move.dart';
+import '../../../../features/auth/domain/models/user_stats.dart';
+import '../../../../features/social/domain/models/friend_record.dart';
 
 class WebSocketSessionHandler implements GameSessionHandler {
   WebSocketChannel? _channel;
 
   final _stateController = StreamController<SessionState>.broadcast();
   final _eventController = StreamController<SessionEventType>.broadcast();
+  final _statsController = StreamController<UserStats>.broadcast();
+  final _leaderboardController = StreamController<List<UserStats>>.broadcast();
+  final _friendsController = StreamController<List<FriendRecord>>.broadcast();
 
   SessionState _currentState = SessionState.initial();
 
@@ -34,6 +39,13 @@ class WebSocketSessionHandler implements GameSessionHandler {
 
   @override
   Stream<SessionEventType> get eventStream => _eventController.stream;
+
+  Stream<UserStats> get statsStream => _statsController.stream;
+
+  Stream<List<UserStats>> get leaderboardStream =>
+      _leaderboardController.stream;
+
+  Stream<List<FriendRecord>> get friendsStream => _friendsController.stream;
 
   @override
   String? get activeEventActorId => _activeEventActorId;
@@ -105,8 +117,36 @@ class WebSocketSessionHandler implements GameSessionHandler {
     switch (type) {
       case 'AUTH_OK':
         debugPrint('Auth successful: ${msg['data']}');
+
+        // Parse stats from AUTH_OK response
+        final authData = msg['data'] as Map<String, dynamic>;
+        if (authData.containsKey('stats')) {
+          try {
+            final stats = UserStats.fromJson(
+              authData['stats'] as Map<String, dynamic>,
+            );
+            _statsController.add(stats);
+            debugPrint(
+              'User stats loaded: ${stats.wins} wins, ${stats.rank} rank',
+            );
+          } catch (e) {
+            debugPrint('Failed to parse stats: $e');
+          }
+        }
+
         // Send JOIN_ROOM after auth
         _send({'type': 'JOIN_ROOM'});
+        break;
+
+      case 'STATS_UPDATE':
+        // Handle real-time stats updates (e.g., after game end)
+        try {
+          final stats = UserStats.fromJson(msg['data'] as Map<String, dynamic>);
+          _statsController.add(stats);
+          debugPrint('Stats updated: ${stats.wins} wins, ${stats.rank} rank');
+        } catch (e) {
+          debugPrint('Failed to parse stats update: $e');
+        }
         break;
 
       case 'AUTH_FAIL':
@@ -120,6 +160,30 @@ class WebSocketSessionHandler implements GameSessionHandler {
       case 'ERROR':
         final errorData = msg['data'] as Map<String, dynamic>;
         debugPrint('Server Error: ${errorData['message']}');
+        break;
+
+      case 'LEADERBOARD_DATA':
+        try {
+          final data = msg['data'] as List<dynamic>;
+          final leaderboard = data
+              .map((u) => UserStats.fromJson(u as Map<String, dynamic>))
+              .toList();
+          _leaderboardController.add(leaderboard);
+        } catch (e) {
+          debugPrint('Failed to parse leaderboard: $e');
+        }
+        break;
+
+      case 'FRIEND_LIST':
+        try {
+          final data = msg['data'] as List<dynamic>;
+          final friends = data
+              .map((f) => FriendRecord.fromJson(f as Map<String, dynamic>))
+              .toList();
+          _friendsController.add(friends);
+        } catch (e) {
+          debugPrint('Failed to parse friend list: $e');
+        }
         break;
     }
   }
@@ -233,10 +297,31 @@ class WebSocketSessionHandler implements GameSessionHandler {
     _stateController.add(newState);
   }
 
+  // -- Social & Competitive Methods --
+
+  void requestLeaderboard() {
+    _send({'type': 'LEADERBOARD_GET'});
+  }
+
+  void requestFriends() {
+    _send({'type': 'FRIEND_LIST'});
+  }
+
+  void addFriend(String friendId) {
+    _send({'type': 'FRIEND_REQUEST', 'data': friendId});
+  }
+
+  void acceptFriend(String friendId) {
+    _send({'type': 'FRIEND_ACCEPT', 'data': friendId});
+  }
+
   @override
   void dispose() {
     _channel?.sink.close();
     _stateController.close();
     _eventController.close();
+    _statsController.close();
+    _leaderboardController.close();
+    _friendsController.close();
   }
 }

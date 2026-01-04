@@ -103,6 +103,43 @@ func (m *Manager) HandleMessage(c *Client, message []byte) {
 
 		return // Handled
 
+	case protocol.MsgTypeLeaderboardGet:
+		leaderboard, err := db.GetLeaderboard()
+		if err != nil {
+			log.Printf("Leaderboard error: %v", err)
+			return
+		}
+
+		response := protocol.NewMessage(protocol.MsgTypeLeaderboardData, leaderboard)
+		bytes, _ := json.Marshal(response)
+		c.Send <- bytes
+		return
+
+	case protocol.MsgTypeFriendRequest:
+		var targetID string // Simple data, could wrap in struct
+		json.Unmarshal(baseMsg.Data, &targetID)
+		if err := db.AddFriend(c.ID, targetID); err != nil {
+			log.Printf("Friend request error: %v", err)
+			return
+		}
+		// Optional: Notify target if online. For now, silence.
+		return
+
+	case protocol.MsgTypeFriendAccept:
+		var targetID string
+		json.Unmarshal(baseMsg.Data, &targetID)
+		if err := db.AcceptFriend(c.ID, targetID); err != nil {
+			log.Printf("Friend accept error: %v", err)
+			return
+		}
+		// Refresh friend list for user
+		addFriendListResponse(c)
+		return
+
+	case protocol.MsgTypeFriendList:
+		addFriendListResponse(c)
+		return
+
 	case "JOIN_ROOM": // Custom internal message for now
 		// Logic to find/create room and add client
 		// Mock:
@@ -133,4 +170,16 @@ func (m *Manager) HandleMessage(c *Client, message []byte) {
 		}))
 		c.Send <- errBytes
 	}
+}
+
+func addFriendListResponse(c *Client) {
+	friends, err := db.GetFriends(c.ID)
+	if err != nil {
+		log.Printf("Friend list error: %v", err)
+		return
+	}
+
+	msg := protocol.NewMessage(protocol.MsgTypeFriendList, friends)
+	bytes, _ := json.Marshal(msg)
+	c.Send <- bytes
 }

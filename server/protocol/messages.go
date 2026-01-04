@@ -5,22 +5,31 @@ import "encoding/json"
 // Message Type Constants
 const (
 	// Client -> Server
-	MsgTypeAuth       = "AUTH"
-	MsgTypePlayCards  = "PLAY_CARDS"
-	MsgTypePass       = "PASS"
-	MsgTypeChallenge  = "CHALLENGE"
-	MsgTypeStartGame  = "START_GAME"
+	MsgTypeAuth      = "AUTH"
+	MsgTypePlayCards = "PLAY_CARDS"
+	MsgTypePass      = "PASS"
+	MsgTypeChallenge = "CHALLENGE"
+	MsgTypeStartGame = "START_GAME"
 
 	// Server -> Client
-	MsgTypeAuthOk         = "AUTH_OK"
-	MsgTypeAuthFail       = "AUTH_FAIL"
-	MsgTypeGameState      = "GAME_STATE"
-	MsgTypePlayerJoined   = "PLAYER_JOINED"
-	MsgTypeCardsPlayed    = "CARDS_PLAYED"
-	MsgTypeTurnPassed     = "TURN_PASSED"
+	MsgTypeAuthOk          = "AUTH_OK"
+	MsgTypeAuthFail        = "AUTH_FAIL"
+	MsgTypeGameState       = "GAME_STATE"
+	MsgTypePlayerJoined    = "PLAYER_JOINED"
+	MsgTypeCardsPlayed     = "CARDS_PLAYED"
+	MsgTypeTurnPassed      = "TURN_PASSED"
 	MsgTypeChallengeResult = "CHALLENGE_RESULT"
-	MsgTypeGameOver       = "GAME_OVER"
-	MsgTypeError          = "ERROR"
+	MsgTypeGameOver        = "GAME_OVER"
+	MsgTypeError           = "ERROR"
+
+	// Leaderboard
+	MsgTypeLeaderboardGet  = "LEADERBOARD_GET"
+	MsgTypeLeaderboardData = "LEADERBOARD_DATA"
+
+	// Social / Friends
+	MsgTypeFriendRequest = "FRIEND_REQUEST"
+	MsgTypeFriendAccept  = "FRIEND_ACCEPT"
+	MsgTypeFriendList    = "FRIEND_LIST"
 )
 
 // BaseMessage structure for all WebSocket messages
