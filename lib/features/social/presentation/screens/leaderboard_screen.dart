@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../../../auth/auth.dart';
+import '../../../../core/di/service_locator.dart' as di;
 import '../../../../core/engine/data/handlers/websocket_session_handler.dart';
 import '../../../session/session.dart';
 import '../../../../core/theme/colors.dart';
@@ -50,6 +51,13 @@ class _LeaderboardScreenState extends State<LeaderboardScreen> {
                 letterSpacing: 2,
               ),
             ),
+            actions: [
+              IconButton(
+                icon: Icon(Icons.emoji_events_outlined, color: palette.primary),
+                onPressed: () => di.sl.playGamesService.showLeaderboards(),
+                tooltip: 'Play Games Leaderboard',
+              ),
+            ],
             leading: IconButton(
               icon: Icon(Icons.arrow_back, color: palette.textSecondary),
               onPressed: () {

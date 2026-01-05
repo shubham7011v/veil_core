@@ -6,6 +6,7 @@ import '../../../../core/theme/bloc/theme_state.dart';
 import '../../../../core/theme/bloc/theme_event.dart';
 import '../../../../core/constants/dimens.dart';
 import '../../../auth/auth.dart';
+import '../../../../core/di/service_locator.dart' as di;
 
 class SettingsScreen extends StatefulWidget {
   final VoidCallback? onBack;
@@ -133,6 +134,34 @@ class _SettingsScreenState extends State<SettingsScreen> {
                         'Chips & cards sounds',
                         _sfx,
                         (v) => setState(() => _sfx = v),
+                      ),
+                    ],
+                  ),
+                ),
+
+                const SizedBox(height: AppDimens.paddingXL),
+                const _SectionHeader('PLAY SERVICES'),
+                Container(
+                  decoration: BoxDecoration(
+                    color: palette.surfaceLight,
+                    borderRadius: BorderRadius.circular(AppDimens.radiusM),
+                  ),
+                  child: Column(
+                    children: [
+                      _buildActionTile(
+                        palette,
+                        Icons.emoji_events,
+                        'Achievements',
+                        'View your trophies',
+                        () => di.sl.playGamesService.showAchievements(),
+                      ),
+                      Divider(color: palette.divider, height: 1),
+                      _buildActionTile(
+                        palette,
+                        Icons.leaderboard,
+                        'Global Leaderboards',
+                        'Compare with everyone',
+                        () => di.sl.playGamesService.showLeaderboards(),
                       ),
                     ],
                   ),
@@ -470,6 +499,54 @@ class _SettingsScreenState extends State<SettingsScreen> {
             ),
           ),
         ],
+      ),
+    );
+  }
+
+  Widget _buildActionTile(
+    AppColorPalette palette,
+    IconData icon,
+    String title,
+    String subtitle,
+    VoidCallback onTap,
+  ) {
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(AppDimens.radiusM),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(
+          horizontal: AppDimens.paddingM,
+          vertical: 12,
+        ),
+        child: Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                color: palette.surface,
+                shape: BoxShape.circle,
+              ),
+              child: Icon(icon, color: palette.textSecondary, size: 18),
+            ),
+            const SizedBox(width: AppDimens.paddingM),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    title,
+                    style: TextStyle(color: palette.textPrimary, fontSize: 16),
+                  ),
+                  Text(
+                    subtitle,
+                    style: TextStyle(color: palette.textTertiary, fontSize: 12),
+                  ),
+                ],
+              ),
+            ),
+            Icon(Icons.chevron_right, color: palette.textTertiary, size: 20),
+          ],
+        ),
       ),
     );
   }

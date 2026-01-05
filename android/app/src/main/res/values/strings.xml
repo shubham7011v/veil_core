@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Veil Core</string>
+    <!-- Replace with your Play Games App ID -->
+    <!-- You can find this in Google Play Console > Play Games Services > Configuration -->
+    <string name="app_id">YOUR_PLAY_GAMES_APP_ID</string>
+</resources>

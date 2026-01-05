@@ -2,6 +2,7 @@ import 'dart:async';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import '../../../../core/data/data.dart';
+import '../../../../core/services/services.dart';
 import '../../../../core/utils/error_messages.dart';
 import 'auth_event.dart';
 import 'auth_state.dart';
@@ -9,13 +10,16 @@ import 'auth_state.dart';
 class AuthBloc extends Bloc<AuthEvent, AuthState> {
   final AuthRepository _authRepository;
   final UserRepository _userRepository;
+  final PlayGamesService _playGamesService;
   StreamSubscription? _authStateSubscription;
 
   AuthBloc({
     required AuthRepository authRepository,
     required UserRepository userRepository,
+    required PlayGamesService playGamesService,
   }) : _authRepository = authRepository,
        _userRepository = userRepository,
+       _playGamesService = playGamesService,
        super(AuthInitial()) {
     on<AuthCheckRequested>(_onAuthCheckRequested);
     on<GoogleSignInRequested>(_onGoogleSignInRequested);
@@ -50,6 +54,10 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
     emit(AuthLoading());
     try {
       await _authRepository.signInWithGoogle();
+
+      // Attempt Play Games sign-in on Android
+      await _playGamesService.signIn();
+
       final user = _authRepository.currentUser;
       if (user != null) {
         await _userRepository.syncUser(user);
@@ -87,6 +95,10 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
     emit(AuthLoading());
     try {
       final userCredential = await _authRepository.signInSilently();
+
+      // Attempt silent Play Games sign-in
+      await _playGamesService.signInSilently();
+
       if (userCredential?.user != null) {
         await _userRepository.syncUser(userCredential!.user!);
         emit(Authenticated(userCredential.user!));

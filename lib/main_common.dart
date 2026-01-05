@@ -56,6 +56,7 @@ class VeilApp extends StatelessWidget {
           create: (context) => AuthBloc(
             authRepository: di.sl.authRepository,
             userRepository: di.sl.userRepository,
+            playGamesService: di.sl.playGamesService,
           )..add(AuthCheckRequested()),
         ),
         BlocProvider(

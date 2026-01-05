@@ -13,7 +13,7 @@ class AuthRepository {
 
   User? get currentUser => _firebaseAuth.currentUser;
 
-  Future<UserCredential> signInWithGoogle() async {
+  Future<UserCredential> signInWithGoogle({bool signInPGS = false}) async {
     try {
       final GoogleSignInAccount? googleUser = await _googleSignIn.signIn();
       if (googleUser == null) {
@@ -30,7 +30,16 @@ class AuthRepository {
         idToken: googleAuth.idToken,
       );
 
-      return await _firebaseAuth.signInWithCredential(credential);
+      final userCredential = await _firebaseAuth.signInWithCredential(
+        credential,
+      );
+
+      // Attempt Play Games sign-in if requested
+      if (signInPGS) {
+        // This will be handled by PlayGamesService in the Bloc/Repository
+      }
+
+      return userCredential;
     } catch (e) {
       rethrow;
     }
