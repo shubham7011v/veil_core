@@ -16,6 +16,7 @@ class ServiceLocator {
   late final OnboardingRepository onboardingRepository;
   late final GameSessionHandler gameSessionHandler;
   late final PlayGamesService playGamesService;
+  late final SocialSyncService socialSyncService;
 
   Future<void> setup() async {
     final prefs = await SharedPreferences.getInstance();
@@ -28,6 +29,12 @@ class ServiceLocator {
     userRepository = UserRepository();
     onboardingRepository = OnboardingRepository(prefs);
     gameSessionHandler = createSessionHandler(online: false);
+
+    socialSyncService = SocialSyncService(
+      sessionHandler: gameSessionHandler,
+      playGamesService: playGamesService,
+    );
+    socialSyncService.init();
   }
 
   /// Factory method to create session handler based on mode

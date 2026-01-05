@@ -7,6 +7,7 @@ import '../models/game_move.dart';
 abstract class GameSessionHandler {
   Stream<SessionState> get sessionStateStream;
   Stream<SessionEventType> get eventStream;
+  Stream<dynamic> get statsStream; // Using dynamic or importing UserStats
 
   // Optional: detailed getters if needed for specialized UI updates
   String? get activeEventActorId;

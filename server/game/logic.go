@@ -16,7 +16,7 @@ func (g *Game) PlayCards(playerID string, cardIDs []string, declaredRank Rank) e
 	if len(cardIDs) == 0 || len(cardIDs) > 4 {
 		return errors.New("invalid card count (1-4)")
 	}
-	
+
 	p := g.PlayerMap[playerID]
 	if !p.HasCards(cardIDs) {
 		return errors.New("you don't possess these cards")
@@ -24,7 +24,7 @@ func (g *Game) PlayCards(playerID string, cardIDs []string, declaredRank Rank) e
 
 	// Logic Check: If round rank is set, must match (server authorizes this rule)
 	// But in bluff, you can LIE. So you just check against declaredRank.
-	// HOWEVER, providing a different registered *rank* than the round's rank 
+	// HOWEVER, providing a different registered *rank* than the round's rank
 	// is usually illegal unless it's the start of a round.
 	if g.DeclaredRank != nil && *g.DeclaredRank != declaredRank {
 		return errors.New("must play current round rank")
@@ -42,7 +42,7 @@ func (g *Game) PlayCards(playerID string, cardIDs []string, declaredRank Rank) e
 		ActualCards:  removed,
 		Timestamp:    time.Now(),
 	}
-	
+
 	// Set round rank if new round
 	if g.DeclaredRank == nil {
 		g.DeclaredRank = &declaredRank
@@ -52,13 +52,20 @@ func (g *Game) PlayCards(playerID string, cardIDs []string, declaredRank Rank) e
 	g.AdvanceTurn()
 	g.Phase = PhaseChallenging // Now others can challenge
 	g.SyncParticipants()
-	
-	// Check for immediate win (0 cards) - NO, must survive challenge first?
-	// Rules say: "Winner: First player to reach 0 cards". 
-	// Usually safe if they survive the circle, but let's check count.
-	// We'll verify win condition after challenge window or on next turn start.
-	
+
 	return nil
+}
+
+func (g *Game) CheckWinCondition() bool {
+	for _, p := range g.Players {
+		if len(p.Hand) == 0 {
+			g.WinnerID = p.ID
+			g.Phase = PhaseFinished
+			g.SyncParticipants()
+			return true
+		}
+	}
+	return false
 }
 
 func (g *Game) Challenge(challengerID string) (string, error) {
@@ -78,7 +85,7 @@ func (g *Game) Challenge(challengerID string) (string, error) {
 	blufferID := g.LastMove.PlayerID
 	declared := g.LastMove.DeclaredRank
 	actual := g.LastMove.ActualCards
-	
+
 	isBluff := false
 	for _, c := range actual {
 		if c.Rank != declared {
@@ -99,14 +106,17 @@ func (g *Game) Challenge(challengerID string) (string, error) {
 		loserID = challengerID
 		winnerID = blufferID
 	}
-	
+
 	g.GivePileTo(loserID)
 	g.ResetRound()
-	g.SyncParticipants()
-	
-	// Set turn to Winner (who was right/innocent)
-	g.SetTurnMessages(winnerID)
 
+	// Check win condition after challenge resolution
+	if !g.CheckWinCondition() {
+		// Set turn to Winner (who was right/innocent)
+		g.SetTurnMessages(winnerID)
+	}
+
+	g.SyncParticipants()
 	return loserID + " lost the challenge!", nil
 }
 
@@ -124,18 +134,19 @@ func (g *Game) Pass(playerID string) error {
 	if g.CheckAllPassed() {
 		// Round ends, cards discarded
 		g.ResetRound()
-		// Turn remains with the current active player (who was last to make move usually?)
-		// Actually if A played, B passed, C passed... A starts new round.
-		// logic: The player BEFORE the first passer (the one who played).
-		// Since we advanced turn, identifying "Original Mover" requires state tracking.
-		// Simplified: If all pass, the player who LAST PLAYED (g.LastMove.PlayerID) starts.
+
+		if g.CheckWinCondition() {
+			return nil
+		}
+
+		// Turn remains with the current active player
 		if g.LastMove != nil {
 			g.SetTurnMessages(g.LastMove.PlayerID)
 		}
 	} else {
 		g.AdvanceTurn()
 	}
-	
+
 	g.SyncParticipants()
 	return nil
 }
@@ -144,9 +155,9 @@ func (g *Game) Pass(playerID string) error {
 
 func (g *Game) AdvanceTurn() {
 	g.ActiveIdx = (g.ActiveIdx + 1) % len(g.TurnOrder)
-	
+
 	// If the active player is finished (0 cards), do they get skipped?
-	// For "First to 0 wins", game ends immediately. 
+	// For "First to 0 wins", game ends immediately.
 	// If "Last Man Standing", skip. Assumed First to 0 for now.
 }
 
@@ -182,7 +193,7 @@ func (g *Game) ResetPassFlags() {
 }
 
 func (g *Game) CheckAllPassed() bool {
-	// If Everyone EXCEPT the last mover has passed... 
+	// If Everyone EXCEPT the last mover has passed...
 	// In 2 player: A plays, B passes -> All passed? Yes.
 	passCount := 0
 	for _, p := range g.Players {

@@ -40,6 +40,7 @@ class WebSocketSessionHandler implements GameSessionHandler {
   @override
   Stream<SessionEventType> get eventStream => _eventController.stream;
 
+  @override
   Stream<UserStats> get statsStream => _statsController.stream;
 
   Stream<List<UserStats>> get leaderboardStream =>

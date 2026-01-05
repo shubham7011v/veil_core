@@ -14,6 +14,7 @@ abstract class BaseAuthoritativeHandler implements GameSessionHandler {
   // Streams
   final _stateController = StreamController<SessionState>.broadcast();
   final _eventController = StreamController<SessionEventType>.broadcast();
+  final _statsController = StreamController<dynamic>.broadcast();
   Timer? _turnTimer;
   int _currentTimerSeconds = 0;
 
@@ -22,6 +23,9 @@ abstract class BaseAuthoritativeHandler implements GameSessionHandler {
 
   @override
   Stream<SessionEventType> get eventStream => _eventController.stream;
+
+  @override
+  Stream<dynamic> get statsStream => _statsController.stream;
 
   // Internal State
   SessionState _currentState = SessionState.initial();
@@ -268,6 +272,7 @@ abstract class BaseAuthoritativeHandler implements GameSessionHandler {
     stopTurnTimer();
     _stateController.close();
     _eventController.close();
+    _statsController.close();
   }
 
   // --- Protected Methods for Subclasses ---
