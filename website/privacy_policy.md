@@ -1,9 +1,9 @@
-# Privacy Policy for Veil
+# Privacy Policy for Bluff
 
 **Last updated:** January 05, 2026
 
 ## Introduction
-Veil ("we," "our," or "us") is committed to protecting your privacy. This Privacy Policy explains how your information is collected, used, and disclosed by Veil.
+Bluff ("we," "our," or "us") is committed to protecting your privacy. This Privacy Policy explains how your information is collected, used, and disclosed by Bluff.
 
 ## Information We Collect
 We collect information that is necessary for the functionality of the game:
