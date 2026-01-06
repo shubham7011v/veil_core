@@ -7,6 +7,7 @@ class UserStats extends Equatable {
   final int wins;
   final int losses;
   final String rank;
+  final int coins;
 
   const UserStats({
     required this.userId,
@@ -15,6 +16,7 @@ class UserStats extends Equatable {
     this.wins = 0,
     this.losses = 0,
     this.rank = 'Novice',
+    this.coins = 1000,
   });
 
   factory UserStats.fromJson(Map<String, dynamic> json) {
@@ -25,6 +27,7 @@ class UserStats extends Equatable {
       wins: json['wins'] as int? ?? 0,
       losses: json['losses'] as int? ?? 0,
       rank: json['rank'] as String? ?? 'Novice',
+      coins: json['coins'] as int? ?? 1000,
     );
   }
 
@@ -36,6 +39,7 @@ class UserStats extends Equatable {
       'wins': wins,
       'losses': losses,
       'rank': rank,
+      'coins': coins,
     };
   }
 
@@ -45,5 +49,13 @@ class UserStats extends Equatable {
   }
 
   @override
-  List<Object?> get props => [userId, name, gamesPlayed, wins, losses, rank];
+  List<Object?> get props => [
+    userId,
+    name,
+    gamesPlayed,
+    wins,
+    losses,
+    rank,
+    coins,
+  ];
 }

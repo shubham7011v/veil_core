@@ -95,7 +95,7 @@ class _HomeScreenState extends State<HomeScreen> {
 
             return Column(
               children: [
-                HomeTopBar(user: user, palette: palette),
+                HomeTopBar(user: user, stats: stats, palette: palette),
                 Expanded(
                   child: SingleChildScrollView(
                     padding: const EdgeInsets.symmetric(horizontal: 24),

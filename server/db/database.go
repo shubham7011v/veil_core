@@ -20,6 +20,7 @@ type UserStats struct {
 	Wins        int    `json:"wins"`
 	Losses      int    `json:"losses"`
 	Rank        string `json:"rank"`
+	Coins       int    `json:"coins"`
 }
 
 // InitDB initializes the SQLite database and creates tables
@@ -54,6 +55,7 @@ func createTables() error {
 		games_played INTEGER DEFAULT 0,
 		wins INTEGER DEFAULT 0,
 		losses INTEGER DEFAULT 0,
+		coins INTEGER DEFAULT 1000,
 		last_seen TIMESTAMP
 	);`
 
@@ -95,8 +97,8 @@ func GetOrCreateUser(userID string, name string) (*UserStats, error) {
 	var user UserStats
 	var dbName string
 
-	row := DB.QueryRow("SELECT user_id, name, games_played, wins, losses FROM users WHERE user_id = ?", userID)
-	err := row.Scan(&user.UserID, &dbName, &user.GamesPlayed, &user.Wins, &user.Losses)
+	row := DB.QueryRow("SELECT user_id, name, games_played, wins, losses, coins FROM users WHERE user_id = ?", userID)
+	err := row.Scan(&user.UserID, &dbName, &user.GamesPlayed, &user.Wins, &user.Losses, &user.Coins)
 
 	if err == sql.ErrNoRows {
 		// Create new user
@@ -104,7 +106,7 @@ func GetOrCreateUser(userID string, name string) (*UserStats, error) {
 		if err != nil {
 			return nil, err
 		}
-		return &UserStats{UserID: userID, Name: name, GamesPlayed: 0, Wins: 0, Losses: 0, Rank: "Novice"}, nil
+		return &UserStats{UserID: userID, Name: name, GamesPlayed: 0, Wins: 0, Losses: 0, Rank: "Novice", Coins: 1000}, nil
 	} else if err != nil {
 		return nil, err
 	}

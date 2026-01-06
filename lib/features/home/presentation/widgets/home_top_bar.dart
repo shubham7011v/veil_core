@@ -3,20 +3,27 @@ import 'package:google_fonts/google_fonts.dart';
 import '../../../../core/theme/colors.dart';
 import '../../../../core/di/service_locator.dart';
 import '../../../../core/data/models/user_model.dart';
+import '../../../auth/auth.dart';
 
 class HomeTopBar extends StatelessWidget {
   final UserModel? user;
+  final UserStats? stats;
   final AppColorPalette palette;
 
-  const HomeTopBar({super.key, required this.user, required this.palette});
+  const HomeTopBar({
+    super.key,
+    required this.user,
+    required this.stats,
+    required this.palette,
+  });
 
   @override
   Widget build(BuildContext context) {
     final String greeting = sl.greetingService.getTimeBasedGreeting();
     final String displayName = user?.firstName ?? 'Mysterious Player';
     final String photoUrl = user?.photoUrl ?? '';
-    final String rank = user?.rank ?? 'Novice';
-    final int coins = user?.coins ?? 1000;
+    final String rank = stats?.rank ?? user?.rank ?? 'Novice';
+    final int coins = stats?.coins ?? user?.coins ?? 1000;
 
     return Container(
       padding: const EdgeInsets.all(24),
