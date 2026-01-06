@@ -4,6 +4,7 @@ import 'package:flutter/foundation.dart';
 import 'package:web_socket_channel/web_socket_channel.dart';
 import '../../domain/handlers/game_session_handler.dart';
 import '../../domain/models/session_state.dart';
+
 import '../../domain/models/session_enums.dart';
 import '../../domain/models/unit.dart';
 import '../../domain/models/participant.dart';
@@ -11,6 +12,8 @@ import '../../domain/models/game_move.dart';
 import '../../../../features/auth/domain/models/user_stats.dart';
 import '../../../../features/social/domain/models/friend_record.dart';
 import '../../domain/models/room_event.dart';
+import '../../../../features/voice/presentation/bloc/voice_bloc.dart';
+import '../../../../features/voice/data/voice_audio_manager.dart';
 
 class WebSocketSessionHandler implements GameSessionHandler {
   WebSocketChannel? _channel;
@@ -21,6 +24,14 @@ class WebSocketSessionHandler implements GameSessionHandler {
   final _leaderboardController = StreamController<List<UserStats>>.broadcast();
   final _friendsController = StreamController<List<FriendRecord>>.broadcast();
   final _roomEventController = StreamController<RoomEvent>.broadcast();
+
+  // Optional Voice Bloc reference for signaling
+  VoiceBloc? _voiceBloc;
+  void setVoiceBloc(VoiceBloc? bloc) => _voiceBloc = bloc;
+
+  // Optional Voice Audio Manager for WebRTC
+  VoiceAudioManager? _voiceManager;
+  void setVoiceManager(VoiceAudioManager? manager) => _voiceManager = manager;
 
   SessionState _currentState = SessionState.initial();
 
@@ -216,6 +227,18 @@ class WebSocketSessionHandler implements GameSessionHandler {
           debugPrint('Failed to parse ROOM_UPDATE: $e');
         }
         break;
+
+      case 'VOICE_SDP':
+        if (_voiceManager != null) {
+          _voiceManager!.handleAnswer(msg['data'] as Map<String, dynamic>);
+        }
+        break;
+
+      case 'VOICE_ICE':
+        if (_voiceManager != null) {
+          _voiceManager!.handleCandidate(msg['data'] as Map<String, dynamic>);
+        }
+        break;
     }
   }
 
@@ -276,6 +299,24 @@ class WebSocketSessionHandler implements GameSessionHandler {
     } else if (phase == SessionPhase.challenging) {
       _eventController.add(SessionEventType.cardsPlayed);
     }
+  }
+
+  void receiveVoiceState(Map<String, dynamic> data) {
+    if (_voiceBloc != null) {
+      _voiceBloc!.add(VoiceStateUpdated(data));
+    }
+  }
+
+  Future<void> raiseHand() async {
+    _send({'type': 'VOICE_RAISE_HAND'});
+  }
+
+  void sendVoiceSDP(Map<String, dynamic> data) {
+    _send({'type': 'VOICE_SDP', 'data': data});
+  }
+
+  void sendVoiceICE(Map<String, dynamic> data) {
+    _send({'type': 'VOICE_ICE', 'data': data});
   }
 
   @override

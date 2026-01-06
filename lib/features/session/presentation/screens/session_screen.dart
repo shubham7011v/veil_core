@@ -15,6 +15,12 @@ import '../widgets/game_win_overlay.dart';
 import '../widgets/session_staging_area.dart';
 import '../widgets/session_bottom_controls.dart';
 import '../../../../core/theme/colors.dart';
+import 'package:veil_core/features/voice/presentation/bloc/voice_bloc.dart';
+import 'package:veil_core/features/voice/presentation/widgets/voice_overlay.dart';
+import '../../../../features/voice/data/voice_audio_manager.dart';
+import '../../../../core/di/service_locator.dart' as di;
+import '../../../../core/engine/data/handlers/websocket_session_handler.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 
 class SessionScreen extends StatefulWidget {
   const SessionScreen({super.key});
@@ -43,6 +49,9 @@ class _SessionScreenState extends State<SessionScreen>
   final GlobalKey _stagingKey = GlobalKey();
   final List<FlyingCard> _flyingCards = [];
 
+  VoiceBloc? _voiceBloc;
+  WebSocketSessionHandler? _sessionHandler;
+
   @override
   void initState() {
     super.initState();
@@ -51,11 +60,43 @@ class _SessionScreenState extends State<SessionScreen>
       duration: const Duration(milliseconds: 1200),
     );
     _entryController.forward();
+
+    // Initialize Voice
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      // Access handler via custom ServiceLocator property
+      final handler = di.sl.gameSessionHandler;
+
+      if (handler is WebSocketSessionHandler) {
+        _sessionHandler = handler;
+
+        // Safe access to FirebaseAuth
+        String myId = "unknown";
+        try {
+          myId = FirebaseAuth.instance.currentUser?.uid ?? "unknown";
+        } catch (e) {
+          debugPrint("Auth not ready: $e");
+        }
+
+        _voiceBloc = VoiceBloc(myUserId: myId);
+        handler.setVoiceBloc(_voiceBloc!);
+
+        // Initialize WebRTC Audio
+        VoiceAudioManager().initialize(handler);
+        handler.setVoiceManager(VoiceAudioManager());
+
+        setState(() {});
+      }
+    });
   }
 
   @override
   void dispose() {
     _entryController.dispose();
+    _voiceBloc?.close();
+    _sessionHandler?.setVoiceBloc(null);
+    _sessionHandler?.setVoiceManager(null);
+    VoiceAudioManager().dispose();
     super.dispose();
   }
 
@@ -102,16 +143,15 @@ class _SessionScreenState extends State<SessionScreen>
           customEndOffset ??
           (targetKey != null ? _getCenterOffset(targetKey) : Offset.zero);
 
-      if (randomOffset &&
-          customStartOffset == null &&
-          customEndOffset == null) {
+      if (randomOffset) {
         final rnd = math.Random();
-        // Wider range for more messy "shuffle" look
-        start += Offset(
-          rnd.nextDouble() * 200 - 100,
-          rnd.nextDouble() * 200 - 100,
-        );
-        end += Offset(rnd.nextDouble() * 80 - 40, rnd.nextDouble() * 80 - 40);
+        if (customStartOffset == null) {
+          start += Offset(
+            rnd.nextDouble() * 40 - 20,
+            rnd.nextDouble() * 40 - 20,
+          );
+        }
+        end += Offset(rnd.nextDouble() * 40 - 20, rnd.nextDouble() * 40 - 20);
       }
 
       if (start == Offset.zero || end == Offset.zero) {
@@ -238,11 +278,15 @@ class _SessionScreenState extends State<SessionScreen>
       },
       child: BlocBuilder<SessionBloc, SessionBlocState>(
         builder: (context, state) {
-          return PopScope(
+          final showSpectatorView = state.engineState.isSpectator;
+
+          Widget content = PopScope(
+            canPop: false,
             onPopInvokedWithResult: (didPop, result) {
               if (didPop) {
-                context.read<SessionBloc>().add(const SessionResetRequested());
+                return;
               }
+              context.read<SessionBloc>().add(const SessionResetRequested());
             },
             child: Scaffold(
               backgroundColor: const Color(0xFF121212),
@@ -252,7 +296,7 @@ class _SessionScreenState extends State<SessionScreen>
                   SafeArea(
                     child: Column(
                       children: [
-                        // Top Bar (0.0 - 0.4)
+                        // Top Bar
                         SlideTransition(
                           position:
                               Tween<Offset>(
@@ -281,7 +325,7 @@ class _SessionScreenState extends State<SessionScreen>
                           ),
                         ),
 
-                        // Opponents (0.1 - 0.5)
+                        // Opponents
                         SlideTransition(
                           position:
                               Tween<Offset>(
@@ -314,7 +358,7 @@ class _SessionScreenState extends State<SessionScreen>
                         ),
                         const SizedBox(height: 10),
 
-                        // Center Pile + Claim Badge
+                        // Center Pile
                         Expanded(
                           child: Center(
                             child: Stack(
@@ -341,8 +385,8 @@ class _SessionScreenState extends State<SessionScreen>
                         ),
                         const SizedBox(height: 16),
 
-                        // Staging Area (0.4 - 0.8)
-                        if (!state.engineState.isSpectator)
+                        // Staging Area
+                        if (!showSpectatorView)
                           SlideTransition(
                             position:
                                 Tween<Offset>(
@@ -376,8 +420,8 @@ class _SessionScreenState extends State<SessionScreen>
                           ),
                         const SizedBox(height: 2),
 
-                        // Bottom Controls (0.5 - 1.0)
-                        if (!state.engineState.isSpectator)
+                        // Bottom Controls
+                        if (!showSpectatorView)
                           SlideTransition(
                             position:
                                 Tween<Offset>(
@@ -461,16 +505,27 @@ class _SessionScreenState extends State<SessionScreen>
                       declaredRank: state.lastMove!.declaredRank,
                     ),
 
-                  // Action Overlays (Flying Cards, Badges) - MUST BE ON TOP
+                  // Action Overlays
                   Positioned.fill(
                     child: IgnorePointer(
                       child: FlyingCardsLayer(activeAnimations: _flyingCards),
                     ),
                   ),
+
+                  // Voice Overlay
+                  if (_voiceBloc != null && _sessionHandler != null)
+                    Positioned.fill(
+                      child: BlocProvider.value(
+                        value: _voiceBloc!,
+                        child: VoiceOverlay(sessionHandler: _sessionHandler!),
+                      ),
+                    ),
                 ],
               ),
             ),
           );
+
+          return content;
         },
       ),
     );

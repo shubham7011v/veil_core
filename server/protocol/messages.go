@@ -41,6 +41,12 @@ const (
 	MsgTypeFriendRequest = "FRIEND_REQUEST"
 	MsgTypeFriendAccept  = "FRIEND_ACCEPT"
 	MsgTypeFriendList    = "FRIEND_LIST"
+
+	// Voice
+	MsgTypeVoiceHandRaise = "VOICE_RAISE_HAND"
+	MsgTypeVoiceState     = "VOICE_STATE"
+	MsgTypeVoiceSDP       = "VOICE_SDP"
+	MsgTypeVoiceICE       = "VOICE_ICE"
 )
 
 // BaseMessage structure for all WebSocket messages
