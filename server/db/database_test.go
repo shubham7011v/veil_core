@@ -34,7 +34,7 @@ func TestUserStats(t *testing.T) {
 	}
 
 	// 3. Record Match
-	err = RecordGameResult("match_1", []string{"user1", "user2"}, "user1", 60)
+	err = RecordGameResult("match_1", []string{"user1", "user2"}, "user1", 60, 200)
 	if err != nil {
 		t.Fatalf("RecordGameResult failed: %v", err)
 	}

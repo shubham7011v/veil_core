@@ -39,14 +39,14 @@ func (h *AdminHandler) GetStats(w http.ResponseWriter, r *http.Request) {
 	defer h.manager.mu.RUnlock()
 
 	totalPlayers := 0
-	for _, room := range h.manager.rooms {
+	for _, room := range h.manager.Rooms {
 		room.mu.RLock()
 		totalPlayers += len(room.clients)
 		room.mu.RUnlock()
 	}
 
 	stats := map[string]interface{}{
-		"total_rooms":   len(h.manager.rooms),
+		"total_rooms":   len(h.manager.Rooms),
 		"total_players": totalPlayers,
 	}
 
@@ -60,12 +60,12 @@ func (h *AdminHandler) ListRooms(w http.ResponseWriter, r *http.Request) {
 	defer h.manager.mu.RUnlock()
 
 	rooms := make([]map[string]interface{}, 0)
-	for id, room := range h.manager.rooms {
+	for id, room := range h.manager.Rooms {
 		room.mu.RLock()
 		rooms = append(rooms, map[string]interface{}{
 			"id":           id,
 			"player_count": len(room.clients),
-			"is_private":   room.IsPrivate,
+			"is_private":   room.isPrivate,
 			"game_started": room.game != nil,
 		})
 		room.mu.RUnlock()
@@ -84,9 +84,9 @@ func (h *AdminHandler) CloseRoom(w http.ResponseWriter, r *http.Request) {
 	}
 
 	h.manager.mu.Lock()
-	room, exists := h.manager.rooms[roomID]
+	room, exists := h.manager.Rooms[roomID]
 	if exists {
-		delete(h.manager.rooms, roomID)
+		delete(h.manager.Rooms, roomID)
 	}
 	h.manager.mu.Unlock()
 

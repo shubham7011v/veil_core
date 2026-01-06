@@ -153,14 +153,31 @@ func (r *Room) Run() {
 			log.Printf("Client joined Room %s (Spectator: %v)", r.ID, client.IsSpectator)
 
 			if !client.IsSpectator {
-				// Auto-join game logic
-				if err := r.game.AddPlayer(client.ID, "Player "+client.ID); err != nil {
-					log.Printf("Error adding player: %v", err)
+				// 1. Check Balance and Deduct Coins
+				// Default boot amount for public matches or private setting
+				boot := 100 // Default public stake
+				if r.isPrivate {
+					boot = int(r.bootAmount)
 				}
 
-				// Check auto-start for public rooms
-				if !r.isPrivate && len(r.game.Players) == r.maxPlayers && r.game.Phase == game.PhaseLobby {
-					r.game.Start()
+				// Deduct coins via DB transaction
+				if err := db.UpdateUserCoins(client.ID, -boot); err != nil {
+					log.Printf("Cannot join room: Insufficient funds for %s", client.ID)
+					r.sendErrorToClient(client, "INSUFFICIENT_FUNDS", "Not enough coins to join")
+					// Clean up / kick logic would go here ideally
+					// For now, just logging - they might join but be 'broke' effectively
+				} else {
+					// Auto-join game logic
+					if err := r.game.AddPlayer(client.ID, "Player "+client.ID); err != nil {
+						log.Printf("Error adding player: %v", err)
+						// Refund if add fails?
+						db.UpdateUserCoins(client.ID, boot)
+					}
+
+					// Check auto-start for public rooms
+					if !r.isPrivate && len(r.game.Players) == r.maxPlayers && r.game.Phase == game.PhaseLobby {
+						r.game.Start()
+					}
 				}
 			}
 
@@ -349,18 +366,26 @@ func (r *Room) processAction(action GameAction) {
 		if r.game.Phase == game.PhaseFinished {
 			log.Printf("Game Over in Room %s! Winner: %s", r.ID, r.game.WinnerID)
 
-			// 1. Record in SQLite
+			// 1. Calculate Pot
+			// Pot = BootAmount * Number of Players (who actually played)
+			boot := 100
+			if r.isPrivate {
+				boot = int(r.bootAmount)
+			}
+			potAmount := boot * len(r.game.Participants)
+
+			// 2. Record in SQLite
 			var playerIDs []string
 			for _, p := range r.game.Participants {
 				playerIDs = append(playerIDs, p.ID)
 			}
 			matchID := fmt.Sprintf("%s_%d", r.ID, time.Now().Unix())
 
-			if err := db.RecordGameResult(matchID, playerIDs, r.game.WinnerID, 120); err != nil {
+			if err := db.RecordGameResult(matchID, playerIDs, r.game.WinnerID, 120, potAmount); err != nil {
 				log.Printf("Failed to record game result: %v", err)
 			}
 
-			// 2. Broadcast Updated Stats
+			// 3. Broadcast Updated Stats
 			// Note: broadcastStats requires mutex because it iterates clients.
 			// Currently we HOLD mutex here (called from Run).
 			// So internal helper should NOT lock.

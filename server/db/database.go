@@ -3,6 +3,7 @@ package db
 import (
 	"database/sql"
 	"encoding/json"
+	"fmt"
 	"log"
 	"os"
 	"path/filepath"
@@ -120,8 +121,43 @@ func GetOrCreateUser(userID string, name string) (*UserStats, error) {
 	return &user, nil
 }
 
+// UpdateUserCoins transactionally updates a user's coin balance.
+// Returns error if insufficient funds for deduction.
+func UpdateUserCoins(userID string, amount int) error {
+	tx, err := DB.Begin()
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+
+	// Check balance if deducting
+	if amount < 0 {
+		var currentCoins int
+		err := tx.QueryRow("SELECT coins FROM users WHERE user_id = ?", userID).Scan(&currentCoins)
+		if err != nil {
+			return err
+		}
+		if currentCoins+amount < 0 {
+			return fmt.Errorf("insufficient funds")
+		}
+	}
+
+	_, err = tx.Exec("UPDATE users SET coins = coins + ? WHERE user_id = ?", amount, userID)
+	if err != nil {
+		return err
+	}
+
+	return tx.Commit()
+}
+
+// UpdateUserName updates the display name for a user
+func UpdateUserName(userID, newName string) error {
+	_, err := DB.Exec("UPDATE users SET name = ? WHERE user_id = ?", newName, userID)
+	return err
+}
+
 // RecordGameResult updates stats and saves match history
-func RecordGameResult(matchID string, playerIDs []string, winnerID string, durationSec int) error {
+func RecordGameResult(matchID string, playerIDs []string, winnerID string, durationSec int, potAmount int) error {
 	tx, err := DB.Begin()
 	if err != nil {
 		return err
@@ -139,28 +175,39 @@ func RecordGameResult(matchID string, playerIDs []string, winnerID string, durat
 		return err
 	}
 
-	// 2. Update User Stats
+	// 2. Update User Stats and Distribute Coins
+	// Logic: Winner takes all. Pot = BootAmount * Players.
+	// But BootAmount is deducted at start. So here we just ADD the total pot to winner.
+	// NOTE: We don't track boot amount in matches table yet. Assuming passed in or default for now?
+	// Actually, best to just pass 'potAmount' into this function.
+
+	// winnerPot := 0 // Will need to update signature
+
 	for _, pid := range playerIDs {
 		isWinner := (pid == winnerID)
 
 		winInc := 0
 		lossInc := 0
+		coinChange := 0
+
 		if isWinner {
 			winInc = 1
+			coinChange = potAmount
 		} else {
 			lossInc = 1
 		}
 
 		_, err = tx.Exec(`
-			INSERT INTO users (user_id, name, games_played, wins, losses, last_seen)
-			VALUES (?, ?, 1, ?, ?, ?)
+			INSERT INTO users (user_id, name, games_played, wins, losses, coins, last_seen)
+			VALUES (?, ?, 1, ?, ?, ?, ?)
 			ON CONFLICT(user_id) DO UPDATE SET
 				games_played = games_played + 1,
 				wins = wins + excluded.wins,
 				losses = losses + excluded.losses,
+				coins = coins + excluded.coins,
 				last_seen = excluded.last_seen
 		`,
-			pid, "Unknown", winInc, lossInc, time.Now(),
+			pid, "Unknown", winInc, lossInc, coinChange, time.Now(),
 		)
 		if err != nil {
 			return err

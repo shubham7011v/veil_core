@@ -5,12 +5,13 @@ import "encoding/json"
 // Message Type Constants
 const (
 	// Client -> Server
-	MsgTypeAuth       = "AUTH"
-	MsgTypePlayCards  = "PLAY_CARDS"
-	MsgTypePass       = "PASS"
-	MsgTypeChallenge  = "CHALLENGE"
-	MsgTypeStartGame  = "START_GAME"
-	MsgTypeUpdateName = "UPDATE_NAME"
+	MsgTypeAuth        = "AUTH"
+	MsgTypePlayCards   = "PLAY_CARDS"
+	MsgTypePass        = "PASS"
+	MsgTypeChallenge   = "CHALLENGE"
+	MsgTypeStartGame   = "START_GAME"
+	MsgTypeUpdateName  = "UPDATE_NAME"
+	MsgTypeRefillCoins = "REFILL_COINS"
 
 	// Private Room (Client -> Server)
 	MsgTypeCreatePrivateRoom = "CREATE_PRIVATE_ROOM"

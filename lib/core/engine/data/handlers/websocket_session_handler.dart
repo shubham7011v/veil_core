@@ -460,6 +460,10 @@ class WebSocketSessionHandler implements GameSessionHandler {
     });
   }
 
+  void refillCoins() {
+    _send({'type': 'REFILL_COINS'});
+  }
+
   void requestLeaderboard() {
     _send({'type': 'LEADERBOARD_GET'});
   }

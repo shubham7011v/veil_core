@@ -336,33 +336,66 @@ class _MatchmakingScreenState extends State<MatchmakingScreen>
   }
 
   Widget _buildStartNowButton() {
-    return InkWell(
-      onTap: () {
-        _handler?.startGame();
-      },
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 40, vertical: 16),
-        decoration: BoxDecoration(
-          color: const Color(0xFFE5A043),
-          borderRadius: BorderRadius.circular(30),
-          boxShadow: [
-            BoxShadow(
-              color: const Color(0xFFE5A043).withValues(alpha: 0.3),
-              blurRadius: 20,
-              offset: const Offset(0, 4),
+    return BlocBuilder<AuthBloc, AuthState>(
+      builder: (context, state) {
+        final int userCoins = state is Authenticated
+            ? (state.stats?.coins ?? 0)
+            : 0;
+        final bool canAfford = userCoins >= 100;
+
+        return Column(
+          children: [
+            Text(
+              'Entry Fee: 100 Coins',
+              style: GoogleFonts.inter(
+                color: canAfford ? Colors.white54 : Colors.redAccent,
+                fontSize: 12,
+                fontWeight: FontWeight.w500,
+              ),
+            ),
+            const SizedBox(height: 8),
+            InkWell(
+              onTap: canAfford
+                  ? () {
+                      _handler?.startGame();
+                    }
+                  : null,
+              child: Container(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 40,
+                  vertical: 16,
+                ),
+                decoration: BoxDecoration(
+                  color: canAfford
+                      ? const Color(0xFFE5A043)
+                      : Colors.grey.withValues(alpha: 0.3),
+                  borderRadius: BorderRadius.circular(30),
+                  boxShadow: canAfford
+                      ? [
+                          BoxShadow(
+                            color: const Color(
+                              0xFFE5A043,
+                            ).withValues(alpha: 0.3),
+                            blurRadius: 20,
+                            offset: const Offset(0, 4),
+                          ),
+                        ]
+                      : [],
+                ),
+                child: Text(
+                  canAfford ? 'START MATCH' : 'INSUFFICIENT COINS',
+                  style: GoogleFonts.cinzel(
+                    color: canAfford ? Colors.black : Colors.white38,
+                    fontSize: 16,
+                    fontWeight: FontWeight.bold,
+                    letterSpacing: 1.5,
+                  ),
+                ),
+              ),
             ),
           ],
-        ),
-        child: Text(
-          'START MATCH',
-          style: GoogleFonts.cinzel(
-            color: Colors.black,
-            fontSize: 16,
-            fontWeight: FontWeight.bold,
-            letterSpacing: 1.5,
-          ),
-        ),
-      ),
+        );
+      },
     );
   }
 }

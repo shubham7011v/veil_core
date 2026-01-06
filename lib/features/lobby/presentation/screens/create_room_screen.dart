@@ -11,6 +11,7 @@ import '../../../session/presentation/bloc/session_event.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import '../../../../core/engine/domain/models/room_event.dart';
 import '../../../../core/config/app_config.dart';
+import '../../../../features/auth/auth.dart';
 
 class CreateRoomScreen extends StatefulWidget {
   const CreateRoomScreen({super.key});
@@ -24,6 +25,7 @@ class _CreateRoomScreenState extends State<CreateRoomScreen> {
   final _passwordController = TextEditingController();
 
   int _selectedPlayerCount = 5;
+  double _bootAmount = 100;
   bool _voiceChat = true;
   bool _spectatorMode = false;
   bool _isPrivate = true; // Default to private based on flow
@@ -38,8 +40,21 @@ class _CreateRoomScreenState extends State<CreateRoomScreen> {
 
   Future<void> _handleCreateRoom() async {
     if (!_isPrivate) {
-      // Public match - redirect to matchmaking for now
       Navigator.pushNamed(context, '/matchmaking');
+      return;
+    }
+
+    final authState = context.read<AuthBloc>().state;
+    final userCoins = authState is Authenticated
+        ? (authState.stats?.coins ?? 0)
+        : 0;
+
+    if (userCoins < _bootAmount) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Insufficient coins for this boot amount!'),
+        ),
+      );
       return;
     }
 
@@ -69,7 +84,7 @@ class _CreateRoomScreenState extends State<CreateRoomScreen> {
             ? null
             : _passwordController.text,
         maxPlayers: _selectedPlayerCount,
-        bootAmount: 0, // Boot amount removed from UI, defaulting to 0 for now
+        bootAmount: _bootAmount,
         voiceChat: _voiceChat,
         spectatorMode: _spectatorMode,
       );
@@ -314,6 +329,58 @@ class _CreateRoomScreenState extends State<CreateRoomScreen> {
                         ),
                       ],
                     ),
+
+                    // Boot Amount (Private Only)
+                    if (_isPrivate) ...[
+                      SizedBox(height: Responsive.h(AppDimens.paddingXL)),
+                      const Text(
+                        'BOOT AMOUNT (COINS)',
+                        style: TextStyle(
+                          color: AppColors.textPrimary,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                      SizedBox(height: Responsive.h(AppDimens.paddingM)),
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Text(
+                            '${_bootAmount.toInt()}',
+                            style: TextStyle(
+                              color: AppColors.primary,
+                              fontSize: Responsive.sp(24),
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                          Expanded(
+                            child: SliderTheme(
+                              data: SliderTheme.of(context).copyWith(
+                                activeTrackColor: AppColors.primary,
+                                inactiveTrackColor: AppColors.surfaceLight,
+                                thumbColor: AppColors.primary,
+                                overlayColor: AppColors.activeGlow,
+                              ),
+                              child: Slider(
+                                value: _bootAmount,
+                                min: 100,
+                                max: 5000,
+                                divisions: 49,
+                                label: '${_bootAmount.toInt()}',
+                                onChanged: (val) =>
+                                    setState(() => _bootAmount = val),
+                              ),
+                            ),
+                          ),
+                          Text(
+                            '5000',
+                            style: TextStyle(
+                              color: AppColors.textTertiary,
+                              fontSize: Responsive.sp(12),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
 
                     SizedBox(height: Responsive.h(AppDimens.paddingXL)),
 

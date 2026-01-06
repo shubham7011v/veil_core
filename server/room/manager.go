@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log"
 	"math/rand"
+	"sync"
 	"time"
 	"veil_server/db"
 	"veil_server/protocol"
@@ -18,6 +19,7 @@ const (
 
 // Manager keeps track of all clients and rooms
 type Manager struct {
+	mu         sync.RWMutex
 	Clients    map[*Client]bool
 	Register   chan *Client
 	Unregister chan *Client
@@ -155,6 +157,26 @@ func (m *Manager) HandleMessage(c *Client, message []byte) {
 		if err == nil {
 			// This forces a refresh on the client side
 			m.sendAuthOk(c, stats)
+		}
+		return
+
+	case protocol.MsgTypeRefillCoins:
+		// Check current balance
+		stats, err := db.GetOrCreateUser(c.ID, "")
+		if err != nil {
+			log.Printf("Refill error fetch: %v", err)
+			return
+		}
+
+		if stats.Coins < 100 {
+			// Refill to 1000
+			topUp := 1000 - stats.Coins
+			if err := db.UpdateUserCoins(c.ID, topUp); err == nil {
+				stats.Coins = 1000
+				m.sendAuthOk(c, stats)
+			}
+		} else {
+			m.sendError(c, "REFILL_DENIED", "You have enough coins!")
 		}
 		return
 

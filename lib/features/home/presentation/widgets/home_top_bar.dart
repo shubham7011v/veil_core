@@ -189,13 +189,49 @@ class _HomeTopBarState extends State<HomeTopBar> {
             letterSpacing: 1,
           ),
         ),
-        Text(
-          value,
-          style: GoogleFonts.cinzel(
-            color: color,
-            fontSize: 16,
-            fontWeight: FontWeight.w500,
-          ),
+        Row(
+          children: [
+            Text(
+              value,
+              style: GoogleFonts.cinzel(
+                color: color,
+                fontSize: 16,
+                fontWeight: FontWeight.w500,
+              ),
+            ),
+            if (label == 'Coins' &&
+                int.tryParse(value) != null &&
+                int.parse(value) < 100)
+              Padding(
+                padding: const EdgeInsets.only(left: 8.0),
+                child: GestureDetector(
+                  onTap: () {
+                    sl.webSocketSessionHandler.refillCoins();
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(content: Text('Refilling coins...')),
+                    );
+                  },
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 8,
+                      vertical: 2,
+                    ),
+                    decoration: BoxDecoration(
+                      color: palette.primaryDim,
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: Text(
+                      'REFILL',
+                      style: GoogleFonts.inter(
+                        color: Colors.white,
+                        fontSize: 10,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+          ],
         ),
       ],
     );
