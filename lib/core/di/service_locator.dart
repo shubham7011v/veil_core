@@ -5,6 +5,7 @@ import '../engine/engine.dart';
 import '../engine/data/handlers/websocket_session_handler.dart';
 import '../services/system_status_service.dart';
 import '../../features/auth/auth.dart';
+import '../../features/profile/profile.dart';
 
 class ServiceLocator {
   static final ServiceLocator _instance = ServiceLocator._internal();
@@ -16,6 +17,7 @@ class ServiceLocator {
   late final AuthRepository authRepository;
   late final UserRepository userRepository;
   late final OnboardingRepository onboardingRepository;
+  late final ProfileRepository profileRepository;
   late final GameSessionHandler gameSessionHandler;
   late final VoiceSessionHandler voiceSessionHandler;
   late final GreetingService greetingService;
@@ -39,6 +41,9 @@ class ServiceLocator {
 
     // Initialize the singleton WS handler
     _webSocketHandler = WebSocketSessionHandler();
+
+    // Initialize ProfileRepository with WebSocket handler
+    profileRepository = ProfileRepository(_webSocketHandler);
 
     // Default to local, but the app can switch
     gameSessionHandler = LocalBotSessionHandler();

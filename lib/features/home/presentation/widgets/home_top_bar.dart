@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+
 import 'package:google_fonts/google_fonts.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import '../../../../core/theme/colors.dart';
@@ -82,6 +83,10 @@ class HomeTopBar extends StatelessWidget {
                 backgroundImage: photoUrl.isNotEmpty
                     ? NetworkImage(photoUrl)
                     : null,
+                onBackgroundImageError: (exception, stackTrace) {
+                  // Silently handle the error
+                  // debugPrint('Failed to load profile image: $exception');
+                },
                 child: photoUrl.isEmpty
                     ? Icon(Icons.person, size: 20, color: palette.primary)
                     : null,

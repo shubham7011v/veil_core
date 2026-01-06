@@ -1,5 +1,5 @@
 import 'package:equatable/equatable.dart';
-import '../../../auth/domain/models/user_stats.dart';
+import '../../domain/models/user_profile.dart';
 
 abstract class ProfileState extends Equatable {
   const ProfileState();
@@ -13,16 +13,19 @@ class ProfileInitial extends ProfileState {}
 class ProfileLoading extends ProfileState {}
 
 class ProfileLoaded extends ProfileState {
-  final UserStats user;
-  const ProfileLoaded(this.user);
+  final UserProfile profile;
+  final bool isOwnProfile;
+
+  const ProfileLoaded({required this.profile, required this.isOwnProfile});
 
   @override
-  List<Object?> get props => [user];
+  List<Object?> get props => [profile, isOwnProfile];
 }
 
-class ProfileFailure extends ProfileState {
+class ProfileError extends ProfileState {
   final String message;
-  const ProfileFailure(this.message);
+
+  const ProfileError(this.message);
 
   @override
   List<Object?> get props => [message];

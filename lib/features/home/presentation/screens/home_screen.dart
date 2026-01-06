@@ -5,7 +5,6 @@ import '../../../../core/theme/colors.dart';
 import '../../../../core/theme/bloc/theme_bloc.dart';
 import '../../../../core/theme/bloc/theme_state.dart';
 import '../../../auth/auth.dart';
-import '../../../profile/profile.dart';
 import '../../../social/social.dart';
 import '../../../collection/collection.dart';
 import '../../../settings/settings.dart';
@@ -25,10 +24,8 @@ class _HomeScreenState extends State<HomeScreen> {
   @override
   void initState() {
     super.initState();
-    final authState = context.read<AuthBloc>().state;
-    if (authState is Authenticated) {
-      context.read<ProfileBloc>().add(ProfileLoadRequested());
-    }
+    // ProfileBloc is now only for viewing OTHER users' profiles
+    // Own profile data comes from AuthBloc
   }
 
   void _goHome() {

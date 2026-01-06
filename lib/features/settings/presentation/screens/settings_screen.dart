@@ -294,6 +294,14 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       Divider(color: palette.divider, height: 1),
                       _buildNavTile(
                         palette,
+                        Icons.book_outlined,
+                        'Game Rules',
+                        null,
+                        onTap: () => Navigator.pushNamed(context, '/rules'),
+                      ),
+                      Divider(color: palette.divider, height: 1),
+                      _buildNavTile(
+                        palette,
                         Icons.help,
                         'Help & Support',
                         null,

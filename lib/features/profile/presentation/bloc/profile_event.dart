@@ -7,4 +7,29 @@ abstract class ProfileEvent extends Equatable {
   List<Object?> get props => [];
 }
 
-class ProfileLoadRequested extends ProfileEvent {}
+class ProfileViewRequested extends ProfileEvent {
+  final String userId;
+
+  const ProfileViewRequested(this.userId);
+
+  @override
+  List<Object?> get props => [userId];
+}
+
+class ProfileFriendAdded extends ProfileEvent {
+  final String userId;
+
+  const ProfileFriendAdded(this.userId);
+
+  @override
+  List<Object?> get props => [userId];
+}
+
+class ProfileFriendRemoved extends ProfileEvent {
+  final String userId;
+
+  const ProfileFriendRemoved(this.userId);
+
+  @override
+  List<Object?> get props => [userId];
+}

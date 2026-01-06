@@ -7,6 +7,7 @@ import '../../../session/session.dart';
 import '../../../../core/theme/colors.dart';
 import '../../../../core/theme/bloc/theme_bloc.dart';
 import '../../../../core/theme/bloc/theme_state.dart';
+import '../../../profile/profile.dart';
 
 class LeaderboardScreen extends StatefulWidget {
   final VoidCallback? onBack;
@@ -136,82 +137,93 @@ class _LeaderboardScreenState extends State<LeaderboardScreen> {
         ? const Color(0xFFCD7F32) // Bronze
         : palette.textTertiary;
 
-    return Container(
-      margin: const EdgeInsets.only(bottom: 12),
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: palette.surfaceLight,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(
-          color: isTop3 ? rankColor.withValues(alpha: 0.3) : palette.divider,
-          width: isTop3 ? 1.5 : 1,
+    return InkWell(
+      onTap: () {
+        Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (_) => ProfileViewScreen(userId: player.userId),
+          ),
+        );
+      },
+      borderRadius: BorderRadius.circular(16),
+      child: Container(
+        margin: const EdgeInsets.only(bottom: 12),
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: palette.surfaceLight,
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(
+            color: isTop3 ? rankColor.withValues(alpha: 0.3) : palette.divider,
+            width: isTop3 ? 1.5 : 1,
+          ),
         ),
-      ),
-      child: Row(
-        children: [
-          SizedBox(
-            width: 32,
-            child: Text(
-              '$rank',
-              style: GoogleFonts.cinzel(
-                color: rankColor,
-                fontSize: 18,
-                fontWeight: FontWeight.bold,
+        child: Row(
+          children: [
+            SizedBox(
+              width: 32,
+              child: Text(
+                '$rank',
+                style: GoogleFonts.cinzel(
+                  color: rankColor,
+                  fontSize: 18,
+                  fontWeight: FontWeight.bold,
+                ),
               ),
             ),
-          ),
-          const SizedBox(width: 12),
-          CircleAvatar(
-            radius: 20,
-            backgroundColor: palette.primary.withValues(alpha: 0.1),
-            child: Icon(Icons.person, color: palette.primary, size: 20),
-          ),
-          const SizedBox(width: 16),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
+            const SizedBox(width: 12),
+            CircleAvatar(
+              radius: 20,
+              backgroundColor: palette.primary.withValues(alpha: 0.1),
+              child: Icon(Icons.person, color: palette.primary, size: 20),
+            ),
+            const SizedBox(width: 16),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    player.name,
+                    style: GoogleFonts.inter(
+                      color: palette.textPrimary,
+                      fontSize: 16,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                  Text(
+                    player.rank.toUpperCase(),
+                    style: GoogleFonts.inter(
+                      color: palette.textTertiary,
+                      fontSize: 10,
+                      fontWeight: FontWeight.w500,
+                      letterSpacing: 0.5,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.end,
               children: [
                 Text(
-                  player.name,
-                  style: GoogleFonts.inter(
-                    color: palette.textPrimary,
-                    fontSize: 16,
+                  '${player.wins} WINS',
+                  style: GoogleFonts.cinzel(
+                    color: palette.primary,
+                    fontSize: 14,
                     fontWeight: FontWeight.bold,
                   ),
                 ),
                 Text(
-                  player.rank.toUpperCase(),
+                  '${player.winRate.toStringAsFixed(1)}% WR',
                   style: GoogleFonts.inter(
                     color: palette.textTertiary,
                     fontSize: 10,
-                    fontWeight: FontWeight.w500,
-                    letterSpacing: 0.5,
                   ),
                 ),
               ],
             ),
-          ),
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.end,
-            children: [
-              Text(
-                '${player.wins} WINS',
-                style: GoogleFonts.cinzel(
-                  color: palette.primary,
-                  fontSize: 14,
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
-              Text(
-                '${player.winRate.toStringAsFixed(1)}% WR',
-                style: GoogleFonts.inter(
-                  color: palette.textTertiary,
-                  fontSize: 10,
-                ),
-              ),
-            ],
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }
