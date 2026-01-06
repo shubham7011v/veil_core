@@ -15,12 +15,14 @@ class ServiceLocator {
   late final UserRepository userRepository;
   late final OnboardingRepository onboardingRepository;
   late final GameSessionHandler gameSessionHandler;
+  late final GreetingService greetingService;
 
   Future<void> setup() async {
     final prefs = await SharedPreferences.getInstance();
 
     navigationService = NavigationService();
     storageService = StorageService(prefs);
+    greetingService = GreetingService();
 
     authRepository = AuthRepository();
     userRepository = UserRepository();

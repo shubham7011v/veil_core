@@ -10,6 +10,7 @@ import '../../../social/social.dart';
 import '../../../collection/collection.dart';
 import '../../../settings/settings.dart';
 import '../widgets/royal_name_modal.dart';
+import '../../../../core/di/service_locator.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -214,7 +215,7 @@ class _HomeScreenState extends State<HomeScreen> {
       displayName = displayName.split(' ').first;
     }
 
-    String greeting = _getGreeting();
+    String greeting = sl.greetingService.getTimeBasedGreeting();
 
     return Container(
       padding: const EdgeInsets.all(24),
@@ -519,13 +520,6 @@ class _HomeScreenState extends State<HomeScreen> {
         BottomNavigationBarItem(icon: Icon(Icons.settings_outlined), label: ''),
       ],
     );
-  }
-
-  String _getGreeting() {
-    final hour = DateTime.now().hour;
-    if (hour < 12) return 'Good Morning';
-    if (hour < 17) return 'Good Afternoon';
-    return 'Good Evening';
   }
 
   void _showRoyalNameModal(BuildContext context) {
