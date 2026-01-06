@@ -298,8 +298,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
                         'Help & Support',
                         null,
                       ),
-                      if (FirebaseAuth.instance.currentUser?.uid ==
-                          AppConfig.instance.masterAdminId) ...[
+                      if (AppConfig.instance.isDevelopment ||
+                          FirebaseAuth.instance.currentUser?.uid ==
+                              AppConfig.instance.masterAdminId) ...[
                         Divider(color: palette.divider, height: 1),
                         _buildNavTile(
                           palette,

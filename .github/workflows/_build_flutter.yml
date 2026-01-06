@@ -37,6 +37,12 @@ on:
         required: true
       key_password:
         required: true
+      server_url:
+        required: false
+      api_url:
+        required: false
+      master_admin_id:
+        required: false
 
 jobs:
   build:
@@ -66,13 +72,28 @@ jobs:
           echo "keyAlias=${{ secrets.key_alias }}" >> android/key.properties
 
       - name: Build App
+        env:
+          SERVER_URL: ${{ secrets.server_url }}
+          API_URL: ${{ secrets.api_url }}
+          MASTER_ADMIN_ID: ${{ secrets.master_admin_id }}
         run: |
+          DART_DEFINES="${{ inputs.dart_defines }}"
+          if [ ! -z "$SERVER_URL" ]; then
+            DART_DEFINES="$DART_DEFINES --dart-define=SERVER_URL=$SERVER_URL"
+          fi
+          if [ ! -z "$API_URL" ]; then
+            DART_DEFINES="$DART_DEFINES --dart-define=API_URL=$API_URL"
+          fi
+          if [ ! -z "$MASTER_ADMIN_ID" ]; then
+            DART_DEFINES="$DART_DEFINES --dart-define=MASTER_ADMIN_ID=$MASTER_ADMIN_ID"
+          fi
+
           flutter build ${{ inputs.build_type }} \
             --flavor ${{ inputs.flavor }} \
             -t ${{ inputs.target }} \
             --build-name=${{ inputs.version_name }} \
             --build-number=${{ inputs.build_number }} \
-            ${{ inputs.dart_defines }} \
+            $DART_DEFINES \
             --release
 
       - name: Upload Artifact

@@ -28,15 +28,15 @@ jobs:
       build_number: ${{ github.run_number }}
       artifact_name: dev-release-apk
       artifact_path: build/app/outputs/flutter-apk/app-dev-release.apk
-      dart_defines: >-
-        --dart-define=ENV=development
-        --dart-define=SERVER_URL=${{ secrets.DEV_SERVER_URL }}
-        --dart-define=API_URL=${{ secrets.DEV_API_URL }}
+      dart_defines: "--dart-define=ENV=development"
     secrets:
       keystore_base64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
       keystore_password: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
       key_alias: ${{ secrets.ANDROID_KEY_ALIAS }}
       key_password: ${{ secrets.ANDROID_KEY_PASSWORD }}
+      server_url: ${{ secrets.DEV_SERVER_URL }}
+      api_url: ${{ secrets.DEV_API_URL }}
+      master_admin_id: ${{ secrets.MASTER_ADMIN_ID }}
 
   release:
     name: Create GitHub Release

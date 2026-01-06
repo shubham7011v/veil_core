@@ -31,15 +31,15 @@ jobs:
       build_number: ${{ github.run_number }}
       artifact_name: prod-release-bundle
       artifact_path: build/app/outputs/bundle/prodRelease/app-prod-release.aab
-      dart_defines: >-
-        --dart-define=ENV=production
-        --dart-define=SERVER_URL=${{ secrets.PROD_SERVER_URL }}
-        --dart-define=API_URL=${{ secrets.PROD_API_URL }}
+      dart_defines: "--dart-define=ENV=production"
     secrets:
       keystore_base64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
       keystore_password: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
       key_alias: ${{ secrets.ANDROID_KEY_ALIAS }}
       key_password: ${{ secrets.ANDROID_KEY_PASSWORD }}
+      server_url: ${{ secrets.PROD_SERVER_URL }}
+      api_url: ${{ secrets.PROD_API_URL }}
+      master_admin_id: ${{ secrets.MASTER_ADMIN_ID }}
 
   deploy_play_store:
     name: Deploy to Play Store
