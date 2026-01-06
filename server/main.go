@@ -32,6 +32,12 @@ func main() {
 		room.ServeWs(manager, w, r)
 	})
 
+	// Admin API
+	admin := room.NewAdminHandler(manager)
+	http.HandleFunc("/admin/stats", admin.AdminMiddleware(admin.GetStats))
+	http.HandleFunc("/admin/rooms", admin.AdminMiddleware(admin.ListRooms))
+	http.HandleFunc("/admin/rooms/close", admin.AdminMiddleware(admin.CloseRoom))
+
 	log.Printf("Veil Server listening on :%s", port)
 	if err := http.ListenAndServe(":"+port, nil); err != nil {
 		log.Fatal("ListenAndServe:", err)

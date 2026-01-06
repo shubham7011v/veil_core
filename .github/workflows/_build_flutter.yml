@@ -24,6 +24,10 @@ on:
       artifact_path:
         required: true
         type: string
+      dart_defines:
+        required: false
+        type: string
+        default: ""
     secrets:
       keystore_base64:
         required: true
@@ -68,6 +72,7 @@ jobs:
             -t ${{ inputs.target }} \
             --build-name=${{ inputs.version_name }} \
             --build-number=${{ inputs.build_number }} \
+            ${{ inputs.dart_defines }} \
             --release
 
       - name: Upload Artifact

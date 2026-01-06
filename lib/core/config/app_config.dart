@@ -1,4 +1,5 @@
 import 'package:flutter/foundation.dart';
+import 'remote_config_service.dart';
 
 /// Environment-based configuration management
 ///
@@ -49,6 +50,7 @@ class AppConfig {
   // Development
   late final bool enableLogging;
   late final bool enableDebugMode;
+  late final String? masterAdminId;
 
   void _loadConfig() {
     // Load environment
@@ -81,30 +83,34 @@ class AppConfig {
     }
 
     // Reconnection Settings
-    maxReconnectAttempts = const int.fromEnvironment(
+    maxReconnectAttempts = _getIntConfig(
+      'max_reconnect_attempts',
       'MAX_RECONNECT_ATTEMPTS',
-      defaultValue: 5,
+      5,
     );
-    reconnectBaseDelayMs = const int.fromEnvironment(
+    reconnectBaseDelayMs = _getIntConfig(
+      'reconnect_base_delay_ms',
       'RECONNECT_BASE_DELAY_MS',
-      defaultValue: 2000,
+      2000,
     );
 
     // Game Settings
-    defaultThinkingTimeS = const int.fromEnvironment(
+    defaultThinkingTimeS = _getIntConfig(
+      'default_thinking_time_s',
       'DEFAULT_THINKING_TIME_S',
-      defaultValue: 10,
+      10,
     );
     defaultPlayerCount = const int.fromEnvironment(
       'DEFAULT_PLAYER_COUNT',
       defaultValue: 5,
     );
-    maxPlayers = const int.fromEnvironment('MAX_PLAYERS', defaultValue: 8);
+    maxPlayers = _getIntConfig('max_players', 'MAX_PLAYERS', 8);
 
     // Voice Settings
-    voiceTimeoutSeconds = const int.fromEnvironment(
+    voiceTimeoutSeconds = _getIntConfig(
+      'voice_timeout_seconds',
       'VOICE_TIMEOUT_SECONDS',
-      defaultValue: 30,
+      30,
     );
     voiceSampleRate = const int.fromEnvironment(
       'VOICE_SAMPLE_RATE',
@@ -112,9 +118,10 @@ class AppConfig {
     );
 
     // Rate Limiting
-    maxActionsPerSecond = const int.fromEnvironment(
+    maxActionsPerSecond = _getIntConfig(
+      'max_actions_per_second',
       'MAX_ACTIONS_PER_SECOND',
-      defaultValue: 10,
+      10,
     );
 
     // UI Settings
@@ -137,6 +144,12 @@ class AppConfig {
       defaultValue: kDebugMode,
     );
 
+    masterAdminId = const String.fromEnvironment(
+      'MASTER_ADMIN_ID',
+      defaultValue:
+          'ADMIN_UID_PLACEHOLDER', // Default to something safe or empty
+    );
+
     if (enableLogging) {
       _logConfig();
     }
@@ -150,6 +163,15 @@ class AppConfig {
     debugPrint('Max Reconnect Attempts: $maxReconnectAttempts');
     debugPrint('Debug Mode: $enableDebugMode');
     debugPrint('=======================');
+  }
+
+  int _getIntConfig(String rcKey, String envKey, int defaultValue) {
+    // 1. Try Remote Config
+    final rcValue = RemoteConfigService.instance.getInt(rcKey);
+    if (rcValue != 0) return rcValue;
+
+    // 2. Try Environment Variable (Build Time)
+    return int.fromEnvironment(envKey, defaultValue: defaultValue);
   }
 
   // Helper method to reload config (useful for testing)

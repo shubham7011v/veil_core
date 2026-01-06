@@ -12,6 +12,7 @@ import '../../features/auth/auth.dart';
 import '../../features/matchmaking/matchmaking.dart';
 import '../../features/social/social.dart';
 import '../../features/lobby/presentation/screens/join_room_screen.dart';
+import '../../features/admin/presentation/screens/admin_screen.dart';
 
 class AppRouter {
   static const String splash = '/splash';
@@ -27,6 +28,7 @@ class AppRouter {
   static const String session = '/session';
   static const String botSettings = '/bot_settings';
   static const String matchmaking = '/matchmaking';
+  static const String admin = '/admin';
 
   static Map<String, WidgetBuilder> get routes => {
     splash: (context) => const SplashScreen(),
@@ -55,6 +57,7 @@ class AppRouter {
     joinRoom: (context) => const JoinRoomScreen(),
     botSettings: (context) => const BotSettingsScreen(),
     matchmaking: (context) => const MatchmakingScreen(),
+    admin: (context) => const AdminScreen(),
     '/leaderboard': (context) => const LeaderboardScreen(),
     '/friends': (context) => const FriendsScreen(),
   };

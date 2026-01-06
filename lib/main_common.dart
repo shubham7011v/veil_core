@@ -11,6 +11,7 @@ import 'features/auth/auth.dart';
 import 'features/profile/profile.dart';
 import 'core/di/service_locator.dart' as di;
 import 'core/navigation/app_router.dart';
+import 'core/config/remote_config_service.dart';
 
 import 'package:flutter_native_splash/flutter_native_splash.dart';
 
@@ -28,6 +29,9 @@ Future<void> mainCommon(AppConfig config) async {
       : dev.DefaultFirebaseOptions.currentPlatform;
 
   await Firebase.initializeApp(options: options);
+
+  // Initialize Remote Config Service
+  await RemoteConfigService.instance.initialize();
 
   // Activate App Check
   await FirebaseAppCheck.instance.activate(

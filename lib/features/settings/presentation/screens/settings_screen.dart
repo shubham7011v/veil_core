@@ -4,8 +4,10 @@ import '../../../../core/theme/colors.dart';
 import '../../../../core/theme/bloc/theme_bloc.dart';
 import '../../../../core/theme/bloc/theme_state.dart';
 import '../../../../core/theme/bloc/theme_event.dart';
+import '../../../../core/config/app_config.dart';
 import '../../../../core/constants/dimens.dart';
 import '../../../auth/auth.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 
 class SettingsScreen extends StatefulWidget {
   final VoidCallback? onBack;
@@ -296,6 +298,17 @@ class _SettingsScreenState extends State<SettingsScreen> {
                         'Help & Support',
                         null,
                       ),
+                      if (FirebaseAuth.instance.currentUser?.uid ==
+                          AppConfig.instance.masterAdminId) ...[
+                        Divider(color: palette.divider, height: 1),
+                        _buildNavTile(
+                          palette,
+                          Icons.admin_panel_settings,
+                          'Admin Dashboard',
+                          null,
+                          onTap: () => Navigator.pushNamed(context, '/admin'),
+                        ),
+                      ],
                     ],
                   ),
                 ),
@@ -399,37 +412,41 @@ class _SettingsScreenState extends State<SettingsScreen> {
     AppColorPalette palette,
     IconData icon,
     String title,
-    String? trailingText,
-  ) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(
-        horizontal: AppDimens.paddingM,
-        vertical: 16,
-      ),
-      child: Row(
-        children: [
-          Container(
-            padding: const EdgeInsets.all(8),
-            decoration: BoxDecoration(
-              color: palette.surface,
-              shape: BoxShape.circle,
+    String? trailingText, {
+    VoidCallback? onTap,
+  }) {
+    return InkWell(
+      onTap: onTap,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(
+          horizontal: AppDimens.paddingM,
+          vertical: 16,
+        ),
+        child: Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                color: palette.surface,
+                shape: BoxShape.circle,
+              ),
+              child: Icon(icon, color: palette.textSecondary, size: 18),
             ),
-            child: Icon(icon, color: palette.textSecondary, size: 18),
-          ),
-          const SizedBox(width: AppDimens.paddingM),
-          Text(
-            title,
-            style: TextStyle(color: palette.textPrimary, fontSize: 16),
-          ),
-          const Spacer(),
-          if (trailingText != null)
+            const SizedBox(width: AppDimens.paddingM),
             Text(
-              trailingText,
-              style: TextStyle(color: palette.textSecondary, fontSize: 14),
+              title,
+              style: TextStyle(color: palette.textPrimary, fontSize: 16),
             ),
-          const SizedBox(width: 8),
-          Icon(Icons.chevron_right, color: palette.textTertiary, size: 20),
-        ],
+            const Spacer(),
+            if (trailingText != null)
+              Text(
+                trailingText,
+                style: TextStyle(color: palette.textSecondary, fontSize: 14),
+              ),
+            const SizedBox(width: 8),
+            Icon(Icons.chevron_right, color: palette.textTertiary, size: 20),
+          ],
+        ),
       ),
     );
   }
