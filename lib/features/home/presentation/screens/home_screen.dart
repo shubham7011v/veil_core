@@ -11,6 +11,7 @@ import '../../../collection/collection.dart';
 import '../../../settings/settings.dart';
 import '../widgets/royal_name_modal.dart';
 import '../widgets/home_top_bar.dart';
+import '../widgets/coming_soon_modal.dart';
 import '../../../../core/di/service_locator.dart';
 
 class HomeScreen extends StatefulWidget {
@@ -159,7 +160,7 @@ class _HomeScreenState extends State<HomeScreen> {
                                 context,
                                 'FRIENDS\nMATCH',
                                 Icons.people_outline,
-                                () {},
+                                () => _showComingSoonModal(context, palette),
                                 palette,
                               ),
                             ),
@@ -398,6 +399,19 @@ class _HomeScreenState extends State<HomeScreen> {
         ),
         BottomNavigationBarItem(icon: Icon(Icons.settings_outlined), label: ''),
       ],
+    );
+  }
+
+  void _showComingSoonModal(BuildContext context, AppColorPalette palette) {
+    showDialog(
+      context: context,
+      builder: (context) => ComingSoonModal(
+        featureName: 'Offline Hotspot Mode',
+        description:
+            'Challenge your friends in person! Create a local hotspot and play together without an internet connection.',
+        icon: Icons.wifi_tethering_rounded,
+        palette: palette,
+      ),
     );
   }
 
