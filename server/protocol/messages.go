@@ -61,6 +61,7 @@ type BaseMessage struct {
 
 type AuthMessage struct {
 	Token string `json:"token"`
+	Name  string `json:"name,omitempty"`
 }
 
 type UpdateNameMessage struct {

@@ -1,5 +1,5 @@
 import 'package:equatable/equatable.dart';
-import '../../../../core/data/data.dart';
+import '../../../auth/domain/models/user_stats.dart';
 
 abstract class ProfileState extends Equatable {
   const ProfileState();
@@ -13,7 +13,7 @@ class ProfileInitial extends ProfileState {}
 class ProfileLoading extends ProfileState {}
 
 class ProfileLoaded extends ProfileState {
-  final UserModel user;
+  final UserStats user;
   const ProfileLoaded(this.user);
 
   @override

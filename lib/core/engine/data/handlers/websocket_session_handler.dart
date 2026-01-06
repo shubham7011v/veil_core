@@ -129,12 +129,19 @@ class WebSocketSessionHandler
   Map<String, String> get pNames => _pNames;
 
   /// Connect to WebSocket server
-  Future<void> connect(String serverUrl, String firebaseToken) async {
+  Future<void> connect(
+    String serverUrl,
+    String firebaseToken, {
+    String? displayName,
+  }) async {
     _lastUrl = serverUrl;
-    await _attemptConnection(firebaseToken);
+    await _attemptConnection(firebaseToken, displayName: displayName);
   }
 
-  Future<void> _attemptConnection(String firebaseToken) async {
+  Future<void> _attemptConnection(
+    String firebaseToken, {
+    String? displayName,
+  }) async {
     if (_connectionStatus == ConnectionStatus.connecting) return;
 
     _updateConnectionStatus(
@@ -145,19 +152,19 @@ class WebSocketSessionHandler
 
     try {
       _channel = WebSocketChannel.connect(Uri.parse(_lastUrl!));
-      _setupMessageListener(firebaseToken);
+      _setupMessageListener(firebaseToken, displayName: displayName);
       _reconnectAttempts = 0; // Reset on success
     } catch (e) {
       debugPrint('Connection attempt failed: $e');
-      _handleConnectionFailure(firebaseToken);
+      _handleConnectionFailure(firebaseToken, displayName: displayName);
     }
   }
 
-  void _setupMessageListener(String firebaseToken) {
+  void _setupMessageListener(String firebaseToken, {String? displayName}) {
     // Send auth message
     _send({
       'type': 'AUTH',
-      'data': {'token': firebaseToken},
+      'data': {'token': firebaseToken, 'name': displayName},
     });
 
     // Listen for messages
@@ -165,20 +172,20 @@ class WebSocketSessionHandler
       _handleMessage,
       onError: (error) {
         debugPrint('WebSocket Error: $error');
-        _handleConnectionFailure(firebaseToken);
+        _handleConnectionFailure(firebaseToken, displayName: displayName);
       },
       onDone: () {
         debugPrint('WebSocket connection closed');
         if (_connectionStatus == ConnectionStatus.connected) {
           // Unexpected disconnect - try to reconnect
-          _handleConnectionFailure(firebaseToken);
+          _handleConnectionFailure(firebaseToken, displayName: displayName);
         }
       },
       cancelOnError: false,
     );
   }
 
-  void _handleConnectionFailure(String firebaseToken) {
+  void _handleConnectionFailure(String firebaseToken, {String? displayName}) {
     if (_reconnectAttempts < _maxReconnectAttempts) {
       _reconnectAttempts++;
       final delay =
@@ -190,7 +197,10 @@ class WebSocketSessionHandler
       );
 
       _reconnectTimer?.cancel();
-      _reconnectTimer = Timer(delay, () => _attemptConnection(firebaseToken));
+      _reconnectTimer = Timer(
+        delay,
+        () => _attemptConnection(firebaseToken, displayName: displayName),
+      );
 
       _updateConnectionStatus(ConnectionStatus.reconnecting);
     } else {
@@ -459,13 +469,6 @@ class WebSocketSessionHandler
   }
 
   // -- Social & Competitive Methods --
-
-  void updateNickname(String newName) {
-    _send({
-      'type': 'UPDATE_NAME',
-      'data': {'name': newName},
-    });
-  }
 
   void refillCoins() {
     _send({'type': 'REFILL_COINS'});

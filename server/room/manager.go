@@ -121,6 +121,10 @@ func (m *Manager) HandleMessage(c *Client, message []byte) {
 		}
 
 		userID := authData.Token
+		userName := authData.Name
+		if userName == "" {
+			userName = "Player " + userID[:4]
+		}
 		// Simplified mock detection
 		if len(userID) > 20 && userID[:5] == "mock_" {
 			userID = fmt.Sprintf("%s_%d", userID, time.Now().UnixNano()%10000)
@@ -129,7 +133,7 @@ func (m *Manager) HandleMessage(c *Client, message []byte) {
 		c.ID = userID
 
 		// Get Data from SQLite
-		stats, err := db.GetOrCreateUser(c.ID, "Player "+c.ID[:4])
+		stats, err := db.GetOrCreateUser(c.ID, userName)
 		if err != nil {
 			log.Printf("DB Error: %v", err)
 			stats = &db.UserStats{UserID: c.ID, Name: "Unknown", Rank: "Novice", Coins: 1000}

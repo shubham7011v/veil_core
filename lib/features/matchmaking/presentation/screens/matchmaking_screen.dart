@@ -64,8 +64,12 @@ class _MatchmakingScreenState extends State<MatchmakingScreen>
       final handler =
           di.sl.createSessionHandler(online: true) as WebSocketSessionHandler;
 
-      // Use controller text
-      await handler.connect(_urlController.text, token);
+      // Use controller text and pass user's current display name
+      await handler.connect(
+        _urlController.text,
+        token,
+        displayName: user?.displayName,
+      );
 
       _handler = handler; // Store handler for manual start
 

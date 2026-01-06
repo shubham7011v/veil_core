@@ -1,85 +1,27 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
-import 'package:shared_preferences/shared_preferences.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import '../../../../core/theme/colors.dart';
 import '../../../../core/di/service_locator.dart';
-import '../../../../core/data/models/user_model.dart';
+import '../../../auth/domain/models/user_stats.dart';
 import '../../../../core/models/system_status.dart';
-import '../../../auth/auth.dart';
 
-class HomeTopBar extends StatefulWidget {
-  final UserModel? user;
+class HomeTopBar extends StatelessWidget {
+  final User? user;
   final UserStats? stats;
   final AppColorPalette palette;
 
-  const HomeTopBar({
-    super.key,
-    required this.user,
-    required this.stats,
-    required this.palette,
-  });
-
-  @override
-  State<HomeTopBar> createState() => _HomeTopBarState();
-}
-
-class _HomeTopBarState extends State<HomeTopBar> {
-  bool _showNickName = false;
-
-  @override
-  void initState() {
-    super.initState();
-    _loadNamePreference();
-  }
-
-  Future<void> _loadNamePreference() async {
-    final prefs = await SharedPreferences.getInstance();
-    if (mounted) {
-      setState(() {
-        _showNickName = prefs.getBool('show_nickname') ?? false;
-      });
-    }
-  }
-
-  Future<void> _toggleNameDisplay() async {
-    final prefs = await SharedPreferences.getInstance();
-    final newValue = !_showNickName;
-    await prefs.setBool('show_nickname', newValue);
-    if (mounted) {
-      setState(() {
-        _showNickName = newValue;
-      });
-    }
-  }
+  const HomeTopBar({super.key, this.user, this.stats, required this.palette});
 
   @override
   Widget build(BuildContext context) {
     final String greeting = sl.greetingService.getTimeBasedGreeting();
-
-    // Logic for toggle:
-    // If _showNickName is true, try to show the Go stats name (Nick Name).
-    // If false, show the Firebase user name (FirstName).
-    // Fallback if either is missing.
-    String displayName;
-
-    if (_showNickName) {
-      // Go Nickname
-      displayName =
-          widget.stats?.name ?? widget.user?.firstName ?? 'Mysterious Player';
-      // If stats name is empty or default 'Unknown', maybe fallback?
-      // UserStats defaults name to 'Unknown' if missing.
-      if (displayName == 'Unknown') {
-        displayName = widget.user?.firstName ?? 'Mysterious Player';
-      }
-    } else {
-      // Firebase User Name
-      displayName =
-          widget.user?.firstName ?? widget.stats?.name ?? 'Mysterious Player';
-    }
-
-    final String photoUrl = widget.user?.photoUrl ?? '';
-    final String rank = widget.stats?.rank ?? widget.user?.rank ?? 'Novice';
-    final int coins = widget.stats?.coins ?? widget.user?.coins ?? 1000;
+    final String rawName =
+        user?.displayName ?? stats?.name ?? 'Mysterious Player';
+    final String displayName = rawName.split(' ').first;
+    final String photoUrl = user?.photoURL ?? '';
+    final String rank = stats?.rank ?? 'Novice';
+    final int coins = stats?.coins ?? 1000;
 
     return Container(
       padding: const EdgeInsets.all(24),
@@ -93,13 +35,13 @@ class _HomeTopBarState extends State<HomeTopBar> {
               Text(
                 'BLUFF',
                 style: GoogleFonts.cinzel(
-                  color: widget.palette.primary,
+                  color: palette.primary,
                   fontSize: 30,
                   fontWeight: FontWeight.w900,
                   letterSpacing: 5,
                 ),
               ),
-              _buildSystemStatusCapsule(),
+              _buildSystemStatusCapsule(context),
             ],
           ),
           const SizedBox(height: 12),
@@ -110,62 +52,24 @@ class _HomeTopBarState extends State<HomeTopBar> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    InkWell(
-                      onTap: () {
-                        _toggleNameDisplay();
-                        final mode = !_showNickName ? 'Nickname' : 'First Name';
-                        ScaffoldMessenger.of(context).hideCurrentSnackBar();
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          SnackBar(
-                            content: Text('Switched to $mode mode'),
-                            duration: const Duration(seconds: 1),
-                          ),
-                        );
-                      },
-                      onLongPress: () {
-                        if (_showNickName) {
-                          _showEditNicknameDialog(context);
-                        } else {
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            const SnackBar(
-                              content: Text(
-                                'Switch to Nickname (tap) to edit it.',
-                              ),
-                            ),
-                          );
-                        }
-                      },
-                      borderRadius: BorderRadius.circular(8),
-                      child: Padding(
-                        padding: const EdgeInsets.symmetric(
-                          vertical: 4,
-                          horizontal: 2,
-                        ),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              greeting.toUpperCase(),
-                              style: GoogleFonts.inter(
-                                color: widget.palette.textTertiary,
-                                fontSize: 14,
-                                fontWeight: FontWeight.w600,
-                                letterSpacing: 1.5,
-                              ),
-                            ),
-                            Text(
-                              displayName,
-                              maxLines: 2,
-                              overflow: TextOverflow.ellipsis,
-                              style: GoogleFonts.cinzel(
-                                color: widget.palette.primary,
-                                fontSize: 24,
-                                fontWeight: FontWeight.bold,
-                                letterSpacing: 1,
-                              ),
-                            ),
-                          ],
-                        ),
+                    Text(
+                      greeting.toUpperCase(),
+                      style: GoogleFonts.inter(
+                        color: palette.textTertiary,
+                        fontSize: 14,
+                        fontWeight: FontWeight.w600,
+                        letterSpacing: 1.5,
+                      ),
+                    ),
+                    Text(
+                      displayName,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: GoogleFonts.cinzel(
+                        color: palette.primary,
+                        fontSize: 24,
+                        fontWeight: FontWeight.bold,
+                        letterSpacing: 1,
                       ),
                     ),
                   ],
@@ -174,16 +78,12 @@ class _HomeTopBarState extends State<HomeTopBar> {
               const SizedBox(width: 16),
               CircleAvatar(
                 radius: 30,
-                backgroundColor: widget.palette.primary.withValues(alpha: 0.1),
+                backgroundColor: palette.primary.withValues(alpha: 0.1),
                 backgroundImage: photoUrl.isNotEmpty
                     ? NetworkImage(photoUrl)
                     : null,
                 child: photoUrl.isEmpty
-                    ? Icon(
-                        Icons.person,
-                        size: 20,
-                        color: widget.palette.primary,
-                      )
+                    ? Icon(Icons.person, size: 20, color: palette.primary)
                     : null,
               ),
             ],
@@ -192,17 +92,13 @@ class _HomeTopBarState extends State<HomeTopBar> {
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
+              _buildInfoChip(context, 'Rank', rank, palette.primary, palette),
               _buildInfoChip(
-                'Rank',
-                rank,
-                widget.palette.primary,
-                widget.palette,
-              ),
-              _buildInfoChip(
+                context,
                 'Coins',
                 coins.toString(),
-                widget.palette.primary,
-                widget.palette,
+                palette.primary,
+                palette,
               ),
             ],
           ),
@@ -212,6 +108,7 @@ class _HomeTopBarState extends State<HomeTopBar> {
   }
 
   Widget _buildInfoChip(
+    BuildContext context,
     String label,
     String value,
     Color color,
@@ -277,67 +174,7 @@ class _HomeTopBarState extends State<HomeTopBar> {
     );
   }
 
-  void _showEditNicknameDialog(BuildContext context) {
-    final TextEditingController controller = TextEditingController.fromValue(
-      TextEditingValue(
-        text: widget.stats?.name ?? '',
-        selection: TextSelection.collapsed(
-          offset: widget.stats?.name.length ?? 0,
-        ),
-      ),
-    );
-
-    showDialog(
-      context: context,
-      builder: (context) {
-        return AlertDialog(
-          backgroundColor: widget.palette.surface,
-          title: Text(
-            'Edit Nickname',
-            style: GoogleFonts.cinzel(color: widget.palette.primary),
-          ),
-          content: TextField(
-            controller: controller,
-            style: GoogleFonts.inter(color: widget.palette.textPrimary),
-            decoration: InputDecoration(
-              labelText: 'New Nickname',
-              labelStyle: TextStyle(color: widget.palette.textSecondary),
-              enabledBorder: UnderlineInputBorder(
-                borderSide: BorderSide(color: widget.palette.primary),
-              ),
-              focusedBorder: UnderlineInputBorder(
-                borderSide: BorderSide(color: widget.palette.primary),
-              ),
-            ),
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(context),
-              child: Text(
-                'Cancel',
-                style: TextStyle(color: widget.palette.textSecondary),
-              ),
-            ),
-            TextButton(
-              onPressed: () {
-                final newName = controller.text.trim();
-                if (newName.isNotEmpty) {
-                  sl.webSocketSessionHandler.updateNickname(newName);
-                  Navigator.pop(context);
-                }
-              },
-              child: Text(
-                'Save',
-                style: TextStyle(color: widget.palette.primary),
-              ),
-            ),
-          ],
-        );
-      },
-    );
-  }
-
-  Widget _buildSystemStatusCapsule() {
+  Widget _buildSystemStatusCapsule(BuildContext context) {
     return StreamBuilder<SystemStatus>(
       stream: sl.systemStatusService.statusStream,
       initialData: sl.systemStatusService.currentStatus,
@@ -348,7 +185,7 @@ class _HomeTopBarState extends State<HomeTopBar> {
           child: Container(
             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
             decoration: BoxDecoration(
-              color: widget.palette.surfaceLight.withValues(alpha: 0.3),
+              color: palette.surfaceLight.withValues(alpha: 0.3),
               borderRadius: BorderRadius.circular(20),
               border: Border.all(
                 color: status.statusColor.withValues(alpha: 0.3),
@@ -376,14 +213,14 @@ class _HomeTopBarState extends State<HomeTopBar> {
                 Text(
                   status.label.toUpperCase(),
                   style: GoogleFonts.inter(
-                    color: widget.palette.textSecondary,
+                    color: palette.textSecondary,
                     fontSize: 9,
                     fontWeight: FontWeight.bold,
                     letterSpacing: 0.5,
                   ),
                 ),
                 const SizedBox(width: 12),
-                Container(height: 10, width: 1, color: widget.palette.divider),
+                Container(height: 10, width: 1, color: palette.divider),
                 const SizedBox(width: 8),
                 Icon(status.icon, size: 12, color: status.statusColor),
               ],
@@ -402,7 +239,7 @@ class _HomeTopBarState extends State<HomeTopBar> {
         return Container(
           padding: const EdgeInsets.all(24),
           decoration: BoxDecoration(
-            color: widget.palette.surface,
+            color: palette.surface,
             borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
           ),
           child: Column(
@@ -427,7 +264,7 @@ class _HomeTopBarState extends State<HomeTopBar> {
               Text(
                 status.description,
                 style: GoogleFonts.inter(
-                  color: widget.palette.textPrimary,
+                  color: palette.textPrimary,
                   fontSize: 14,
                   height: 1.5,
                 ),
@@ -438,10 +275,9 @@ class _HomeTopBarState extends State<HomeTopBar> {
                 child: ElevatedButton(
                   onPressed: () {
                     Navigator.pop(context);
-                    // Refresh and retry logic
                   },
                   style: ElevatedButton.styleFrom(
-                    backgroundColor: widget.palette.primary,
+                    backgroundColor: palette.primary,
                     foregroundColor: Colors.black,
                     padding: const EdgeInsets.symmetric(vertical: 16),
                     shape: RoundedRectangleBorder(

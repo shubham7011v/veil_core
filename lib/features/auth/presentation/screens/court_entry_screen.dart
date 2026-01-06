@@ -89,7 +89,7 @@ class _CourtEntryScreenState extends State<CourtEntryScreen>
                 ),
                 const SizedBox(height: 60),
                 Text(
-                  'ENTERING THE ROYAL COURT',
+                  'ENTERING THE LOBBY',
                   style: GoogleFonts.cinzel(
                     color: const Color(0xFFE5A043).withValues(alpha: 0.9),
                     fontSize: 20,

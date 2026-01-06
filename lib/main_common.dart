@@ -66,12 +66,7 @@ class VeilApp extends StatelessWidget {
             return authBloc;
           },
         ),
-        BlocProvider(
-          create: (context) => ProfileBloc(
-            userRepository: di.sl.userRepository,
-            authRepository: di.sl.authRepository,
-          ),
-        ),
+        BlocProvider(create: (context) => ProfileBloc()),
         BlocProvider(create: (_) => SessionBloc()),
       ],
       child: BlocBuilder<ThemeBloc, ThemeState>(

@@ -27,7 +27,7 @@ class _DeckCollectionScreenState extends State<DeckCollectionScreen> {
           backgroundColor: palette.background,
           appBar: AppBar(
             title: Text(
-              'Royal Deck Collection',
+              'Elite Deck Collection',
               style: TextStyle(
                 fontWeight: FontWeight.bold,
                 fontSize: 16,
@@ -82,7 +82,7 @@ class _DeckCollectionScreenState extends State<DeckCollectionScreen> {
                       ),
                       const SizedBox(height: 8),
                       Text(
-                        'Semi-realistic Indian royalty theme with premium finishes.',
+                        'Premium deck collection with high-fidelity finishes.',
                         textAlign: TextAlign.center,
                         style: TextStyle(
                           color: palette.textSecondary,
@@ -212,7 +212,7 @@ class _DeckCollectionScreenState extends State<DeckCollectionScreen> {
             children: [
               Expanded(
                 child: _buildBackCard(
-                  'Royal Mandala',
+                  'Classic Mandala',
                   'Standard',
                   false,
                   palette,

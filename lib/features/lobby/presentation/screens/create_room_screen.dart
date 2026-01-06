@@ -22,7 +22,7 @@ class CreateRoomScreen extends StatefulWidget {
 }
 
 class _CreateRoomScreenState extends State<CreateRoomScreen> {
-  final _nameController = TextEditingController(text: 'Royal Lounge #88');
+  final _nameController = TextEditingController(text: 'Game Lobby #88');
   final _passwordController = TextEditingController();
 
   int _selectedPlayerCount = 5;
@@ -76,6 +76,7 @@ class _CreateRoomScreenState extends State<CreateRoomScreen> {
       await handler.connect(
         AppConfig.instance.serverUrl,
         token!,
+        displayName: user?.displayName,
       ); // 3. Update Bloc
       if (!mounted) return;
       context.read<SessionBloc>().add(SessionHandlerSwapped(handler));

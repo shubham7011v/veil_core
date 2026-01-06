@@ -9,7 +9,6 @@ import '../../../profile/profile.dart';
 import '../../../social/social.dart';
 import '../../../collection/collection.dart';
 import '../../../settings/settings.dart';
-import '../widgets/royal_name_modal.dart';
 import '../widgets/home_top_bar.dart';
 import '../widgets/coming_soon_modal.dart';
 
@@ -40,154 +39,133 @@ class _HomeScreenState extends State<HomeScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return BlocListener<ProfileBloc, ProfileState>(
-      listener: (context, state) {
-        if (state is ProfileLoaded && !state.user.isNameSet) {
-          _showRoyalNameModal(context);
-        }
-      },
-      child: BlocBuilder<ThemeBloc, ThemeState>(
-        builder: (context, themeState) {
-          final palette = AppColors.getPalette(themeState.mode);
+    return BlocBuilder<ThemeBloc, ThemeState>(
+      builder: (context, themeState) {
+        final palette = AppColors.getPalette(themeState.mode);
 
-          return PopScope(
-            canPop: _selectedIndex == 0,
-            onPopInvokedWithResult: (didPop, result) {
-              if (didPop) return;
-              _goHome();
-            },
-            child: Scaffold(
-              backgroundColor: palette.background,
-              body: SafeArea(
-                child: IndexedStack(
-                  index: _selectedIndex,
-                  children: [
-                    _buildHomeDashboard(palette),
-                    FriendsScreen(onBack: _goHome),
-                    LeaderboardScreen(onBack: _goHome),
-                    DeckCollectionScreen(onBack: _goHome),
-                    SettingsScreen(onBack: _goHome),
-                  ],
-                ),
+        return PopScope(
+          canPop: _selectedIndex == 0,
+          onPopInvokedWithResult: (didPop, result) {
+            if (didPop) return;
+            _goHome();
+          },
+          child: Scaffold(
+            backgroundColor: palette.background,
+            body: SafeArea(
+              child: IndexedStack(
+                index: _selectedIndex,
+                children: [
+                  _buildHomeDashboard(palette),
+                  FriendsScreen(onBack: _goHome),
+                  LeaderboardScreen(onBack: _goHome),
+                  DeckCollectionScreen(onBack: _goHome),
+                  SettingsScreen(onBack: _goHome),
+                ],
               ),
-              bottomNavigationBar: _buildBottomNav(palette),
             ),
-          );
-        },
-      ),
+            bottomNavigationBar: _buildBottomNav(palette),
+          ),
+        );
+      },
     );
   }
 
   Widget _buildHomeDashboard(AppColorPalette palette) {
-    return BlocBuilder<ProfileBloc, ProfileState>(
-      builder: (context, state) {
-        if (state is ProfileLoading) {
-          return Center(
-            child: CircularProgressIndicator(color: palette.primary),
-          );
-        }
+    return BlocBuilder<AuthBloc, AuthState>(
+      builder: (context, authState) {
+        final stats = (authState is Authenticated) ? authState.stats : null;
+        final user = (authState is Authenticated) ? authState.user : null;
 
-        final user = (state is ProfileLoaded) ? state.user : null;
-
-        return BlocBuilder<AuthBloc, AuthState>(
-          builder: (context, authState) {
-            final stats = (authState is Authenticated) ? authState.stats : null;
-
-            return Column(
-              children: [
-                HomeTopBar(user: user, stats: stats, palette: palette),
-                Expanded(
-                  child: SingleChildScrollView(
-                    padding: const EdgeInsets.symmetric(horizontal: 24),
-                    child: Column(
+        return Column(
+          children: [
+            HomeTopBar(user: user, stats: stats, palette: palette),
+            Expanded(
+              child: SingleChildScrollView(
+                padding: const EdgeInsets.symmetric(horizontal: 24),
+                child: Column(
+                  children: [
+                    const SizedBox(height: 24),
+                    // Stats Grid
+                    Row(
                       children: [
-                        const SizedBox(height: 24),
-                        // Stats Grid (Embedded from Profile)
-                        Row(
-                          children: [
-                            Expanded(
-                              child: _buildStatItem(
-                                'Wins',
-                                '${stats?.wins ?? 0}',
-                                const Color(0xFF4CAF50),
-                                palette,
-                              ),
-                            ),
-                            const SizedBox(width: 16),
-                            Expanded(
-                              child: _buildStatItem(
-                                'Losses',
-                                '${stats?.losses ?? 0}',
-                                palette.danger, // Use theme danger color
-                                palette,
-                              ),
-                            ),
-                          ],
+                        Expanded(
+                          child: _buildStatItem(
+                            'Wins',
+                            '${stats?.wins ?? 0}',
+                            const Color(0xFF4CAF50),
+                            palette,
+                          ),
                         ),
-                        const SizedBox(height: 16),
-                        Row(
-                          children: [
-                            Expanded(
-                              child: _buildStatItem(
-                                'Total Games',
-                                '${stats?.gamesPlayed ?? 0}',
-                                Colors.blueAccent,
-                                palette,
-                              ),
-                            ),
-                            const SizedBox(width: 16),
-                            Expanded(
-                              child: _buildStatItem(
-                                'Win Rate',
-                                '${stats?.winRate.toStringAsFixed(1) ?? '0.0'}%',
-                                palette.primary,
-                                palette,
-                              ),
-                            ),
-                          ],
+                        const SizedBox(width: 16),
+                        Expanded(
+                          child: _buildStatItem(
+                            'Losses',
+                            '${stats?.losses ?? 0}',
+                            palette.danger,
+                            palette,
+                          ),
                         ),
-
-                        const SizedBox(height: 40),
-                        _buildPlayOnlineCTA(context, palette),
-                        const SizedBox(height: 24),
-                        _buildPrivateRoomButton(context, palette),
-                        const SizedBox(height: 48),
-                        Row(
-                          children: [
-                            Expanded(
-                              child: _buildMatchCard(
-                                context,
-                                'FRIENDS\nMATCH',
-                                Icons.people_outline,
-                                () => _showComingSoonModal(context, palette),
-                                palette,
-                              ),
-                            ),
-                            const SizedBox(width: 16),
-                            Expanded(
-                              child: _buildMatchCard(
-                                context,
-                                'BOT\nMATCH',
-                                Icons.smart_toy_outlined,
-                                () => Navigator.pushNamed(
-                                  context,
-                                  '/bot_settings',
-                                ),
-                                palette,
-                              ),
-                            ),
-                          ],
-                        ),
-                        const SizedBox(height: 32),
-                        _buildDailyChallenge(palette),
-                        const SizedBox(height: 32),
                       ],
                     ),
-                  ),
+                    const SizedBox(height: 16),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: _buildStatItem(
+                            'Total Games',
+                            '${stats?.gamesPlayed ?? 0}',
+                            Colors.blueAccent,
+                            palette,
+                          ),
+                        ),
+                        const SizedBox(width: 16),
+                        Expanded(
+                          child: _buildStatItem(
+                            'Win Rate',
+                            '${stats?.winRate.toStringAsFixed(1) ?? '0.0'}%',
+                            palette.primary,
+                            palette,
+                          ),
+                        ),
+                      ],
+                    ),
+
+                    const SizedBox(height: 40),
+                    _buildPlayOnlineCTA(context, palette),
+                    const SizedBox(height: 24),
+                    _buildPrivateRoomButton(context, palette),
+                    const SizedBox(height: 48),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: _buildMatchCard(
+                            context,
+                            'FRIENDS\nMATCH',
+                            Icons.people_outline,
+                            () => _showComingSoonModal(context, palette),
+                            palette,
+                          ),
+                        ),
+                        const SizedBox(width: 16),
+                        Expanded(
+                          child: _buildMatchCard(
+                            context,
+                            'BOT\nMATCH',
+                            Icons.smart_toy_outlined,
+                            () => Navigator.pushNamed(context, '/bot_settings'),
+                            palette,
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 32),
+                    _buildDailyChallenge(palette),
+                    const SizedBox(height: 32),
+                  ],
                 ),
-              ],
-            );
-          },
+              ),
+            ),
+          ],
         );
       },
     );
@@ -202,7 +180,7 @@ class _HomeScreenState extends State<HomeScreen> {
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: palette.surfaceLight, // Use theme surface
+        color: palette.surfaceLight,
         borderRadius: BorderRadius.circular(16),
         border: Border.all(color: palette.divider),
       ),
@@ -262,7 +240,7 @@ class _HomeScreenState extends State<HomeScreen> {
             child: Text(
               'PLAY ONLINE',
               style: GoogleFonts.cinzel(
-                color: Colors.black, // Keep black text on high contrast primary
+                color: Colors.black,
                 fontSize: 24,
                 fontWeight: FontWeight.bold,
                 letterSpacing: 4,
@@ -452,14 +430,6 @@ class _HomeScreenState extends State<HomeScreen> {
           {'icon': Icons.emoji_events_rounded, 'text': 'Exclusive Daily Loot'},
         ],
       ),
-    );
-  }
-
-  void _showRoyalNameModal(BuildContext context) {
-    showDialog(
-      context: context,
-      barrierDismissible: false,
-      builder: (context) => const RoyalNameModal(),
     );
   }
 }

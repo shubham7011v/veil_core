@@ -339,6 +339,6 @@ func CalculateRank(wins int) string {
 	case wins < 200:
 		return "Master"
 	default:
-		return "Royale"
+		return "Legend"
 	}
 }
