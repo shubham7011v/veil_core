@@ -4,6 +4,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../../../../core/theme/colors.dart';
 import '../../../../core/di/service_locator.dart';
 import '../../../../core/data/models/user_model.dart';
+import '../../../../core/models/system_status.dart';
 import '../../../auth/auth.dart';
 
 class HomeTopBar extends StatefulWidget {
@@ -87,22 +88,40 @@ class _HomeTopBarState extends State<HomeTopBar> {
         children: [
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            crossAxisAlignment: CrossAxisAlignment.center,
+            children: [
+              Text(
+                'BLUFF',
+                style: GoogleFonts.cinzel(
+                  color: widget.palette.primary,
+                  fontSize: 30,
+                  fontWeight: FontWeight.w900,
+                  letterSpacing: 5,
+                ),
+              ),
+              _buildSystemStatusCapsule(),
+            ],
+          ),
+          const SizedBox(height: 12),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(
-                      greeting.toUpperCase(),
-                      style: GoogleFonts.inter(
-                        color: widget.palette.textTertiary,
-                        fontSize: 14,
-                        fontWeight: FontWeight.w600,
-                        letterSpacing: 1.5,
-                      ),
-                    ),
-                    GestureDetector(
-                      onTap: _toggleNameDisplay,
+                    InkWell(
+                      onTap: () {
+                        _toggleNameDisplay();
+                        final mode = !_showNickName ? 'Nickname' : 'First Name';
+                        ScaffoldMessenger.of(context).hideCurrentSnackBar();
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(
+                            content: Text('Switched to $mode mode'),
+                            duration: const Duration(seconds: 1),
+                          ),
+                        );
+                      },
                       onLongPress: () {
                         if (_showNickName) {
                           _showEditNicknameDialog(context);
@@ -116,15 +135,36 @@ class _HomeTopBarState extends State<HomeTopBar> {
                           );
                         }
                       },
-                      child: Text(
-                        displayName,
-                        maxLines: 2,
-                        overflow: TextOverflow.ellipsis,
-                        style: GoogleFonts.cinzel(
-                          color: widget.palette.primary,
-                          fontSize: 24,
-                          fontWeight: FontWeight.bold,
-                          letterSpacing: 1,
+                      borderRadius: BorderRadius.circular(8),
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(
+                          vertical: 4,
+                          horizontal: 2,
+                        ),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              greeting.toUpperCase(),
+                              style: GoogleFonts.inter(
+                                color: widget.palette.textTertiary,
+                                fontSize: 14,
+                                fontWeight: FontWeight.w600,
+                                letterSpacing: 1.5,
+                              ),
+                            ),
+                            Text(
+                              displayName,
+                              maxLines: 2,
+                              overflow: TextOverflow.ellipsis,
+                              style: GoogleFonts.cinzel(
+                                color: widget.palette.primary,
+                                fontSize: 24,
+                                fontWeight: FontWeight.bold,
+                                letterSpacing: 1,
+                              ),
+                            ),
+                          ],
                         ),
                       ),
                     ),
@@ -292,6 +332,131 @@ class _HomeTopBarState extends State<HomeTopBar> {
               ),
             ),
           ],
+        );
+      },
+    );
+  }
+
+  Widget _buildSystemStatusCapsule() {
+    return StreamBuilder<SystemStatus>(
+      stream: sl.systemStatusService.statusStream,
+      initialData: sl.systemStatusService.currentStatus,
+      builder: (context, snapshot) {
+        final status = snapshot.data ?? sl.systemStatusService.currentStatus;
+        return GestureDetector(
+          onTap: () => _showDiagnosticsModal(context, status),
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+            decoration: BoxDecoration(
+              color: widget.palette.surfaceLight.withValues(alpha: 0.3),
+              borderRadius: BorderRadius.circular(20),
+              border: Border.all(
+                color: status.statusColor.withValues(alpha: 0.3),
+                width: 1,
+              ),
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Container(
+                  width: 6,
+                  height: 6,
+                  decoration: BoxDecoration(
+                    color: status.statusColor,
+                    shape: BoxShape.circle,
+                    boxShadow: [
+                      BoxShadow(
+                        color: status.statusColor.withValues(alpha: 0.5),
+                        blurRadius: 4,
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Text(
+                  status.label.toUpperCase(),
+                  style: GoogleFonts.inter(
+                    color: widget.palette.textSecondary,
+                    fontSize: 9,
+                    fontWeight: FontWeight.bold,
+                    letterSpacing: 0.5,
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Container(height: 10, width: 1, color: widget.palette.divider),
+                const SizedBox(width: 8),
+                Icon(status.icon, size: 12, color: status.statusColor),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  void _showDiagnosticsModal(BuildContext context, SystemStatus status) {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.transparent,
+      builder: (context) {
+        return Container(
+          padding: const EdgeInsets.all(24),
+          decoration: BoxDecoration(
+            color: widget.palette.surface,
+            borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Icon(status.icon, color: status.statusColor, size: 28),
+                  const SizedBox(width: 16),
+                  Text(
+                    status.label.toUpperCase(),
+                    style: GoogleFonts.cinzel(
+                      color: status.statusColor,
+                      fontSize: 18,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 16),
+              Text(
+                status.description,
+                style: GoogleFonts.inter(
+                  color: widget.palette.textPrimary,
+                  fontSize: 14,
+                  height: 1.5,
+                ),
+              ),
+              const SizedBox(height: 32),
+              SizedBox(
+                width: double.infinity,
+                child: ElevatedButton(
+                  onPressed: () {
+                    Navigator.pop(context);
+                    // Refresh and retry logic
+                  },
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: widget.palette.primary,
+                    foregroundColor: Colors.black,
+                    padding: const EdgeInsets.symmetric(vertical: 16),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                  ),
+                  child: Text(
+                    status.actionLabel,
+                    style: GoogleFonts.inter(fontWeight: FontWeight.bold),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 16),
+            ],
+          ),
         );
       },
     );

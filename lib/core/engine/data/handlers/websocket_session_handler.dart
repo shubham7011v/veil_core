@@ -44,6 +44,8 @@ class WebSocketSessionHandler implements GameSessionHandler {
   Stream<ConnectionStatus> get connectionStatusStream =>
       _connectionStatusController.stream;
 
+  ConnectionStatus get connectionStatus => _connectionStatus;
+
   // Voice Callbacks & Managers
   Function(Map<String, dynamic> data)? _voiceCallback;
 
@@ -139,7 +141,6 @@ class WebSocketSessionHandler implements GameSessionHandler {
     try {
       _channel = WebSocketChannel.connect(Uri.parse(_lastUrl!));
       _setupMessageListener(firebaseToken);
-      _updateConnectionStatus(ConnectionStatus.connected);
       _reconnectAttempts = 0; // Reset on success
     } catch (e) {
       debugPrint('Connection attempt failed: $e');
@@ -212,6 +213,7 @@ class WebSocketSessionHandler implements GameSessionHandler {
     switch (type) {
       case 'AUTH_OK':
         debugPrint('Auth successful: ${msg['data']}');
+        _updateConnectionStatus(ConnectionStatus.connected);
 
         // Parse stats from AUTH_OK response
         final authData = msg['data'] as Map<String, dynamic>;
