@@ -12,4 +12,5 @@ enum SessionEventType {
   pileDiscarded,
   cardStaged,
   shuffling,
+  connectionFailed,
 }

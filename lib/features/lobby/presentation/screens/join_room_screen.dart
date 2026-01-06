@@ -10,6 +10,7 @@ import '../../../session/presentation/bloc/session_bloc.dart';
 import '../../../session/presentation/bloc/session_event.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import '../../../../core/engine/domain/models/room_event.dart';
+import '../../../../core/config/app_config.dart';
 
 class JoinRoomScreen extends StatefulWidget {
   const JoinRoomScreen({super.key});
@@ -47,12 +48,7 @@ class _JoinRoomScreenState extends State<JoinRoomScreen> {
       // 2. Connect
       final handler =
           di.sl.createSessionHandler(online: true) as WebSocketSessionHandler;
-      // TODO: Use real URL from config
-      await handler.connect(
-        'wss://rebelliously-unforgone-mandie.ngrok-free.dev/ws',
-        token!,
-      );
-
+      await handler.connect(AppConfig.instance.serverUrl, token!);
       // 3. Update Bloc
       if (!mounted) return;
       context.read<SessionBloc>().add(SessionHandlerSwapped(handler));

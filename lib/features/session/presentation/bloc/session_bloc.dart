@@ -26,6 +26,8 @@ class SessionBloc extends Bloc<SessionEvent, SessionBlocState> {
     on<HandlerSyncRequested>(_onHandlerSync);
     on<SessionResetRequested>(_onResetRequested);
     on<SessionHandlerSwapped>(_onHandlerSwapped);
+    on<SessionErrorOccurred>(_onErrorOccurred);
+    on<SessionErrorCleared>(_onErrorCleared);
 
     // Engine update handlers
     on<EngineStateUpdated>((event, emit) {
@@ -252,5 +254,19 @@ class SessionBloc extends Bloc<SessionEvent, SessionBlocState> {
     _eventSub?.cancel();
     _handler.dispose();
     return super.close();
+  }
+
+  void _onErrorOccurred(
+    SessionErrorOccurred event,
+    Emitter<SessionBlocState> emit,
+  ) {
+    emit(state.copyWith(error: event.error));
+  }
+
+  void _onErrorCleared(
+    SessionErrorCleared event,
+    Emitter<SessionBlocState> emit,
+  ) {
+    emit(state.copyWith(clearError: true));
   }
 }

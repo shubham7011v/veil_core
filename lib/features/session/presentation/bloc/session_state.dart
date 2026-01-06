@@ -24,6 +24,9 @@ class SessionBlocState extends Equatable {
   // -- Game History --
   final List<String> gameLog;
 
+  // -- Error State --
+  final engine.SessionError? error;
+
   const SessionBlocState({
     required this.engineState,
     required this.selectedUnitIds,
@@ -37,6 +40,7 @@ class SessionBlocState extends Equatable {
     this.lastEventTimestamp = 0,
     required this.pNames,
     required this.gameLog,
+    this.error,
   });
 
   factory SessionBlocState.initial() => SessionBlocState(
@@ -63,8 +67,10 @@ class SessionBlocState extends Equatable {
     int? lastEventTimestamp,
     Map<String, String>? pNames,
     List<String>? gameLog,
+    engine.SessionError? error,
     bool clearStagedRank = false,
     bool clearLastMove = false,
+    bool clearError = false,
   }) {
     return SessionBlocState(
       engineState: engineState ?? this.engineState,
@@ -79,6 +85,7 @@ class SessionBlocState extends Equatable {
       lastEventTimestamp: lastEventTimestamp ?? this.lastEventTimestamp,
       pNames: pNames ?? this.pNames,
       gameLog: gameLog ?? this.gameLog,
+      error: clearError ? null : (error ?? this.error),
     );
   }
 
@@ -120,5 +127,6 @@ class SessionBlocState extends Equatable {
     lastEventTimestamp,
     pNames,
     gameLog,
+    error,
   ];
 }

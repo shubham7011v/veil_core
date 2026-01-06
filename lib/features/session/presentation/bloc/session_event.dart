@@ -90,3 +90,16 @@ class EngineEventReceived extends SessionEvent {
 class HandlerSyncRequested extends SessionEvent {
   const HandlerSyncRequested();
 }
+
+// -- Error Events --
+class SessionErrorOccurred extends SessionEvent {
+  final engine.SessionError error;
+  const SessionErrorOccurred(this.error);
+
+  @override
+  List<Object?> get props => [error];
+}
+
+class SessionErrorCleared extends SessionEvent {
+  const SessionErrorCleared();
+}

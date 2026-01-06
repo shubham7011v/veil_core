@@ -1,6 +1,7 @@
 import 'package:equatable/equatable.dart';
 import 'participant.dart';
 import 'unit.dart';
+import 'session_error.dart';
 
 enum SessionPhase {
   lobby,
@@ -22,6 +23,7 @@ class SessionState extends Equatable {
   final int? turnTimerS;
 
   final bool isSpectator;
+  final SessionError? error;
 
   const SessionState({
     required this.roomId,
@@ -34,6 +36,7 @@ class SessionState extends Equatable {
     this.winnerId,
     this.turnTimerS,
     this.isSpectator = false,
+    this.error,
   });
 
   @override
@@ -48,6 +51,7 @@ class SessionState extends Equatable {
     winnerId,
     turnTimerS,
     isSpectator,
+    error,
   ];
 
   // Factory for initial/empty state
@@ -72,7 +76,9 @@ class SessionState extends Equatable {
     String? winnerId,
     int? turnTimerS,
     bool? isSpectator,
+    SessionError? error,
     bool clearTimer = false,
+    bool clearError = false,
   }) {
     return SessionState(
       roomId: roomId ?? this.roomId,
@@ -85,6 +91,7 @@ class SessionState extends Equatable {
       winnerId: winnerId ?? this.winnerId,
       turnTimerS: clearTimer ? null : (turnTimerS ?? this.turnTimerS),
       isSpectator: isSpectator ?? this.isSpectator,
+      error: clearError ? null : (error ?? this.error),
     );
   }
 }

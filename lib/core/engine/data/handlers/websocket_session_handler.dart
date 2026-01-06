@@ -4,7 +4,6 @@ import 'package:flutter/foundation.dart';
 import 'package:web_socket_channel/web_socket_channel.dart';
 import '../../domain/handlers/game_session_handler.dart';
 import '../../domain/models/session_state.dart';
-
 import '../../domain/models/session_enums.dart';
 import '../../domain/models/unit.dart';
 import '../../domain/models/participant.dart';
@@ -13,6 +12,14 @@ import '../../../../features/auth/domain/models/user_stats.dart';
 import '../../../../features/social/domain/models/friend_record.dart';
 import '../../domain/models/room_event.dart';
 import '../../../../features/voice/data/voice_audio_manager.dart';
+
+enum ConnectionStatus {
+  disconnected,
+  connecting,
+  connected,
+  reconnecting,
+  failed,
+}
 
 class WebSocketSessionHandler implements GameSessionHandler {
   WebSocketChannel? _channel;
@@ -23,6 +30,19 @@ class WebSocketSessionHandler implements GameSessionHandler {
   final _leaderboardController = StreamController<List<UserStats>>.broadcast();
   final _friendsController = StreamController<List<FriendRecord>>.broadcast();
   final _roomEventController = StreamController<RoomEvent>.broadcast();
+  final _connectionStatusController =
+      StreamController<ConnectionStatus>.broadcast();
+
+  // Connection state
+  ConnectionStatus _connectionStatus = ConnectionStatus.disconnected;
+  Timer? _reconnectTimer;
+  int _reconnectAttempts = 0;
+  static const _maxReconnectAttempts = 5;
+  static const _baseReconnectDelay = Duration(seconds: 2);
+  String? _lastUrl;
+
+  Stream<ConnectionStatus> get connectionStatusStream =>
+      _connectionStatusController.stream;
 
   // Voice Callbacks & Managers
   Function(Map<String, dynamic> data)? _voiceCallback;
@@ -103,29 +123,80 @@ class WebSocketSessionHandler implements GameSessionHandler {
 
   /// Connect to WebSocket server
   Future<void> connect(String serverUrl, String firebaseToken) async {
+    _lastUrl = serverUrl;
+    await _attemptConnection(firebaseToken);
+  }
+
+  Future<void> _attemptConnection(String firebaseToken) async {
+    if (_connectionStatus == ConnectionStatus.connecting) return;
+
+    _updateConnectionStatus(
+      _reconnectAttempts > 0
+          ? ConnectionStatus.reconnecting
+          : ConnectionStatus.connecting,
+    );
+
     try {
-      _channel = WebSocketChannel.connect(Uri.parse(serverUrl));
-
-      // Send auth message
-      _send({
-        'type': 'AUTH',
-        'data': {'token': firebaseToken},
-      });
-
-      // Listen for messages
-      _channel!.stream.listen(
-        _handleMessage,
-        onError: (error) {
-          debugPrint('WebSocket Error: $error');
-        },
-        onDone: () {
-          debugPrint('WebSocket connection closed');
-        },
-      );
+      _channel = WebSocketChannel.connect(Uri.parse(_lastUrl!));
+      _setupMessageListener(firebaseToken);
+      _updateConnectionStatus(ConnectionStatus.connected);
+      _reconnectAttempts = 0; // Reset on success
     } catch (e) {
-      debugPrint('Failed to connect to WebSocket: $e');
-      rethrow;
+      debugPrint('Connection attempt failed: $e');
+      _handleConnectionFailure(firebaseToken);
     }
+  }
+
+  void _setupMessageListener(String firebaseToken) {
+    // Send auth message
+    _send({
+      'type': 'AUTH',
+      'data': {'token': firebaseToken},
+    });
+
+    // Listen for messages
+    _channel!.stream.listen(
+      _handleMessage,
+      onError: (error) {
+        debugPrint('WebSocket Error: $error');
+        _handleConnectionFailure(firebaseToken);
+      },
+      onDone: () {
+        debugPrint('WebSocket connection closed');
+        if (_connectionStatus == ConnectionStatus.connected) {
+          // Unexpected disconnect - try to reconnect
+          _handleConnectionFailure(firebaseToken);
+        }
+      },
+      cancelOnError: false,
+    );
+  }
+
+  void _handleConnectionFailure(String firebaseToken) {
+    if (_reconnectAttempts < _maxReconnectAttempts) {
+      _reconnectAttempts++;
+      final delay =
+          _baseReconnectDelay *
+          (1 << (_reconnectAttempts - 1)); // Exponential backoff
+
+      debugPrint(
+        'Reconnecting in ${delay.inSeconds}s (attempt $_reconnectAttempts/$_maxReconnectAttempts)',
+      );
+
+      _reconnectTimer?.cancel();
+      _reconnectTimer = Timer(delay, () => _attemptConnection(firebaseToken));
+
+      _updateConnectionStatus(ConnectionStatus.reconnecting);
+    } else {
+      debugPrint('Max reconnection attempts reached');
+      _updateConnectionStatus(ConnectionStatus.failed);
+      _eventController.add(SessionEventType.connectionFailed);
+    }
+  }
+
+  void _updateConnectionStatus(ConnectionStatus status) {
+    _connectionStatus = status;
+    _connectionStatusController.add(status);
   }
 
   void _send(Map<String, dynamic> message) {
@@ -319,10 +390,12 @@ class WebSocketSessionHandler implements GameSessionHandler {
     _send({'type': 'VOICE_RAISE_HAND'});
   }
 
+  @override
   void sendVoiceSDP(Map<String, dynamic> data) {
     _send({'type': 'VOICE_SDP', 'data': data});
   }
 
+  @override
   void sendVoiceICE(Map<String, dynamic> data) {
     _send({'type': 'VOICE_ICE', 'data': data});
   }
@@ -449,13 +522,16 @@ class WebSocketSessionHandler implements GameSessionHandler {
   }
 
   @override
-  void dispose() {
-    _channel?.sink.close();
-    _stateController.close();
-    _eventController.close();
-    _statsController.close();
-    _leaderboardController.close();
-    _friendsController.close();
-    _roomEventController.close();
+  Future<void> dispose() async {
+    _reconnectTimer?.cancel();
+    await _channel?.sink.close();
+    await _connectionStatusController.close();
+    await _stateController.close();
+    await _eventController.close();
+    await _statsController.close();
+    await _leaderboardController.close();
+    await _friendsController.close();
+    await _roomEventController.close();
+    _voiceManager?.dispose();
   }
 }

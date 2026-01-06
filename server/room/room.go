@@ -92,7 +92,17 @@ func (r *Room) HandleAction(action GameAction) {
 func (r *Room) IsFull() bool {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
-	return len(r.game.Participants) >= r.maxPlayers
+
+	// Count non-spectator clients directly to avoid race conditions
+	// between client registration and participant creation
+	playerCount := 0
+	for client := range r.clients {
+		if !client.IsSpectator {
+			playerCount++
+		}
+	}
+
+	return playerCount >= r.maxPlayers
 }
 
 func (r *Room) IsPrivate() bool {
@@ -225,6 +235,29 @@ func (r *Room) processAction(action GameAction) {
 	client := action.Client
 	msg := action.Message
 
+	// 1. Validate client is in room
+	r.mu.RLock()
+	if !r.clients[client] {
+		r.mu.RUnlock()
+		log.Printf("Rejected action from non-member client %s in room %s", client.ID, r.ID)
+		return
+	}
+	r.mu.RUnlock()
+
+	// 2. Validate message type
+	if !isValidGameMessageType(msg.Type) {
+		log.Printf("Invalid message type %s from client %s", msg.Type, client.ID)
+		r.sendErrorToClient(client, "INVALID_MESSAGE", "Invalid message type")
+		return
+	}
+
+	// 3. Rate limiting check
+	if !client.canPerformAction() {
+		log.Printf("Rate limited client %s", client.ID)
+		r.sendErrorToClient(client, "RATE_LIMITED", "Too many actions")
+		return
+	}
+
 	var err error
 
 	switch msg.Type {
@@ -333,6 +366,32 @@ func (r *Room) processAction(action GameAction) {
 			// So internal helper should NOT lock.
 			r.broadcastStats()
 		}
+	}
+}
+
+func isValidGameMessageType(msgType string) bool {
+	validTypes := map[string]bool{
+		protocol.MsgTypePlayCards:        true,
+		protocol.MsgTypePass:             true,
+		protocol.MsgTypeChallenge:        true,
+		protocol.MsgTypeVoiceHandRaise:   true,
+		protocol.MsgTypeVoiceSDP:         true,
+		protocol.MsgTypeVoiceICE:         true,
+		protocol.MsgTypeStartGame:        true,
+		protocol.MsgTypeStartPrivateGame: true,
+	}
+	return validTypes[msgType]
+}
+
+func (r *Room) sendErrorToClient(client *Client, code, message string) {
+	errBytes, _ := json.Marshal(protocol.NewMessage(protocol.MsgTypeError, protocol.ErrorMessage{
+		Code:    code,
+		Message: message,
+	}))
+	select {
+	case client.Send <- errBytes:
+	default:
+		// Client channel full, skip
 	}
 }
 

@@ -2,6 +2,8 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:equatable/equatable.dart';
 import '../../../../core/engine/engine.dart';
 import '../../data/voice_audio_manager.dart';
+import '../../../../core/utils/app_logger.dart';
+import '../../domain/models/voice_error.dart';
 
 // -- Events --
 abstract class VoiceEvent extends Equatable {
@@ -29,6 +31,7 @@ class VoiceState extends Equatable {
   final bool isMyTurn;
   final int myQueuePosition; // -1 if not in queue
   final bool isMuted; // Local mute fallback
+  final VoiceError? error;
 
   const VoiceState({
     this.currentSpeakerId,
@@ -37,6 +40,7 @@ class VoiceState extends Equatable {
     this.isMyTurn = false,
     this.myQueuePosition = -1,
     this.isMuted = true,
+    this.error,
   });
 
   VoiceState copyWith({
@@ -46,6 +50,8 @@ class VoiceState extends Equatable {
     bool? isMyTurn,
     int? myQueuePosition,
     bool? isMuted,
+    VoiceError? error,
+    bool clearError = false,
   }) {
     return VoiceState(
       currentSpeakerId: currentSpeakerId ?? this.currentSpeakerId,
@@ -54,6 +60,7 @@ class VoiceState extends Equatable {
       isMyTurn: isMyTurn ?? this.isMyTurn,
       myQueuePosition: myQueuePosition ?? this.myQueuePosition,
       isMuted: isMuted ?? this.isMuted,
+      error: clearError ? null : (error ?? this.error),
     );
   }
 
@@ -65,6 +72,7 @@ class VoiceState extends Equatable {
     isMyTurn,
     myQueuePosition,
     isMuted,
+    error,
   ];
 }
 
@@ -72,6 +80,7 @@ class VoiceState extends Equatable {
 class VoiceBloc extends Bloc<VoiceEvent, VoiceState> {
   final String myUserId;
   final GameSessionHandler handler;
+  int _stateVersion = 0; // Track state version for synchronization
 
   VoiceBloc({required this.myUserId, required this.handler})
     : super(const VoiceState()) {
@@ -98,25 +107,45 @@ class VoiceBloc extends Bloc<VoiceEvent, VoiceState> {
     final data = event.data;
     final speakerId = data['currentSpeakerId'] as String?;
     final qList = (data['queue'] as List<dynamic>? ?? []).cast<String>();
-    final time = data['timeRemainingS'] as int? ?? 0;
+    final timeLeft = data['timeRemainingS'] as int? ?? 0;
+    final version = data['version'] as int? ?? 0;
 
-    final isMeSpeaking = speakerId == myUserId;
-    int myPos = -1;
-    for (int i = 0; i < qList.length; i++) {
-      if (qList[i] == myUserId) {
-        myPos = i;
-        break;
-      }
+    // Version tracking: only accept newer or equal versions
+    if (version < _stateVersion) {
+      // Ignore outdated state updates
+      return;
     }
+    _stateVersion = version;
+
+    // Validate speaker exists in current session (if handler has participant info)
+    // Note: We skip validation for now as we don't have synchronous access to session state
+    // This could be improved by maintaining a local cache of participants
+    if (speakerId != null &&
+        speakerId.isNotEmpty &&
+        speakerId != 'me' &&
+        speakerId != myUserId) {
+      // Log voice state update for monitoring
+      AppLogger.voiceEvent(
+        'Voice state updated',
+        data: {
+          'speakerId': speakerId,
+          'queueLength': qList.length,
+          'version': version,
+        },
+      );
+    }
+
+    final myPos = qList.indexOf(myUserId);
+    final isMeSpeaking = speakerId == myUserId;
 
     emit(
       state.copyWith(
         currentSpeakerId: speakerId,
         queue: qList,
-        timeRemainingS: time,
+        timeRemainingS: timeLeft,
         isMyTurn: isMeSpeaking,
         myQueuePosition: myPos,
-        isMuted: !isMeSpeaking, // Simplified: Auto-mute if not speaker
+        isMuted: !isMeSpeaking,
       ),
     );
   }

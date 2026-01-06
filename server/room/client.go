@@ -3,6 +3,7 @@ package room
 import (
 	"log"
 	"net/http"
+	"sync"
 	"time"
 
 	"github.com/gorilla/websocket"
@@ -28,6 +29,37 @@ type Client struct {
 	CurrentRoom *Room  // Pointer to room they are in, if any
 	IsBot       bool   // True if this is a server-side bot
 	IsSpectator bool   // True if joining as a watcher
+
+	// Rate limiting
+	lastActionTime time.Time
+	actionCount    int
+	mu             sync.Mutex
+}
+
+const (
+	maxActionsPerSecond = 10
+	rateLimitWindow     = time.Second
+)
+
+func (c *Client) canPerformAction() bool {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	now := time.Now()
+
+	// Reset counter if window expired
+	if now.Sub(c.lastActionTime) > rateLimitWindow {
+		c.actionCount = 0
+		c.lastActionTime = now
+	}
+
+	// Check limit
+	if c.actionCount >= maxActionsPerSecond {
+		return false
+	}
+
+	c.actionCount++
+	return true
 }
 
 // readPump pumps messages from the websocket connection to the hub.

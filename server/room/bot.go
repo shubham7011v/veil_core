@@ -104,7 +104,7 @@ func (b *Bot) decideMove() {
 	// Wait, we can't access Game state safely while it might be mutating.
 	// But deciding a move doesn't mutate.
 
-	g := room.Game
+	g := room.game
 	player := g.PlayerMap[b.Client.ID]
 	if player == nil {
 		return
@@ -199,20 +199,20 @@ func (b *Bot) decideMove() {
 			Data: data,
 		}
 
-		room.Actions <- GameAction{
+		room.HandleAction(GameAction{
 			Client:  b.Client,
 			Message: msg,
-		}
+		})
 
 	case "PASS":
 		msg := protocol.BaseMessage{
 			Type: protocol.MsgTypePass,
 			Data: []byte("null"),
 		}
-		room.Actions <- GameAction{
+		room.HandleAction(GameAction{
 			Client:  b.Client,
 			Message: msg,
-		}
+		})
 	}
 }
 

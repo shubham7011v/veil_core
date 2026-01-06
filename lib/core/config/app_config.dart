@@ -1,0 +1,160 @@
+import 'package:flutter/foundation.dart';
+
+/// Environment-based configuration management
+///
+/// Usage:
+/// 1. Set environment variables before running:
+///    flutter run --dart-define=ENV=production --dart-define=SERVER_URL=wss://your-server.com/ws
+///
+/// 2. Or use .env files with flutter_dotenv package
+///
+/// 3. Access config: AppConfig.instance.serverUrl
+class AppConfig {
+  static AppConfig? _instance;
+  static AppConfig get instance => _instance ??= AppConfig._();
+
+  AppConfig._() {
+    _loadConfig();
+  }
+
+  // Environment
+  late final String environment;
+  late final bool isProduction;
+  late final bool isDevelopment;
+
+  // Server Configuration
+  late final String serverUrl;
+  late final String apiBaseUrl;
+
+  // Reconnection Settings
+  late final int maxReconnectAttempts;
+  late final int reconnectBaseDelayMs;
+
+  // Game Settings
+  late final int defaultThinkingTimeS;
+  late final int defaultPlayerCount;
+  late final int maxPlayers;
+
+  // Voice Settings
+  late final int voiceTimeoutSeconds;
+  late final int voiceSampleRate;
+
+  // Rate Limiting
+  late final int maxActionsPerSecond;
+
+  // UI Settings
+  late final int animationDurationMs;
+  late final int cardDealDelayMs;
+
+  // Development
+  late final bool enableLogging;
+  late final bool enableDebugMode;
+
+  void _loadConfig() {
+    // Load environment
+    environment = const String.fromEnvironment(
+      'ENV',
+      defaultValue: 'development',
+    );
+    isProduction = environment == 'production';
+    isDevelopment = environment == 'development';
+
+    // Server Configuration
+    if (isProduction) {
+      serverUrl = const String.fromEnvironment(
+        'SERVER_URL',
+        defaultValue: 'wss://your-production-server.com/ws',
+      );
+      apiBaseUrl = const String.fromEnvironment(
+        'API_URL',
+        defaultValue: 'https://your-production-server.com/api',
+      );
+    } else {
+      serverUrl = const String.fromEnvironment(
+        'SERVER_URL',
+        defaultValue: 'ws://localhost:8080/ws',
+      );
+      apiBaseUrl = const String.fromEnvironment(
+        'API_URL',
+        defaultValue: 'http://localhost:8080/api',
+      );
+    }
+
+    // Reconnection Settings
+    maxReconnectAttempts = const int.fromEnvironment(
+      'MAX_RECONNECT_ATTEMPTS',
+      defaultValue: 5,
+    );
+    reconnectBaseDelayMs = const int.fromEnvironment(
+      'RECONNECT_BASE_DELAY_MS',
+      defaultValue: 2000,
+    );
+
+    // Game Settings
+    defaultThinkingTimeS = const int.fromEnvironment(
+      'DEFAULT_THINKING_TIME_S',
+      defaultValue: 10,
+    );
+    defaultPlayerCount = const int.fromEnvironment(
+      'DEFAULT_PLAYER_COUNT',
+      defaultValue: 5,
+    );
+    maxPlayers = const int.fromEnvironment('MAX_PLAYERS', defaultValue: 8);
+
+    // Voice Settings
+    voiceTimeoutSeconds = const int.fromEnvironment(
+      'VOICE_TIMEOUT_SECONDS',
+      defaultValue: 30,
+    );
+    voiceSampleRate = const int.fromEnvironment(
+      'VOICE_SAMPLE_RATE',
+      defaultValue: 48000,
+    );
+
+    // Rate Limiting
+    maxActionsPerSecond = const int.fromEnvironment(
+      'MAX_ACTIONS_PER_SECOND',
+      defaultValue: 10,
+    );
+
+    // UI Settings
+    animationDurationMs = const int.fromEnvironment(
+      'ANIMATION_DURATION_MS',
+      defaultValue: 300,
+    );
+    cardDealDelayMs = const int.fromEnvironment(
+      'CARD_DEAL_DELAY_MS',
+      defaultValue: 100,
+    );
+
+    // Development
+    enableLogging = const bool.fromEnvironment(
+      'ENABLE_LOGGING',
+      defaultValue: kDebugMode,
+    );
+    enableDebugMode = const bool.fromEnvironment(
+      'DEBUG',
+      defaultValue: kDebugMode,
+    );
+
+    if (enableLogging) {
+      _logConfig();
+    }
+  }
+
+  void _logConfig() {
+    debugPrint('=== AppConfig Loaded ===');
+    debugPrint('Environment: $environment');
+    debugPrint('Server URL: $serverUrl');
+    debugPrint('API Base URL: $apiBaseUrl');
+    debugPrint('Max Reconnect Attempts: $maxReconnectAttempts');
+    debugPrint('Debug Mode: $enableDebugMode');
+    debugPrint('=======================');
+  }
+
+  // Helper method to reload config (useful for testing)
+  static void reload() {
+    _instance = null;
+    _instance = AppConfig._();
+  }
+}
