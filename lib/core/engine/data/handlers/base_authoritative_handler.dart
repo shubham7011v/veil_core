@@ -11,11 +11,25 @@ import '../../domain/logic/game_rules.dart';
 /// Base class for any handler that manages a local/authoritative game state.
 /// This handles the "logic of the table" (pile, hands, turns, win conditions).
 abstract class BaseAuthoritativeHandler implements GameSessionHandler {
-  // Streams
-  final _stateController = StreamController<SessionState>.broadcast();
-  final _eventController = StreamController<SessionEventType>.broadcast();
+  // Streams - mutable so they can be recreated after dispose
+  StreamController<SessionState> _stateController =
+      StreamController<SessionState>.broadcast();
+  StreamController<SessionEventType> _eventController =
+      StreamController<SessionEventType>.broadcast();
+  bool _disposed = false;
   Timer? _turnTimer;
   int _currentTimerSeconds = 0;
+
+  /// Ensures stream controllers are open, recreating them if they were closed.
+  void _ensureControllersOpen() {
+    if (_disposed || _stateController.isClosed) {
+      _stateController = StreamController<SessionState>.broadcast();
+    }
+    if (_disposed || _eventController.isClosed) {
+      _eventController = StreamController<SessionEventType>.broadcast();
+    }
+    _disposed = false;
+  }
 
   @override
   Stream<SessionState> get sessionStateStream => _stateController.stream;
@@ -104,6 +118,9 @@ abstract class BaseAuthoritativeHandler implements GameSessionHandler {
 
   @override
   Future<void> startGame({int playerCount = 5, int thinkingTimeS = 10}) async {
+    // Recreate controllers if they were closed by a previous dispose()
+    _ensureControllersOpen();
+
     _potentialWinnerId = null;
     _gameLog.clear();
     _pile.clear();
@@ -175,7 +192,7 @@ abstract class BaseAuthoritativeHandler implements GameSessionHandler {
 
     // Phase 1.5: Shuffling (delayed to ensure UI is fully mounted and listening)
     Future.delayed(const Duration(milliseconds: 800), () {
-      _eventController.add(SessionEventType.shuffling);
+      emitEvent(SessionEventType.shuffling);
     });
 
     // Phase 2: Update state after shuffle animation completes
@@ -212,7 +229,7 @@ abstract class BaseAuthoritativeHandler implements GameSessionHandler {
     if (activeId == null) return;
     _passCount++;
     _activeEventActorId = activeId;
-    _eventController.add(SessionEventType.passed);
+    emitEvent(SessionEventType.passed);
     _addToLog("${pNames[activeId] ?? activeId} passed.");
     stopTurnTimer();
     advanceTurn();
@@ -233,7 +250,7 @@ abstract class BaseAuthoritativeHandler implements GameSessionHandler {
     final blufferId = _lastMove!.playerId;
     _activeEventActorId = challengerId;
     _isRevealingBluff = true;
-    _eventController.add(SessionEventType.bluffCalled);
+    emitEvent(SessionEventType.bluffCalled);
     _addToLog(
       "${pNames[challengerId] ?? challengerId} called bluff on ${pNames[blufferId] ?? blufferId}!",
     );
@@ -279,6 +296,7 @@ abstract class BaseAuthoritativeHandler implements GameSessionHandler {
   @override
   void dispose() {
     stopTurnTimer();
+    _disposed = true;
     _stateController.close();
     _eventController.close();
   }
@@ -286,7 +304,15 @@ abstract class BaseAuthoritativeHandler implements GameSessionHandler {
   // --- Protected Methods for Subclasses ---
 
   void emitState() {
-    _stateController.add(_currentState);
+    if (!_stateController.isClosed) {
+      _stateController.add(_currentState);
+    }
+  }
+
+  void emitEvent(SessionEventType event) {
+    if (!_eventController.isClosed) {
+      _eventController.add(event);
+    }
   }
 
   void startTurnTimer() {
@@ -388,7 +414,7 @@ abstract class BaseAuthoritativeHandler implements GameSessionHandler {
     _activeEventActorId = playerId;
     _lastRankClaimed = declaredRank;
     _lastCountClaimed = units.length;
-    _eventController.add(SessionEventType.cardsPlayed);
+    emitEvent(SessionEventType.cardsPlayed);
     _addToLog(
       "${pNames[playerId] ?? playerId} claimed ${units.length} ${declaredRank.name}s.",
     );
@@ -437,7 +463,7 @@ abstract class BaseAuthoritativeHandler implements GameSessionHandler {
       activeParticipantId: nextId,
     );
     _activeEventActorId = nextId;
-    _eventController.add(SessionEventType.turnChanged);
+    emitEvent(SessionEventType.turnChanged);
     emitState();
     startTurnTimer();
     onTurnActive(nextId);
@@ -454,7 +480,7 @@ abstract class BaseAuthoritativeHandler implements GameSessionHandler {
 
     if (wasDiscarded) {
       _activeEventActorId = startId;
-      _eventController.add(SessionEventType.pileDiscarded);
+      emitEvent(SessionEventType.pileDiscarded);
       _addToLog("Everyone passed. Pile discarded.");
     }
 
@@ -535,7 +561,7 @@ abstract class BaseAuthoritativeHandler implements GameSessionHandler {
   void distributePileTo(String playerId) {
     _activeEventActorId = playerId;
     _lastCountClaimed = _pile.length;
-    _eventController.add(SessionEventType.cardsPickedUp);
+    emitEvent(SessionEventType.cardsPickedUp);
     _hands[playerId]!.addAll(_pile);
     _pile.clear();
 
