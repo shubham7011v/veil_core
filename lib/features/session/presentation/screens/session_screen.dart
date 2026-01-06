@@ -179,6 +179,12 @@ class _SessionScreenState extends State<SessionScreen>
         }
         break;
       case engine.SessionEventType.shuffling:
+        // Check user setting for shuffle animation
+        final shouldAnimate =
+            di.sl.storageService.getBool('pref_shuffle_animation') ?? true;
+
+        if (!shouldAnimate) break;
+
         // Clean distribution: Fly cards from pile directly to each player
         final participants = state.engineState.participants;
         if (participants.isEmpty) return;

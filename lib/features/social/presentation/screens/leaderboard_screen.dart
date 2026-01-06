@@ -7,7 +7,7 @@ import '../../../session/session.dart';
 import '../../../../core/theme/colors.dart';
 import '../../../../core/theme/bloc/theme_bloc.dart';
 import '../../../../core/theme/bloc/theme_state.dart';
-import '../../../profile/profile.dart';
+import '../../../profile/presentation/screens/profile_view_screen.dart';
 
 class LeaderboardScreen extends StatefulWidget {
   final VoidCallback? onBack;

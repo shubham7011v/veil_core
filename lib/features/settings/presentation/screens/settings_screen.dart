@@ -8,6 +8,7 @@ import '../../../../core/config/app_config.dart';
 import '../../../../core/constants/dimens.dart';
 import '../../../auth/auth.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import '../../../../core/di/service_locator.dart';
 
 class SettingsScreen extends StatefulWidget {
   final VoidCallback? onBack;
@@ -24,6 +25,20 @@ class _SettingsScreenState extends State<SettingsScreen> {
   bool _haptics = true;
   bool _notifications = false;
   bool _showAvatars = true;
+  bool _shuffleAnimation = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadSettings();
+  }
+
+  Future<void> _loadSettings() async {
+    setState(() {
+      _shuffleAnimation =
+          sl.storageService.getBool('pref_shuffle_animation') ?? true;
+    });
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -149,6 +164,21 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   ),
                   child: Column(
                     children: [
+                      _buildSwitchTile(
+                        palette,
+                        Icons.style,
+                        'Shuffle Animation',
+                        'Show cards flying when dealing',
+                        _shuffleAnimation,
+                        (v) {
+                          setState(() => _shuffleAnimation = v);
+                          sl.storageService.setBool(
+                            'pref_shuffle_animation',
+                            v,
+                          );
+                        },
+                      ),
+                      Divider(color: palette.divider, height: 1),
                       _buildSwitchTile(
                         palette,
                         Icons.vibration,
