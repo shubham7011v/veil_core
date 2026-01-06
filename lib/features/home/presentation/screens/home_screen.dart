@@ -348,25 +348,34 @@ class _HomeScreenState extends State<HomeScreen> {
 
   Widget _buildDailyChallenge(AppColorPalette palette) {
     return Container(
-      padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
         color: palette.surfaceLight.withValues(alpha: 0.5),
         borderRadius: BorderRadius.circular(16),
       ),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          Icon(Icons.track_changes, color: palette.primary, size: 18),
-          const SizedBox(width: 8),
-          Text(
-            'Daily Challenge',
-            style: GoogleFonts.inter(
-              color: palette.textSecondary,
-              fontSize: 14,
-              letterSpacing: 0.5,
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          onTap: () => _showDailyChallengeComingSoon(context, palette),
+          borderRadius: BorderRadius.circular(16),
+          child: Padding(
+            padding: const EdgeInsets.all(20),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(Icons.track_changes, color: palette.primary, size: 18),
+                const SizedBox(width: 8),
+                Text(
+                  'Daily Challenge',
+                  style: GoogleFonts.inter(
+                    color: palette.textSecondary,
+                    fontSize: 14,
+                    letterSpacing: 0.5,
+                  ),
+                ),
+              ],
             ),
           ),
-        ],
+        ),
       ),
     );
   }
@@ -410,6 +419,38 @@ class _HomeScreenState extends State<HomeScreen> {
             'Challenge your friends in person! Create a local hotspot and play together without an internet connection.',
         icon: Icons.wifi_tethering_rounded,
         palette: palette,
+        featureHighlights: const [
+          {
+            'icon': Icons.wifi_tethering_rounded,
+            'text': 'Offline Hotspot Mode',
+          },
+          {'icon': Icons.devices_rounded, 'text': 'Local Network Play'},
+          {'icon': Icons.group_rounded, 'text': 'Connect with Nearby Friends'},
+        ],
+      ),
+    );
+  }
+
+  void _showDailyChallengeComingSoon(
+    BuildContext context,
+    AppColorPalette palette,
+  ) {
+    showDialog(
+      context: context,
+      builder: (context) => ComingSoonModal(
+        featureName: 'Daily Challenge',
+        description:
+            'Compete in a unique daily puzzle against the whole community! Earn exclusive rewards and climb the daily leaderboard.',
+        icon: Icons.track_changes,
+        palette: palette,
+        featureHighlights: const [
+          {
+            'icon': Icons.calendar_today_rounded,
+            'text': 'New Puzzle Every Day',
+          },
+          {'icon': Icons.leaderboard_rounded, 'text': 'Global Daily Rankings'},
+          {'icon': Icons.emoji_events_rounded, 'text': 'Exclusive Daily Loot'},
+        ],
       ),
     );
   }

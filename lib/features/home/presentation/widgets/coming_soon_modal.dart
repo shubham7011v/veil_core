@@ -7,6 +7,7 @@ class ComingSoonModal extends StatefulWidget {
   final String description;
   final IconData icon;
   final AppColorPalette palette;
+  final List<Map<String, dynamic>>? featureHighlights;
 
   const ComingSoonModal({
     super.key,
@@ -14,6 +15,7 @@ class ComingSoonModal extends StatefulWidget {
     required this.description,
     required this.icon,
     required this.palette,
+    this.featureHighlights,
   });
 
   @override
@@ -212,20 +214,17 @@ class _ComingSoonModalState extends State<ComingSoonModal>
                       const SizedBox(height: 32),
 
                       // Feature Highlights
-                      _buildFeatureHighlight(
-                        Icons.wifi_tethering_rounded,
-                        'Offline Hotspot Mode',
-                      ),
-                      const SizedBox(height: 12),
-                      _buildFeatureHighlight(
-                        Icons.devices_rounded,
-                        'Local Network Play',
-                      ),
-                      const SizedBox(height: 12),
-                      _buildFeatureHighlight(
-                        Icons.group_rounded,
-                        'Connect with Nearby Friends',
-                      ),
+                      // Feature Highlights
+                      if (widget.featureHighlights != null)
+                        ...widget.featureHighlights!.map(
+                          (highlight) => Padding(
+                            padding: const EdgeInsets.only(bottom: 12),
+                            child: _buildFeatureHighlight(
+                              highlight['icon'] as IconData,
+                              highlight['text'] as String,
+                            ),
+                          ),
+                        ),
 
                       const SizedBox(height: 32),
 
