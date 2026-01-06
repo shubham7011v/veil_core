@@ -1,12 +1,10 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_bloc/flutter_bloc.dart';
 import '../../../../core/theme/colors.dart';
 import '../../../../core/constants/dimens.dart';
 import '../../../../core/utils/responsive.dart';
 import '../../../../shared/components/primary_button.dart';
 import '../../../../shared/components/glass_container.dart';
-import '../bloc/session_bloc.dart';
-import '../bloc/session_event.dart';
+import '../../../../core/di/service_locator.dart' as di;
 
 class BotSettingsScreen extends StatefulWidget {
   const BotSettingsScreen({super.key});
@@ -116,21 +114,14 @@ class _BotSettingsScreenState extends State<BotSettingsScreen> {
                     final playerCount = _playerCount.toInt();
                     final thinkingTime = _botThinkingTime.toInt();
 
-                    // Navigate first, then add event to the new SessionBloc
-                    Navigator.pushReplacementNamed(context, '/session').then((
-                      _,
-                    ) {
-                      // Find the SessionBloc in the new route's context
-                      final newContext = Navigator.of(context).context;
-                      if (newContext.mounted) {
-                        newContext.read<SessionBloc>().add(
-                          SessionStartRequested(
-                            playerCount: playerCount,
-                            thinkingTimeS: thinkingTime,
-                          ),
-                        );
-                      }
-                    });
+                    // Start Game directly via Handler (Singleton)
+                    di.sl.gameSessionHandler.startGame(
+                      playerCount: playerCount,
+                      thinkingTimeS: thinkingTime,
+                    );
+
+                    // Navigate to session
+                    Navigator.pushReplacementNamed(context, '/session');
                   },
                 ),
               ),

@@ -25,6 +25,7 @@ abstract class BaseAuthoritativeHandler implements GameSessionHandler {
 
   // Internal State
   SessionState _currentState = SessionState.initial();
+  @override
   SessionState get currentState => _currentState;
 
   // -- Table Data --

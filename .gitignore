@@ -53,9 +53,9 @@ app.*.map.json
  *_base64.txt
  service-account.json
  
- # Firebase (optional but recommended to keep projects isolated)
- google-services.json
+# Firebase (optional but recommended to keep projects isolated)
+# google-services.json
 
- # Production Secrets
- android/app/src/prod/google-services.json
- android/app/src/dev/google-services.json
+# Production Secrets
+android/app/src/prod/google-services.json
+android/app/src/dev/google-services.json
