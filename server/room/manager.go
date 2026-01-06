@@ -4,10 +4,17 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
+	"math/rand"
 	"time"
 	"veil_server/db"
 	"veil_server/protocol"
 )
+
+const (
+	charset = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789" // Excludes I, O, 0, 1
+)
+
+// Manager keeps track of all clients and rooms
 
 // Manager keeps track of all clients and rooms
 type Manager struct {
@@ -174,13 +181,35 @@ func (m *Manager) HandleMessage(c *Client, message []byte) {
 		return
 
 	case "JOIN_ROOM":
-		// Add to Matchmaking Queue
-		// (Ignore payload for now, assume auto-match)
+		// Public Matchmaking
 		if c.CurrentRoom == nil {
 			m.Queue.Add(c)
 		} else {
-			// Already in room? Re-send state?
 			c.CurrentRoom.BroadcastState()
+		}
+		return
+
+	case protocol.MsgTypeCreatePrivateRoom:
+		var payload protocol.CreatePrivateRoomMessage
+		if err := json.Unmarshal(baseMsg.Data, &payload); err != nil {
+			log.Printf("Create Room parse error: %v", err)
+			return
+		}
+		m.createPrivateRoom(c, payload)
+		return
+
+	case protocol.MsgTypeJoinPrivateRoom:
+		var payload protocol.JoinPrivateRoomMessage
+		if err := json.Unmarshal(baseMsg.Data, &payload); err != nil {
+			log.Printf("Join Room parse error: %v", err)
+			return
+		}
+		m.joinPrivateRoom(c, payload)
+		return
+	case protocol.MsgTypeLeaveRoom:
+		if c.CurrentRoom != nil {
+			c.CurrentRoom.Unregister <- c
+			c.CurrentRoom = nil
 		}
 		return
 	}
@@ -211,4 +240,101 @@ func addFriendListResponse(c *Client) {
 	msg := protocol.NewMessage(protocol.MsgTypeFriendList, friends)
 	bytes, _ := json.Marshal(msg)
 	c.Send <- bytes
+}
+
+// -- Private Room Logic --
+
+func (m *Manager) createPrivateRoom(c *Client, data protocol.CreatePrivateRoomMessage) {
+	if c.CurrentRoom != nil {
+		// Already in a room
+		return
+	}
+
+	code := m.generateRoomCode()
+	roomID := fmt.Sprintf("private_%s_%d", code, time.Now().Unix())
+
+	r := NewPrivateRoom(roomID, data.RoomName, code, data.Password, c.ID, data.MaxPlayers, data.BootAmount)
+	m.Rooms[code] = r // Index by Code for easy lookup! (Note: this overrides ID index effectively for lookup)
+	// Optionally also store by ID if needed, but Code is primary for joining.
+
+	go r.Run()
+
+	log.Printf("Created Private Room %s (%s) for host %s", data.RoomName, code, c.ID)
+
+	// Send Room Created Success
+	response := map[string]interface{}{
+		"roomCode": code,
+		"roomId":   roomID,
+		"roomName": data.RoomName,
+		"hostId":   c.ID,
+	}
+	bytes, _ := json.Marshal(protocol.NewMessage(protocol.MsgTypeRoomCreated, response))
+	c.Send <- bytes
+
+	// Auto-join the creator
+	c.CurrentRoom = r
+	r.Register <- c
+}
+
+func (m *Manager) joinPrivateRoom(c *Client, data protocol.JoinPrivateRoomMessage) {
+	if c.CurrentRoom != nil {
+		// Leave current room first? Or error?
+		// For now, error
+		m.sendError(c, "ALREADY_IN_ROOM", "You are already in a room")
+		return
+	}
+
+	r, ok := m.Rooms[data.RoomCode]
+	if !ok {
+		m.sendError(c, "ROOM_NOT_FOUND", "Room not found")
+		return
+	}
+
+	if r.Password != "" && r.Password != data.Password {
+		m.sendError(c, "INVALID_PASSWORD", "Incorrect password")
+		return
+	}
+
+	// Set Spectator Status
+	c.IsSpectator = data.IsSpectator
+
+	// Only check max players if NOT a spectator
+	if !c.IsSpectator && len(r.Game.Participants) >= r.MaxPlayers {
+		m.sendError(c, "ROOM_FULL", "Room is full")
+		return
+	}
+
+	// Success
+	c.CurrentRoom = r
+	r.Register <- c
+
+	// Send success message
+	// Client receives ROOM_JOINED with room info
+	response := map[string]interface{}{
+		"roomCode": r.Code,
+		"roomName": r.Name,
+		"hostId":   r.HostID,
+	}
+	bytes, _ := json.Marshal(protocol.NewMessage(protocol.MsgTypeRoomJoined, response))
+	c.Send <- bytes
+}
+
+func (m *Manager) generateRoomCode() string {
+	b := make([]byte, 6)
+	for i := range b {
+		b[i] = charset[rand.Intn(len(charset))]
+	}
+	// TODO: Check for collision
+	return string(b)
+}
+
+func (m *Manager) sendError(c *Client, code, message string) {
+	errBytes, _ := json.Marshal(protocol.NewMessage(protocol.MsgTypeError, protocol.ErrorMessage{
+		Code:    code,
+		Message: message,
+	}))
+	select {
+	case c.Send <- errBytes:
+	default:
+	}
 }

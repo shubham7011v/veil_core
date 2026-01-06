@@ -398,16 +398,28 @@ class _HomeScreenState extends State<HomeScreen> {
     BuildContext context,
     AppColorPalette palette,
   ) {
-    return TextButton(
-      onPressed: () => Navigator.pushNamed(context, '/lobby'),
-      child: Text(
-        'Create or Join Private Room',
-        style: GoogleFonts.inter(
-          color: palette.textSecondary,
-          fontSize: 14,
-          decoration: TextDecoration.underline,
+    return Row(
+      children: [
+        Expanded(
+          child: _buildMatchCard(
+            context,
+            'CREATE\nROOM',
+            Icons.add_circle_outline,
+            () => Navigator.pushNamed(context, '/create_room'),
+            palette,
+          ),
         ),
-      ),
+        const SizedBox(width: 16),
+        Expanded(
+          child: _buildMatchCard(
+            context,
+            'JOIN\nROOM',
+            Icons.login,
+            () => Navigator.pushNamed(context, '/join_room'),
+            palette,
+          ),
+        ),
+      ],
     );
   }
 

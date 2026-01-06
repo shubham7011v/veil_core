@@ -75,7 +75,8 @@ class VeilApp extends StatelessWidget {
             initialRoute: AppRouter.splash,
             routes: {
               ...AppRouter.routes,
-              AppRouter.lobby: (context) => const LobbyWrapper(),
+              // LobbyScreen is now self-sufficient via Bloc
+              // AppRouter.lobby is already handled in AppRouter.routes
             },
           );
         },
@@ -84,25 +85,4 @@ class VeilApp extends StatelessWidget {
   }
 }
 
-// Wrapper for Lobby to handle data passing logic if complex, or simple direct usage
-class LobbyWrapper extends StatelessWidget {
-  const LobbyWrapper({super.key});
-
-  @override
-  Widget build(BuildContext context) {
-    // In a real app, arguments would be passed here.
-    // For now, we read from bloc.
-    return BlocBuilder<SessionBloc, SessionBlocState>(
-      builder: (context, state) {
-        return LobbyScreen(
-          roomId: state.engineState.roomId,
-          participants: state.engineState.participants,
-          onStart: () {
-            context.read<SessionBloc>().add(const SessionStartRequested());
-            Navigator.pushReplacementNamed(context, AppRouter.session);
-          },
-        );
-      },
-    );
-  }
-}
+// Wrapper removed as LobbyScreen now handles its own state connection

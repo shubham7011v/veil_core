@@ -2,7 +2,14 @@ import 'package:flutter/material.dart';
 import '../../../../core/theme/colors.dart';
 import '../../../../core/constants/dimens.dart';
 import '../../../../core/utils/responsive.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
 import '../../../../shared/components/primary_button.dart';
+import '../../../../core/di/service_locator.dart' as di;
+import '../../../../core/engine/data/handlers/websocket_session_handler.dart';
+import '../../../session/presentation/bloc/session_bloc.dart';
+import '../../../session/presentation/bloc/session_event.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+import '../../../../core/engine/domain/models/room_event.dart';
 
 class CreateRoomScreen extends StatefulWidget {
   const CreateRoomScreen({super.key});
@@ -12,10 +19,86 @@ class CreateRoomScreen extends StatefulWidget {
 }
 
 class _CreateRoomScreenState extends State<CreateRoomScreen> {
-  double _bootAmount = 5000;
+  final _nameController = TextEditingController(text: 'Royal Lounge #88');
+  final _passwordController = TextEditingController();
+
   int _selectedPlayerCount = 5;
   bool _voiceChat = true;
   bool _spectatorMode = false;
+  bool _isPrivate = true; // Default to private based on flow
+  bool _isCreating = false;
+
+  @override
+  void dispose() {
+    _nameController.dispose();
+    _passwordController.dispose();
+    super.dispose();
+  }
+
+  Future<void> _handleCreateRoom() async {
+    if (!_isPrivate) {
+      // Public match - redirect to matchmaking for now
+      Navigator.pushNamed(context, '/matchmaking');
+      return;
+    }
+
+    setState(() => _isCreating = true);
+
+    try {
+      // 1. Get Token
+      final user = FirebaseAuth.instance.currentUser;
+      final token = user != null
+          ? await user.getIdToken()
+          : 'mock_token_${DateTime.now().millisecondsSinceEpoch}';
+
+      // 2. Connect
+      final handler =
+          di.sl.createSessionHandler(online: true) as WebSocketSessionHandler;
+      // TODO: Use real URL from config
+      await handler.connect(
+        'wss://rebelliously-unforgone-mandie.ngrok-free.dev/ws',
+        token!,
+      );
+
+      // 3. Update Bloc
+      if (!mounted) return;
+      context.read<SessionBloc>().add(SessionHandlerSwapped(handler));
+
+      // 4. Create Room
+      await handler.createPrivateRoom(
+        roomName: _nameController.text,
+        password: _passwordController.text.isEmpty
+            ? null
+            : _passwordController.text,
+        maxPlayers: _selectedPlayerCount,
+        bootAmount: 0, // Boot amount removed from UI, defaulting to 0 for now
+        voiceChat: _voiceChat,
+        spectatorMode: _spectatorMode,
+      );
+
+      // 5. Listen for success
+      // We can listen to the stream here or in the Lobby.
+      // For smoother UX, let's wait for the event here before navigating.
+      handler.roomEventStream.listen((event) {
+        if (event is RoomCreated) {
+          if (mounted) {
+            Navigator.pushReplacementNamed(context, '/lobby');
+          }
+        }
+      });
+
+      // Cleanup subscription handled by stream closing or navigation?
+      // Ideally managing subscriptions is better, but for this one-shot navigation it's ok.
+      // The handler persists in the Bloc.
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Failed to create room: $e')));
+        setState(() => _isCreating = false);
+      }
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -54,36 +137,68 @@ class _CreateRoomScreenState extends State<CreateRoomScreen> {
                       height: Responsive.h(180),
                       width: double.infinity,
                       decoration: BoxDecoration(
-                        color: AppColors.surfaceLight,
+                        gradient: LinearGradient(
+                          begin: Alignment.topLeft,
+                          end: Alignment.bottomRight,
+                          colors: [
+                            AppColors.surfaceLight,
+                            AppColors.primary.withValues(alpha: 0.1),
+                            AppColors.background,
+                          ],
+                        ),
                         borderRadius: BorderRadius.circular(AppDimens.radiusL),
-                        image: const DecorationImage(
-                          image: AssetImage(
-                            'assets/images/room_header_placeholder.png',
-                          ),
-                          fit: BoxFit.cover,
-                        ),
+                        border: Border.all(color: AppColors.divider),
                       ),
-                      alignment: Alignment.bottomLeft,
-                      child: Container(
-                        margin: EdgeInsets.all(
-                          Responsive.w(AppDimens.paddingM),
-                        ),
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 12,
-                          vertical: 6,
-                        ),
-                        decoration: BoxDecoration(
-                          color: Colors.black.withValues(alpha: 0.6),
-                          borderRadius: BorderRadius.circular(4),
-                        ),
-                        child: Text(
-                          'CLASSIC MODE',
-                          style: TextStyle(
-                            color: AppColors.primary,
-                            fontSize: Responsive.sp(10),
-                            fontWeight: FontWeight.bold,
+                      child: Stack(
+                        children: [
+                          Positioned(
+                            right: -20,
+                            top: -20,
+                            child: Icon(
+                              Icons.auto_awesome,
+                              size: 100,
+                              color: AppColors.primary.withValues(alpha: 0.05),
+                            ),
                           ),
-                        ),
+                          Positioned(
+                            left: 0,
+                            right: 0,
+                            top: 0,
+                            bottom: 0,
+                            child: Center(
+                              child: Icon(
+                                Icons.casino_outlined,
+                                size: 64,
+                                color: AppColors.primary.withValues(alpha: 0.1),
+                              ),
+                            ),
+                          ),
+                          Positioned(
+                            bottom: 0,
+                            left: 0,
+                            child: Container(
+                              margin: EdgeInsets.all(
+                                Responsive.w(AppDimens.paddingM),
+                              ),
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 12,
+                                vertical: 6,
+                              ),
+                              decoration: BoxDecoration(
+                                color: Colors.black.withValues(alpha: 0.6),
+                                borderRadius: BorderRadius.circular(4),
+                              ),
+                              child: Text(
+                                'CLASSIC MODE',
+                                style: TextStyle(
+                                  color: AppColors.primary,
+                                  fontSize: Responsive.sp(10),
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
+                            ),
+                          ),
+                        ],
                       ),
                     ),
                     SizedBox(height: Responsive.h(AppDimens.paddingL)),
@@ -92,11 +207,23 @@ class _CreateRoomScreenState extends State<CreateRoomScreen> {
                     Row(
                       children: [
                         Expanded(
-                          child: _buildRoomTypeOption('Public Match', false),
+                          child: GestureDetector(
+                            onTap: () => setState(() => _isPrivate = false),
+                            child: _buildRoomTypeOption(
+                              'Public Match',
+                              !_isPrivate,
+                            ),
+                          ),
                         ),
                         SizedBox(width: Responsive.w(AppDimens.paddingM)),
                         Expanded(
-                          child: _buildRoomTypeOption('Private Room', true),
+                          child: GestureDetector(
+                            onTap: () => setState(() => _isPrivate = true),
+                            child: _buildRoomTypeOption(
+                              'Private Room',
+                              _isPrivate,
+                            ),
+                          ),
                         ),
                       ],
                     ),
@@ -111,7 +238,11 @@ class _CreateRoomScreenState extends State<CreateRoomScreen> {
                       ),
                     ),
                     SizedBox(height: Responsive.h(8)),
-                    _buildTextField(Icons.meeting_room, 'Royal Lounge #88'),
+                    _buildTextField(
+                      controller: _nameController,
+                      icon: Icons.meeting_room,
+                      hint: 'Room Name',
+                    ),
 
                     SizedBox(height: Responsive.h(AppDimens.paddingL)),
 
@@ -125,78 +256,13 @@ class _CreateRoomScreenState extends State<CreateRoomScreen> {
                     ),
                     SizedBox(height: Responsive.h(8)),
                     _buildTextField(
-                      Icons.lock,
-                      'Set a secure password',
+                      controller: _passwordController,
+                      icon: Icons.lock,
+                      hint: 'Set a secure password',
                       isPassword: true,
                     ),
 
                     SizedBox(height: Responsive.h(AppDimens.paddingXL)),
-
-                    // Boot Amount Slider
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        const Text(
-                          'BOOT AMOUNT',
-                          style: TextStyle(
-                            color: AppColors.textPrimary,
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
-                        Container(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 12,
-                            vertical: 4,
-                          ),
-                          decoration: BoxDecoration(
-                            color: AppColors.surfaceLight,
-                            borderRadius: BorderRadius.circular(16),
-                            border: Border.all(color: AppColors.primaryDim),
-                          ),
-                          child: Text(
-                            '\$ ${_bootAmount.toInt()}',
-                            style: const TextStyle(
-                              color: AppColors.primary,
-                              fontWeight: FontWeight.bold,
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                    SliderTheme(
-                      data: SliderTheme.of(context).copyWith(
-                        activeTrackColor: AppColors.primary,
-                        inactiveTrackColor: AppColors.surfaceLight,
-                        thumbColor: AppColors.primary,
-                        overlayColor: AppColors.activeGlow,
-                      ),
-                      child: Slider(
-                        value: _bootAmount,
-                        min: 500,
-                        max: 50000,
-                        divisions: 99,
-                        onChanged: (val) => setState(() => _bootAmount = val),
-                      ),
-                    ),
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        Text(
-                          '500',
-                          style: TextStyle(
-                            color: AppColors.textTertiary,
-                            fontSize: Responsive.sp(10),
-                          ),
-                        ),
-                        Text(
-                          '50k',
-                          style: TextStyle(
-                            color: AppColors.textTertiary,
-                            fontSize: Responsive.sp(10),
-                          ),
-                        ),
-                      ],
-                    ),
 
                     SizedBox(height: Responsive.h(AppDimens.paddingXL)),
 
@@ -209,14 +275,46 @@ class _CreateRoomScreenState extends State<CreateRoomScreen> {
                       ),
                     ),
                     SizedBox(height: Responsive.h(AppDimens.paddingM)),
+                    // Player Count Slider
                     Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
-                        2,
-                        3,
-                        4,
-                        5,
-                      ].map((count) => _buildPlayerCountOption(count)).toList(),
+                        Text(
+                          '$_selectedPlayerCount',
+                          style: TextStyle(
+                            color: AppColors.primary,
+                            fontSize: Responsive.sp(24),
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                        Expanded(
+                          child: SliderTheme(
+                            data: SliderTheme.of(context).copyWith(
+                              activeTrackColor: AppColors.primary,
+                              inactiveTrackColor: AppColors.surfaceLight,
+                              thumbColor: AppColors.primary,
+                              overlayColor: AppColors.activeGlow,
+                            ),
+                            child: Slider(
+                              value: _selectedPlayerCount.toDouble(),
+                              min: 2,
+                              max: 10,
+                              divisions: 8,
+                              label: '$_selectedPlayerCount Players',
+                              onChanged: (val) => setState(
+                                () => _selectedPlayerCount = val.toInt(),
+                              ),
+                            ),
+                          ),
+                        ),
+                        Text(
+                          '10',
+                          style: TextStyle(
+                            color: AppColors.textTertiary,
+                            fontSize: Responsive.sp(12),
+                          ),
+                        ),
+                      ],
                     ),
 
                     SizedBox(height: Responsive.h(AppDimens.paddingXL)),
@@ -251,33 +349,15 @@ class _CreateRoomScreenState extends State<CreateRoomScreen> {
               ),
               child: Column(
                 children: [
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      const Text(
-                        'Total Entry Fee',
-                        style: TextStyle(color: AppColors.textSecondary),
-                      ),
-                      Text(
-                        '${_bootAmount.toInt()}',
-                        style: TextStyle(
-                          color: AppColors.textPrimary,
-                          fontWeight: FontWeight.bold,
-                          fontSize: Responsive.sp(18),
-                        ),
-                      ),
-                    ],
-                  ),
+                  // Fee display removed
+                  const SizedBox.shrink(),
                   SizedBox(height: Responsive.h(AppDimens.paddingM)),
                   SizedBox(
                     width: double.infinity,
                     child: PrimaryButton(
                       label: 'Create Room',
                       icon: Icons.arrow_forward,
-                      onPressed: () {
-                        // Navigate to Lobby
-                        Navigator.pushReplacementNamed(context, '/lobby');
-                      },
+                      onPressed: _isCreating ? null : _handleCreateRoom,
                     ),
                   ),
                 ],
@@ -308,9 +388,10 @@ class _CreateRoomScreenState extends State<CreateRoomScreen> {
     );
   }
 
-  Widget _buildTextField(
-    IconData icon,
-    String hint, {
+  Widget _buildTextField({
+    required TextEditingController controller,
+    required IconData icon,
+    required String hint,
     bool isPassword = false,
   }) {
     return Container(
@@ -319,6 +400,7 @@ class _CreateRoomScreenState extends State<CreateRoomScreen> {
         borderRadius: BorderRadius.circular(AppDimens.radiusS),
       ),
       child: TextField(
+        controller: controller,
         obscureText: isPassword,
         style: const TextStyle(color: AppColors.textPrimary),
         decoration: InputDecoration(
@@ -330,43 +412,6 @@ class _CreateRoomScreenState extends State<CreateRoomScreen> {
           suffixIcon: isPassword
               ? const Icon(Icons.visibility_off, color: AppColors.textTertiary)
               : null,
-        ),
-      ),
-    );
-  }
-
-  Widget _buildPlayerCountOption(int count) {
-    final isSelected = _selectedPlayerCount == count;
-    return GestureDetector(
-      onTap: () => setState(() => _selectedPlayerCount = count),
-      child: Container(
-        width: Responsive.w(70),
-        height: Responsive.w(70), // Keep square
-        decoration: BoxDecoration(
-          color: isSelected
-              ? AppColors.surfaceLight
-              : AppColors.surfaceLight.withValues(alpha: 0.5),
-          borderRadius: BorderRadius.circular(AppDimens.radiusM),
-          border: Border.all(
-            color: isSelected ? AppColors.primary : Colors.transparent,
-          ),
-        ),
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(
-              Icons.person,
-              color: isSelected ? AppColors.primary : AppColors.textTertiary,
-            ),
-            const SizedBox(height: 4),
-            Text(
-              '$count',
-              style: TextStyle(
-                color: isSelected ? AppColors.primary : AppColors.textSecondary,
-                fontWeight: FontWeight.bold,
-              ),
-            ),
-          ],
         ),
       ),
     );

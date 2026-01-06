@@ -21,6 +21,8 @@ class SessionState extends Equatable {
 
   final int? turnTimerS;
 
+  final bool isSpectator;
+
   const SessionState({
     required this.roomId,
     required this.participants,
@@ -31,6 +33,7 @@ class SessionState extends Equatable {
     this.lastActionText,
     this.winnerId,
     this.turnTimerS,
+    this.isSpectator = false,
   });
 
   @override
@@ -44,6 +47,7 @@ class SessionState extends Equatable {
     lastActionText,
     winnerId,
     turnTimerS,
+    isSpectator,
   ];
 
   // Factory for initial/empty state
@@ -67,6 +71,7 @@ class SessionState extends Equatable {
     String? lastActionText,
     String? winnerId,
     int? turnTimerS,
+    bool? isSpectator,
     bool clearTimer = false,
   }) {
     return SessionState(
@@ -79,6 +84,7 @@ class SessionState extends Equatable {
       lastActionText: lastActionText ?? this.lastActionText,
       winnerId: winnerId ?? this.winnerId,
       turnTimerS: clearTimer ? null : (turnTimerS ?? this.turnTimerS),
+      isSpectator: isSpectator ?? this.isSpectator,
     );
   }
 }

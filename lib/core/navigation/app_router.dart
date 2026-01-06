@@ -8,6 +8,7 @@ import '../../features/collection/collection.dart';
 import '../../features/auth/auth.dart';
 import '../../features/matchmaking/matchmaking.dart';
 import '../../features/social/social.dart';
+import '../../features/lobby/presentation/screens/join_room_screen.dart';
 
 class AppRouter {
   static const String splash = '/splash';
@@ -15,6 +16,7 @@ class AppRouter {
   static const String courtEntry = '/court_entry';
   static const String home = '/home';
   static const String createRoom = '/create_room';
+  static const String joinRoom = '/join_room';
   static const String settings = '/settings';
   static const String rules = '/rules';
   static const String deck = '/deck';
@@ -32,8 +34,9 @@ class AppRouter {
     settings: (context) => const SettingsScreen(),
     rules: (context) => const RulesScreen(),
     deck: (context) => const DeckCollectionScreen(),
-    // lobby is special in the original code, I'll keep the wrapper logic in main for now or move it here
+    lobby: (context) => const LobbyScreen(),
     session: (context) => const SessionScreen(),
+    joinRoom: (context) => const JoinRoomScreen(),
     botSettings: (context) => const BotSettingsScreen(),
     matchmaking: (context) => const MatchmakingScreen(),
     '/leaderboard': (context) => const LeaderboardScreen(),

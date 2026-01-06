@@ -26,6 +26,15 @@ type Room struct {
 
 	// Action Channel (Thread-safe game updates)
 	Actions chan GameAction
+
+	// Private Room Fields
+	Name       string
+	Code       string
+	Password   string
+	IsPrivate  bool
+	HostID     string
+	MaxPlayers int
+	BootAmount float64
 }
 
 type GameAction struct {
@@ -42,7 +51,20 @@ func NewRoom(id string) *Room {
 		Clients:    make(map[*Client]bool),
 		Game:       game.NewGame(),
 		Actions:    make(chan GameAction),
+		MaxPlayers: game.MaxPlayers, // Default
 	}
+}
+
+func NewPrivateRoom(id, name, code, password, hostID string, maxPlayers int, bootAmount float64) *Room {
+	r := NewRoom(id)
+	r.Name = name
+	r.Code = code
+	r.Password = password
+	r.IsPrivate = true
+	r.HostID = hostID
+	r.MaxPlayers = maxPlayers
+	r.BootAmount = bootAmount
+	return r
 }
 
 func (r *Room) Run() {
@@ -50,20 +72,26 @@ func (r *Room) Run() {
 		select {
 		case client := <-r.Register:
 			r.Clients[client] = true
-			log.Printf("Client joined Room %s", r.ID)
+			log.Printf("Client joined Room %s (Spectator: %v)", r.ID, client.IsSpectator)
 
-			// Auto-join game logic (simplified)
-			if err := r.Game.AddPlayer(client.ID, "Player "+client.ID); err != nil {
-				log.Printf("Error adding player: %v", err)
+			if !client.IsSpectator {
+				// Auto-join game logic (simplified)
+				if err := r.Game.AddPlayer(client.ID, "Player "+client.ID); err != nil {
+					log.Printf("Error adding player: %v", err)
+				}
+
+				// No auto-start at 2 players anymore, let them choose.
+				// But auto-start if lobby reaches absolute MaxPlayers (ONLY FOR PUBLIC).
+				if !r.IsPrivate && len(r.Game.Players) == game.MaxPlayers && r.Game.Phase == game.PhaseLobby {
+					r.Game.Start()
+				}
 			}
 
-			// No auto-start at 2 players anymore, let them choose.
-			// But auto-start if lobby reaches absolute MaxPlayers.
-			if len(r.Game.Players) == game.MaxPlayers && r.Game.Phase == game.PhaseLobby {
-				r.Game.Start()
+			if r.IsPrivate {
+				r.BroadcastRoomInfo() // Update lobby UI
+			} else {
+				r.BroadcastState()
 			}
-
-			r.BroadcastState()
 
 		case client := <-r.Unregister:
 			if _, ok := r.Clients[client]; ok {
@@ -71,7 +99,23 @@ func (r *Room) Run() {
 				// Also remove from game engine to allow reconnects/slots
 				r.Game.RemovePlayer(client.ID)
 				log.Printf("Client left Room %s", r.ID)
-				r.BroadcastState()
+
+				// If Host leaves, assign new host (if anyone left)
+				if r.IsPrivate && client.ID == r.HostID {
+					if len(r.Game.Players) > 0 {
+						// Assign generic first player as host
+						for _, p := range r.Game.Players {
+							r.HostID = p.ID
+							break
+						}
+					}
+				}
+
+				if r.IsPrivate {
+					r.BroadcastRoomInfo()
+				} else {
+					r.BroadcastState()
+				}
 			}
 
 		case action := <-r.Actions:
@@ -109,8 +153,32 @@ func (r *Room) processAction(action GameAction) {
 	case protocol.MsgTypeChallenge:
 		_, err = r.Game.Challenge(client.ID)
 
+	case protocol.MsgTypeJoinPrivateRoom:
+		var payload protocol.JoinPrivateRoomMessage
+		if json.Unmarshal(msg.Data, &payload) == nil {
+			// Logic handled in Manager usually, but if we need room-specific logic:
+			// Actually manager.go handles routing to the room.
+			// The room itself receives the client via Register channel.
+			// We need to know if they are a spectator.
+			// Currently Register channel only passes *Client.
+			// We might need to update Client state BEFORE registering or handle it here?
+			// The Client struct now has IsSpectator.
+		}
+
 	case protocol.MsgTypeStartGame:
-		err = r.Game.Start()
+		// Public room generic start or Private room host start
+		if r.IsPrivate && client.ID != r.HostID {
+			err = fmt.Errorf("only host can start the game")
+		} else {
+			err = r.Game.Start()
+		}
+
+	case protocol.MsgTypeStartPrivateGame:
+		if client.ID != r.HostID {
+			err = fmt.Errorf("only host can start the game")
+		} else {
+			err = r.Game.Start()
+		}
 	}
 
 	if err != nil {
@@ -170,6 +238,26 @@ func (r *Room) BroadcastState() {
 	}()
 
 	for client := range r.Clients {
+		if client.IsSpectator {
+			// Spectator View
+			view := map[string]interface{}{
+				"phase":          r.Game.Phase,
+				"myHand":         []interface{}{}, // Empty hand for spectators
+				"participants":   r.Game.Participants,
+				"pileCount":      r.Game.PileCount,
+				"activePlayerId": r.Game.ActivePlayerID(),
+				"declaredRank":   r.Game.DeclaredRank,
+				"isSpectator":    true,
+			}
+			msg := protocol.NewMessage(protocol.MsgTypeGameState, view)
+			bytes, _ := json.Marshal(msg)
+			select {
+			case client.Send <- bytes:
+			default:
+			}
+			continue
+		}
+
 		p := r.Game.PlayerMap[client.ID]
 		if p == nil {
 			continue
@@ -191,6 +279,43 @@ func (r *Room) BroadcastState() {
 		case client.Send <- bytes:
 		default:
 			log.Printf("Skip send to %s (buffer full/closed)", client.ID)
+		}
+	}
+}
+
+func (r *Room) BroadcastRoomInfo() {
+	roomInfo := map[string]interface{}{
+		"roomCode":    r.Code,
+		"roomName":    r.Name,
+		"hostId":      r.HostID,
+		"maxPlayers":  r.MaxPlayers,
+		"bootAmount":  r.BootAmount,
+		"playerCount": len(r.Clients),
+	}
+
+	// Participants List
+	var participants []map[string]interface{}
+	for client := range r.Clients {
+		p := map[string]interface{}{
+			"id":       client.ID,
+			"name":     "Player " + client.ID, // Or fetch real name
+			"isActive": true,
+		}
+		if r.Game.PlayerMap[client.ID] != nil {
+			p["name"] = r.Game.PlayerMap[client.ID].Name
+		}
+		participants = append(participants, p)
+	}
+	roomInfo["participants"] = participants
+	roomInfo["isGameStarted"] = r.Game.Phase != game.PhaseLobby
+
+	msg := protocol.NewMessage(protocol.MsgTypeRoomUpdate, roomInfo)
+	bytes, _ := json.Marshal(msg)
+
+	for client := range r.Clients {
+		select {
+		case client.Send <- bytes:
+		default:
 		}
 	}
 }

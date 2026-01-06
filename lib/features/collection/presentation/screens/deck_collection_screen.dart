@@ -181,34 +181,10 @@ class _DeckCollectionScreenState extends State<DeckCollectionScreen> {
       crossAxisSpacing: AppDimens.paddingM,
       childAspectRatio: 0.7,
       children: [
-        _buildCardPreview(
-          'K',
-          'hearts',
-          'assets/king.png',
-          true,
-          palette,
-        ), // King of Hearts
-        _buildCardPreview(
-          'A',
-          'spades',
-          'assets/ace.png',
-          false,
-          palette,
-        ), // Ace of Spades
-        _buildCardPreview(
-          'Q',
-          'diamonds',
-          'assets/queen.png',
-          true,
-          palette,
-        ), // Queen of Diamonds
-        _buildCardPreview(
-          '10',
-          'clubs',
-          'assets/ten.png',
-          false,
-          palette,
-        ), // 10 of Clubs
+        _buildCardPreview('K', 'hearts', true, palette), // King of Hearts
+        _buildCardPreview('A', 'spades', false, palette), // Ace of Spades
+        _buildCardPreview('Q', 'diamonds', true, palette), // Queen of Diamonds
+        _buildCardPreview('10', 'clubs', false, palette), // 10 of Clubs
       ],
     );
   }
@@ -261,7 +237,6 @@ class _DeckCollectionScreenState extends State<DeckCollectionScreen> {
   Widget _buildCardPreview(
     String rank,
     String suit,
-    String assetPath,
     bool isRed,
     AppColorPalette palette,
   ) {
@@ -311,10 +286,18 @@ class _DeckCollectionScreenState extends State<DeckCollectionScreen> {
           ),
           Center(
             child: Icon(
-              Icons.style,
+              rank == 'K'
+                  ? Icons.workspace_premium
+                  : rank == 'Q'
+                  ? Icons.auto_awesome
+                  : rank == 'A'
+                  ? Icons.star
+                  : Icons.style,
               size: 48,
-              color: Colors.black.withValues(alpha: 0.1),
-            ), // Placeholder for art
+              color: (isRed ? palette.danger : Colors.black).withValues(
+                alpha: 0.2,
+              ),
+            ),
           ),
         ],
       ),

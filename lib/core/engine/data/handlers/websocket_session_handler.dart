@@ -10,6 +10,7 @@ import '../../domain/models/participant.dart';
 import '../../domain/models/game_move.dart';
 import '../../../../features/auth/domain/models/user_stats.dart';
 import '../../../../features/social/domain/models/friend_record.dart';
+import '../../domain/models/room_event.dart';
 
 class WebSocketSessionHandler implements GameSessionHandler {
   WebSocketChannel? _channel;
@@ -19,6 +20,7 @@ class WebSocketSessionHandler implements GameSessionHandler {
   final _statsController = StreamController<UserStats>.broadcast();
   final _leaderboardController = StreamController<List<UserStats>>.broadcast();
   final _friendsController = StreamController<List<FriendRecord>>.broadcast();
+  final _roomEventController = StreamController<RoomEvent>.broadcast();
 
   SessionState _currentState = SessionState.initial();
 
@@ -46,6 +48,8 @@ class WebSocketSessionHandler implements GameSessionHandler {
       _leaderboardController.stream;
 
   Stream<List<FriendRecord>> get friendsStream => _friendsController.stream;
+
+  Stream<RoomEvent> get roomEventStream => _roomEventController.stream;
 
   @override
   String? get activeEventActorId => _activeEventActorId;
@@ -185,6 +189,33 @@ class WebSocketSessionHandler implements GameSessionHandler {
           debugPrint('Failed to parse friend list: $e');
         }
         break;
+
+      case 'ROOM_CREATED':
+        try {
+          final evt = RoomCreated.fromJson(msg['data'] as Map<String, dynamic>);
+          _roomEventController.add(evt);
+        } catch (e) {
+          debugPrint('Failed to parse ROOM_CREATED: $e');
+        }
+        break;
+
+      case 'ROOM_JOINED':
+        try {
+          final evt = RoomJoined.fromJson(msg['data'] as Map<String, dynamic>);
+          _roomEventController.add(evt);
+        } catch (e) {
+          debugPrint('Failed to parse ROOM_JOINED: $e');
+        }
+        break;
+
+      case 'ROOM_UPDATE':
+        try {
+          final evt = RoomUpdated.fromJson(msg['data'] as Map<String, dynamic>);
+          _roomEventController.add(evt);
+        } catch (e) {
+          debugPrint('Failed to parse ROOM_UPDATE: $e');
+        }
+        break;
     }
   }
 
@@ -233,6 +264,7 @@ class WebSocketSessionHandler implements GameSessionHandler {
       pileCount: stateData['pileCount'] as int? ?? 0,
       currentPhase: phase,
       activeParticipantId: stateData['activePlayerId'] as String?,
+      isSpectator: stateData['isSpectator'] as bool? ?? false,
     );
 
     _currentState = newState;
@@ -315,6 +347,58 @@ class WebSocketSessionHandler implements GameSessionHandler {
     _send({'type': 'FRIEND_ACCEPT', 'data': friendId});
   }
 
+  // -- Private Room Methods --
+
+  Future<void> createPrivateRoom({
+    required String roomName,
+    String? password,
+    required int maxPlayers,
+    required double bootAmount,
+    required bool voiceChat,
+    required bool spectatorMode,
+  }) async {
+    _send({
+      'type': 'CREATE_PRIVATE_ROOM',
+      'data': {
+        'roomName': roomName,
+        'password': password,
+        'maxPlayers': maxPlayers,
+        'bootAmount': bootAmount,
+        'voiceChat': voiceChat,
+        'spectatorMode': spectatorMode,
+      },
+    });
+  }
+
+  Future<void> joinPrivateRoom(
+    String roomCode, {
+    String? password,
+    bool isSpectator = false,
+  }) async {
+    _send({
+      'type': 'JOIN_PRIVATE_ROOM',
+      'data': {
+        'roomCode': roomCode,
+        'password': password,
+        'isSpectator': isSpectator,
+      },
+    });
+  }
+
+  void startPrivateGame(String roomCode) {
+    _send({
+      'type': 'START_PRIVATE_GAME',
+      'data': {'roomCode': roomCode},
+    });
+  }
+
+  void leaveRoom(String roomCode) {
+    _send({
+      'type': 'LEAVE_ROOM',
+      'data': {'roomCode': roomCode},
+    });
+  }
+
   @override
   void dispose() {
     _channel?.sink.close();
@@ -323,5 +407,6 @@ class WebSocketSessionHandler implements GameSessionHandler {
     _statsController.close();
     _leaderboardController.close();
     _friendsController.close();
+    _roomEventController.close();
   }
 }

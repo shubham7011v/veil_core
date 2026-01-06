@@ -14,6 +14,7 @@ import '../widgets/session_background.dart';
 import '../widgets/game_win_overlay.dart';
 import '../widgets/session_staging_area.dart';
 import '../widgets/session_bottom_controls.dart';
+import '../../../../core/theme/colors.dart';
 
 class SessionScreen extends StatefulWidget {
   const SessionScreen({super.key});
@@ -341,70 +342,97 @@ class _SessionScreenState extends State<SessionScreen>
                         const SizedBox(height: 16),
 
                         // Staging Area (0.4 - 0.8)
-                        SlideTransition(
-                          position:
-                              Tween<Offset>(
-                                begin: const Offset(0, 0.2),
-                                end: Offset.zero,
-                              ).animate(
-                                CurvedAnimation(
-                                  parent: _entryController,
-                                  curve: const Interval(
-                                    0.4,
-                                    0.8,
-                                    curve: Curves.easeOutCubic,
+                        if (!state.engineState.isSpectator)
+                          SlideTransition(
+                            position:
+                                Tween<Offset>(
+                                  begin: const Offset(0, 0.2),
+                                  end: Offset.zero,
+                                ).animate(
+                                  CurvedAnimation(
+                                    parent: _entryController,
+                                    curve: const Interval(
+                                      0.4,
+                                      0.8,
+                                      curve: Curves.easeOutCubic,
+                                    ),
                                   ),
                                 ),
+                            child: FadeTransition(
+                              opacity: CurvedAnimation(
+                                parent: _entryController,
+                                curve: const Interval(
+                                  0.4,
+                                  0.8,
+                                  curve: Curves.easeOut,
+                                ),
                               ),
-                          child: FadeTransition(
-                            opacity: CurvedAnimation(
-                              parent: _entryController,
-                              curve: const Interval(
-                                0.4,
-                                0.8,
-                                curve: Curves.easeOut,
+                              child: SessionStagingArea(
+                                key: _stagingKey,
+                                state: state,
+                                myAvatarKey: _avatarKeys['me']!,
                               ),
-                            ),
-                            child: SessionStagingArea(
-                              key: _stagingKey,
-                              state: state,
-                              myAvatarKey: _avatarKeys['me']!,
                             ),
                           ),
-                        ),
                         const SizedBox(height: 2),
 
                         // Bottom Controls (0.5 - 1.0)
-                        SlideTransition(
-                          position:
-                              Tween<Offset>(
-                                begin: const Offset(0, 0.5),
-                                end: Offset.zero,
-                              ).animate(
-                                CurvedAnimation(
-                                  parent: _entryController,
-                                  curve: const Interval(
-                                    0.5,
-                                    1.0,
-                                    curve: Curves.easeOutCubic,
+                        if (!state.engineState.isSpectator)
+                          SlideTransition(
+                            position:
+                                Tween<Offset>(
+                                  begin: const Offset(0, 0.5),
+                                  end: Offset.zero,
+                                ).animate(
+                                  CurvedAnimation(
+                                    parent: _entryController,
+                                    curve: const Interval(
+                                      0.5,
+                                      1.0,
+                                      curve: Curves.easeOutCubic,
+                                    ),
                                   ),
                                 ),
+                            child: FadeTransition(
+                              opacity: CurvedAnimation(
+                                parent: _entryController,
+                                curve: const Interval(
+                                  0.5,
+                                  1.0,
+                                  curve: Curves.easeOut,
+                                ),
                               ),
-                          child: FadeTransition(
-                            opacity: CurvedAnimation(
-                              parent: _entryController,
-                              curve: const Interval(
-                                0.5,
-                                1.0,
-                                curve: Curves.easeOut,
+                              child: SessionBottomControls(
+                                state: state,
+                                myAvatarKey: _avatarKeys['me']!,
                               ),
                             ),
-                            child: SessionBottomControls(
-                              state: state,
-                              myAvatarKey: _avatarKeys['me']!,
+                          )
+                        else
+                          Padding(
+                            padding: const EdgeInsets.only(bottom: 32.0),
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 24,
+                                vertical: 12,
+                              ),
+                              decoration: BoxDecoration(
+                                color: Colors.black54,
+                                borderRadius: BorderRadius.circular(30),
+                                border: Border.all(
+                                  color: AppColors.textTertiary,
+                                ),
+                              ),
+                              child: const Text(
+                                'SPECTATING',
+                                style: TextStyle(
+                                  color: AppColors.textSecondary,
+                                  fontWeight: FontWeight.bold,
+                                  letterSpacing: 2,
+                                ),
+                              ),
                             ),
                           ),
-                        ),
                       ],
                     ),
                   ),

@@ -27,6 +27,7 @@ type Client struct {
 	ID          string // PlayerID (after auth)
 	CurrentRoom *Room  // Pointer to room they are in, if any
 	IsBot       bool   // True if this is a server-side bot
+	IsSpectator bool   // True if joining as a watcher
 }
 
 // readPump pumps messages from the websocket connection to the hub.

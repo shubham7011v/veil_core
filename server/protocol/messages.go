@@ -11,6 +11,12 @@ const (
 	MsgTypeChallenge = "CHALLENGE"
 	MsgTypeStartGame = "START_GAME"
 
+	// Private Room (Client -> Server)
+	MsgTypeCreatePrivateRoom = "CREATE_PRIVATE_ROOM"
+	MsgTypeJoinPrivateRoom   = "JOIN_PRIVATE_ROOM"
+	MsgTypeStartPrivateGame  = "START_PRIVATE_GAME"
+	MsgTypeLeaveRoom         = "LEAVE_ROOM"
+
 	// Server -> Client
 	MsgTypeAuthOk          = "AUTH_OK"
 	MsgTypeAuthFail        = "AUTH_FAIL"
@@ -21,6 +27,11 @@ const (
 	MsgTypeChallengeResult = "CHALLENGE_RESULT"
 	MsgTypeGameOver        = "GAME_OVER"
 	MsgTypeError           = "ERROR"
+
+	// Private Room (Server -> Client)
+	MsgTypeRoomCreated = "ROOM_CREATED"
+	MsgTypeRoomJoined  = "ROOM_JOINED"
+	MsgTypeRoomUpdate  = "ROOM_UPDATE"
 
 	// Leaderboard
 	MsgTypeLeaderboardGet  = "LEADERBOARD_GET"
@@ -47,6 +58,29 @@ type AuthMessage struct {
 type PlayCardsMessage struct {
 	CardIDs      []string `json:"cardIds"`
 	DeclaredRank string   `json:"declaredRank"`
+}
+
+type CreatePrivateRoomMessage struct {
+	RoomName      string  `json:"roomName"`
+	Password      string  `json:"password,omitempty"`
+	MaxPlayers    int     `json:"maxPlayers"`
+	BootAmount    float64 `json:"bootAmount"`
+	VoiceChat     bool    `json:"voiceChat"`
+	SpectatorMode bool    `json:"spectatorMode"`
+}
+
+type JoinPrivateRoomMessage struct {
+	RoomCode    string `json:"roomCode"`
+	Password    string `json:"password,omitempty"`
+	IsSpectator bool   `json:"isSpectator"`
+}
+
+type StartPrivateGameMessage struct {
+	RoomCode string `json:"roomCode"`
+}
+
+type LeaveRoomMessage struct {
+	RoomCode string `json:"roomCode"`
 }
 
 // -- Server Messages --
