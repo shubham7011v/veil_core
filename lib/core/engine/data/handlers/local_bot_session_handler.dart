@@ -137,4 +137,20 @@ class LocalBotSessionHandler extends BaseAuthoritativeHandler {
       executeMove(botId, botUnitsToPlay, targetRank);
     }
   }
+
+  // Use dynamic to match interface, though ignored here
+  @override
+  void setVoiceCallback(Function(Map<String, dynamic> data)? callback) {}
+
+  @override
+  void setVoiceManager(dynamic manager) {}
+
+  @override
+  Future<void> raiseHand() async {}
+
+  @override
+  void sendVoiceSDP(Map<String, dynamic> data) {}
+
+  @override
+  void sendVoiceICE(Map<String, dynamic> data) {}
 }

@@ -15,12 +15,7 @@ import '../widgets/game_win_overlay.dart';
 import '../widgets/session_staging_area.dart';
 import '../widgets/session_bottom_controls.dart';
 import '../../../../core/theme/colors.dart';
-import 'package:veil_core/features/voice/presentation/bloc/voice_bloc.dart';
 import 'package:veil_core/features/voice/presentation/widgets/voice_overlay.dart';
-import '../../../../features/voice/data/voice_audio_manager.dart';
-import '../../../../core/di/service_locator.dart' as di;
-import '../../../../core/engine/data/handlers/websocket_session_handler.dart';
-import 'package:firebase_auth/firebase_auth.dart';
 
 class SessionScreen extends StatefulWidget {
   const SessionScreen({super.key});
@@ -49,9 +44,6 @@ class _SessionScreenState extends State<SessionScreen>
   final GlobalKey _stagingKey = GlobalKey();
   final List<FlyingCard> _flyingCards = [];
 
-  VoiceBloc? _voiceBloc;
-  WebSocketSessionHandler? _sessionHandler;
-
   @override
   void initState() {
     super.initState();
@@ -60,43 +52,11 @@ class _SessionScreenState extends State<SessionScreen>
       duration: const Duration(milliseconds: 1200),
     );
     _entryController.forward();
-
-    // Initialize Voice
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!mounted) return;
-      // Access handler via custom ServiceLocator property
-      final handler = di.sl.gameSessionHandler;
-
-      if (handler is WebSocketSessionHandler) {
-        _sessionHandler = handler;
-
-        // Safe access to FirebaseAuth
-        String myId = "unknown";
-        try {
-          myId = FirebaseAuth.instance.currentUser?.uid ?? "unknown";
-        } catch (e) {
-          debugPrint("Auth not ready: $e");
-        }
-
-        _voiceBloc = VoiceBloc(myUserId: myId);
-        handler.setVoiceBloc(_voiceBloc!);
-
-        // Initialize WebRTC Audio
-        VoiceAudioManager().initialize(handler);
-        handler.setVoiceManager(VoiceAudioManager());
-
-        setState(() {});
-      }
-    });
   }
 
   @override
   void dispose() {
     _entryController.dispose();
-    _voiceBloc?.close();
-    _sessionHandler?.setVoiceBloc(null);
-    _sessionHandler?.setVoiceManager(null);
-    VoiceAudioManager().dispose();
     super.dispose();
   }
 
@@ -513,13 +473,11 @@ class _SessionScreenState extends State<SessionScreen>
                   ),
 
                   // Voice Overlay
-                  if (_voiceBloc != null && _sessionHandler != null)
-                    Positioned.fill(
-                      child: BlocProvider.value(
-                        value: _voiceBloc!,
-                        child: VoiceOverlay(sessionHandler: _sessionHandler!),
-                      ),
+                  Positioned.fill(
+                    child: VoiceOverlay(
+                      sessionHandler: context.read<SessionBloc>().handler,
                     ),
+                  ),
                 ],
               ),
             ),

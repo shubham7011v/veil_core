@@ -1,4 +1,7 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
+import '../di/service_locator.dart' as di;
+import '../../features/voice/presentation/bloc/voice_bloc.dart';
 import '../../features/session/session.dart';
 import '../../features/home/home.dart';
 import '../../features/lobby/lobby.dart';
@@ -35,7 +38,20 @@ class AppRouter {
     rules: (context) => const RulesScreen(),
     deck: (context) => const DeckCollectionScreen(),
     lobby: (context) => const LobbyScreen(),
-    session: (context) => const SessionScreen(),
+    session: (context) => MultiBlocProvider(
+      providers: [
+        BlocProvider(
+          create: (_) => SessionBloc(handler: di.sl.gameSessionHandler),
+        ),
+        BlocProvider(
+          create: (_) => VoiceBloc(
+            myUserId: di.sl.authRepository.currentUser?.uid ?? 'unknown',
+            handler: di.sl.gameSessionHandler,
+          ),
+        ),
+      ],
+      child: const SessionScreen(),
+    ),
     joinRoom: (context) => const JoinRoomScreen(),
     botSettings: (context) => const BotSettingsScreen(),
     matchmaking: (context) => const MatchmakingScreen(),

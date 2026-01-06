@@ -12,7 +12,6 @@ import '../../domain/models/game_move.dart';
 import '../../../../features/auth/domain/models/user_stats.dart';
 import '../../../../features/social/domain/models/friend_record.dart';
 import '../../domain/models/room_event.dart';
-import '../../../../features/voice/presentation/bloc/voice_bloc.dart';
 import '../../../../features/voice/data/voice_audio_manager.dart';
 
 class WebSocketSessionHandler implements GameSessionHandler {
@@ -25,13 +24,23 @@ class WebSocketSessionHandler implements GameSessionHandler {
   final _friendsController = StreamController<List<FriendRecord>>.broadcast();
   final _roomEventController = StreamController<RoomEvent>.broadcast();
 
-  // Optional Voice Bloc reference for signaling
-  VoiceBloc? _voiceBloc;
-  void setVoiceBloc(VoiceBloc? bloc) => _voiceBloc = bloc;
+  // Voice Callbacks & Managers
+  Function(Map<String, dynamic> data)? _voiceCallback;
 
-  // Optional Voice Audio Manager for WebRTC
+  @override
+  void setVoiceCallback(Function(Map<String, dynamic> data)? callback) =>
+      _voiceCallback = callback;
+
+  // Optional Voice Audio Manager for WebRTC (dynamic to avoid direct dependency cycle if strict)
+  // Or ideally VoiceAudioManager interface.
   VoiceAudioManager? _voiceManager;
-  void setVoiceManager(VoiceAudioManager? manager) => _voiceManager = manager;
+
+  @override
+  void setVoiceManager(dynamic manager) {
+    if (manager is VoiceAudioManager) {
+      _voiceManager = manager;
+    }
+  }
 
   SessionState _currentState = SessionState.initial();
 
@@ -302,11 +311,10 @@ class WebSocketSessionHandler implements GameSessionHandler {
   }
 
   void receiveVoiceState(Map<String, dynamic> data) {
-    if (_voiceBloc != null) {
-      _voiceBloc!.add(VoiceStateUpdated(data));
-    }
+    _voiceCallback?.call(data);
   }
 
+  @override
   Future<void> raiseHand() async {
     _send({'type': 'VOICE_RAISE_HAND'});
   }

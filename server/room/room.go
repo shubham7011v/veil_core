@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
+	"sync"
 	"time"
 
 	"veil_server/db"
@@ -15,30 +16,30 @@ import (
 
 // Room represents a single game session
 type Room struct {
-	ID      string
-	Clients map[*Client]bool
+	mu sync.RWMutex // Protects state access
 
-	// Channels
-	Broadcast  chan []byte
-	Register   chan *Client
-	Unregister chan *Client
+	ID      string
+	clients map[*Client]bool
+
+	// Channels (internal use mostly, exposed via methods)
+	broadcast  chan []byte
+	register   chan *Client
+	unregister chan *Client
+	actions    chan GameAction
 
 	// Game State
-	Game *game.Game
+	game *game.Game
 
-	// Action Channel (Thread-safe game updates)
-	Actions chan GameAction
-
-	// Private Room Fields
-	Name       string
-	Code       string
-	Password   string
-	IsPrivate  bool
-	HostID     string
-	MaxPlayers int
-	BootAmount float64
-	Voice      *game.VoiceState
-	WebRTC     *game.WebRTCManager
+	// Private Settings
+	name       string
+	code       string
+	password   string
+	isPrivate  bool
+	hostID     string
+	maxPlayers int
+	bootAmount float64
+	voice      *game.VoiceState
+	webRTC     *game.WebRTCManager
 }
 
 type GameAction struct {
@@ -49,121 +50,173 @@ type GameAction struct {
 func NewRoom(id string) *Room {
 	return &Room{
 		ID:         id,
-		Broadcast:  make(chan []byte),
-		Register:   make(chan *Client),
-		Unregister: make(chan *Client),
-		Clients:    make(map[*Client]bool),
-		Game:       game.NewGame(),
-		Actions:    make(chan GameAction),
-		MaxPlayers: game.MaxPlayers, // Default
-		Voice:      game.NewVoiceState(),
-		WebRTC:     game.NewWebRTCManager(),
+		broadcast:  make(chan []byte),
+		register:   make(chan *Client),
+		unregister: make(chan *Client),
+		clients:    make(map[*Client]bool),
+		game:       game.NewGame(),
+		actions:    make(chan GameAction),
+		maxPlayers: game.MaxPlayers, // Default
+		voice:      game.NewVoiceState(),
+		webRTC:     game.NewWebRTCManager(),
 	}
 }
 
 func NewPrivateRoom(id, name, code, password, hostID string, maxPlayers int, bootAmount float64) *Room {
 	r := NewRoom(id)
-	r.Name = name
-	r.Code = code
-	r.Password = password
-	r.IsPrivate = true
-	r.HostID = hostID
-	r.MaxPlayers = maxPlayers
-	r.BootAmount = bootAmount
-	r.Voice = game.NewVoiceState()
-	r.WebRTC = game.NewWebRTCManager()
+	r.name = name
+	r.code = code
+	r.password = password
+	r.isPrivate = true
+	r.hostID = hostID
+	r.maxPlayers = maxPlayers
+	r.bootAmount = bootAmount
+	// Voice/WebRTC already init in NewRoom
 	return r
 }
 
+// -- Public Accessors (Thread-Safe) --
+
+func (r *Room) Join(client *Client) {
+	r.register <- client
+}
+
+func (r *Room) Leave(client *Client) {
+	r.unregister <- client
+}
+
+func (r *Room) HandleAction(action GameAction) {
+	r.actions <- action
+}
+
+func (r *Room) IsFull() bool {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	return len(r.game.Participants) >= r.maxPlayers
+}
+
+func (r *Room) IsPrivate() bool {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	return r.isPrivate
+}
+
+func (r *Room) CheckPassword(pw string) bool {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	return r.password == "" || r.password == pw
+}
+
+func (r *Room) GetInfo() map[string]interface{} {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+
+	return map[string]interface{}{
+		"roomCode":    r.code,
+		"roomName":    r.name,
+		"hostId":      r.hostID,
+		"maxPlayers":  r.maxPlayers,
+		"bootAmount":  r.bootAmount,
+		"playerCount": len(r.game.Participants),
+		"isPrivate":   r.isPrivate,
+	}
+}
+
+func (r *Room) GetUnicastActionChannel(client *Client) chan<- GameAction {
+	return r.actions
+}
+
 func (r *Room) Run() {
-	ticker := time.NewTicker(200 * time.Millisecond) // Faster ticker for voice updates?
-	// Or keep 1s? Voice needs roughly 1s updates for timer.
-	// 200ms is safer for UI responsiveness if we want to catch state changes quickly.
+	ticker := time.NewTicker(200 * time.Millisecond)
 	defer func() {
 		ticker.Stop()
-		close(r.Register)
-		close(r.Unregister)
-		close(r.Actions)
+		close(r.register)
+		close(r.unregister)
+		close(r.actions)
 	}()
 
 	for {
 		select {
-		case client := <-r.Register:
-			r.Clients[client] = true
+		case client := <-r.register:
+			r.mu.Lock()
+			r.clients[client] = true
 			log.Printf("Client joined Room %s (Spectator: %v)", r.ID, client.IsSpectator)
 
 			if !client.IsSpectator {
-				// Auto-join game logic (simplified)
-				if err := r.Game.AddPlayer(client.ID, "Player "+client.ID); err != nil {
+				// Auto-join game logic
+				if err := r.game.AddPlayer(client.ID, "Player "+client.ID); err != nil {
 					log.Printf("Error adding player: %v", err)
 				}
 
-				// No auto-start at 2 players anymore, let them choose.
-				// But auto-start if lobby reaches absolute MaxPlayers (ONLY FOR PUBLIC).
-				if !r.IsPrivate && len(r.Game.Players) == game.MaxPlayers && r.Game.Phase == game.PhaseLobby {
-					r.Game.Start()
+				// Check auto-start for public rooms
+				if !r.isPrivate && len(r.game.Players) == r.maxPlayers && r.game.Phase == game.PhaseLobby {
+					r.game.Start()
 				}
 			}
 
-			if r.IsPrivate {
-				r.BroadcastRoomInfo() // Update lobby UI
+			// Broadcast Update
+			if r.isPrivate {
+				r.broadcastRoomInfo()
 			} else {
-				r.BroadcastState()
+				r.broadcastState()
 			}
+			r.mu.Unlock()
 
-		case client := <-r.Unregister:
-			if _, ok := r.Clients[client]; ok {
-				delete(r.Clients, client)
-				// Also remove from game engine to allow reconnects/slots
-				r.Game.RemovePlayer(client.ID)
-				// Also remove from voice queue/speaker
-				r.Voice.ReleaseMic(client.ID)
+		case client := <-r.unregister:
+			r.mu.Lock()
+			if _, ok := r.clients[client]; ok {
+				delete(r.clients, client)
+				r.game.RemovePlayer(client.ID)
+				r.voice.ReleaseMic(client.ID)
 				log.Printf("Client left Room %s", r.ID)
 
-				// If Host leaves, assign new host (if anyone left)
-				if r.IsPrivate && client.ID == r.HostID {
-					if len(r.Game.Players) > 0 {
-						// Assign generic first player as host
-						for _, p := range r.Game.Players {
-							r.HostID = p.ID
-							break
-						}
+				// Host reassignment
+				if r.isPrivate && client.ID == r.hostID {
+					if len(r.game.Players) > 0 {
+						// Assign first player as host
+						r.hostID = r.game.Players[0].ID
 					}
 				}
 
-				if r.IsPrivate {
-					r.BroadcastRoomInfo()
+				if r.isPrivate {
+					r.broadcastRoomInfo()
 				} else {
-					r.BroadcastState()
+					r.broadcastState()
 				}
 			}
+			r.mu.Unlock()
 
-		case action := <-r.Actions:
+		case action := <-r.actions:
+			r.mu.Lock()
 			r.processAction(action)
+			r.mu.Unlock()
 
-		case message := <-r.Broadcast:
-			for client := range r.Clients {
+		case message := <-r.broadcast:
+			// Lock for iterating clients
+			r.mu.Lock()
+			for client := range r.clients {
 				select {
 				case client.Send <- message:
 				default:
 					close(client.Send)
-					delete(r.Clients, client)
+					delete(r.clients, client)
 				}
 			}
+			r.mu.Unlock()
 
 		case <-ticker.C:
-			// Game Tick (e.g. turn timers)
-			if r.Game.Phase != game.PhaseLobby && r.Game.Phase != game.PhaseFinished {
-				// r.Game.Tick() // If we had game timers
+			r.mu.Lock()
+			// Game updates
+			if r.game.Phase != game.PhaseLobby && r.game.Phase != game.PhaseFinished {
+				// r.game.Tick()
 			}
 
-			// Voice Tick
-			if r.Voice.Tick() {
-				// Update WebRTC component with new speaker (or empty)
-				r.WebRTC.SetSpeaker(r.Voice.CurrentSpeakerID)
-
-				r.BroadcastVoiceState()
+			// Voice updates
+			if r.voice.Tick() {
+				r.webRTC.SetSpeaker(r.voice.CurrentSpeakerID)
+				r.broadcastVoiceState()
 			}
+			r.mu.Unlock()
 		}
 	}
 }
@@ -178,56 +231,40 @@ func (r *Room) processAction(action GameAction) {
 	case protocol.MsgTypePlayCards:
 		var payload protocol.PlayCardsMessage
 		if json.Unmarshal(msg.Data, &payload) == nil {
-			err = r.Game.PlayCards(client.ID, payload.CardIDs, game.Rank(payload.DeclaredRank))
+			err = r.game.PlayCards(client.ID, payload.CardIDs, game.Rank(payload.DeclaredRank))
 		}
 
 	case protocol.MsgTypePass:
-		err = r.Game.Pass(client.ID)
+		err = r.game.Pass(client.ID)
 
 	case protocol.MsgTypeChallenge:
-		_, err = r.Game.Challenge(client.ID)
+		_, err = r.game.Challenge(client.ID)
 
 	case protocol.MsgTypeJoinPrivateRoom:
-		var payload protocol.JoinPrivateRoomMessage
-		if json.Unmarshal(msg.Data, &payload) == nil {
-			// Logic handled in Manager usually, but if we need room-specific logic:
-			// Actually manager.go handles routing to the room.
-			// The room itself receives the client via Register channel.
-			// We need to know if they are a spectator.
-			// Currently Register channel only passes *Client.
-			// We might need to update Client state BEFORE registering or handle it here?
-			// The Client struct now has IsSpectator.
-		}
+		// Logic mostly handled in Manager.
+		// If we did need it here, we'd process it.
 
 	case protocol.MsgTypeVoiceHandRaise:
-		// Toggle: If speaking/queued, remove. If not, add.
-		// Actually spec says "Raise Hand" -> "Queue".
-		// Implementing toggle is nicer UX usually, but let's stick to "Raise" adds to queue.
-		// Wait, user doc says "Tap Raise Hand". If they tap again?
-		// Let's make it a request to join queue.
-		// If already in queue, maybe remove? (Cancel request).
-		// Let's implement smart toggle: Request if not in, Release if in.
-
 		isQueued := false
-		for _, id := range r.Voice.Queue {
+		for _, id := range r.voice.Queue {
 			if id == client.ID {
 				isQueued = true
 				break
 			}
 		}
 
-		if r.Voice.CurrentSpeakerID == client.ID || isQueued {
-			r.Voice.ReleaseMic(client.ID)
+		if r.voice.CurrentSpeakerID == client.ID || isQueued {
+			r.voice.ReleaseMic(client.ID)
 		} else {
-			r.Voice.RequestMic(client.ID)
+			r.voice.RequestMic(client.ID)
 		}
 
-		r.BroadcastVoiceState()
+		r.broadcastVoiceState()
 
 	case protocol.MsgTypeVoiceSDP:
 		var offer webrtc.SessionDescription
 		if json.Unmarshal(msg.Data, &offer) == nil {
-			answer, err := r.WebRTC.HandleOffer(client.ID, offer)
+			answer, err := r.webRTC.HandleOffer(client.ID, offer)
 			if err == nil && answer != nil {
 				// Reply with Answer
 				resp := protocol.NewMessage(protocol.MsgTypeVoiceSDP, answer)
@@ -241,24 +278,23 @@ func (r *Room) processAction(action GameAction) {
 	case protocol.MsgTypeVoiceICE:
 		var candidate webrtc.ICECandidateInit
 		if json.Unmarshal(msg.Data, &candidate) == nil {
-			if err := r.WebRTC.HandleICE(client.ID, candidate); err != nil {
+			if err := r.webRTC.HandleICE(client.ID, candidate); err != nil {
 				log.Printf("WebRTC ICE Error for %s: %v", client.ID, err)
 			}
 		}
 
 	case protocol.MsgTypeStartGame:
-		// Public room generic start or Private room host start
-		if r.IsPrivate && client.ID != r.HostID {
+		if r.isPrivate && client.ID != r.hostID {
 			err = fmt.Errorf("only host can start the game")
 		} else {
-			err = r.Game.Start()
+			err = r.game.Start()
 		}
 
 	case protocol.MsgTypeStartPrivateGame:
-		if client.ID != r.HostID {
+		if client.ID != r.hostID {
 			err = fmt.Errorf("only host can start the game")
 		} else {
-			err = r.Game.Start()
+			err = r.game.Start()
 		}
 	}
 
@@ -274,48 +310,51 @@ func (r *Room) processAction(action GameAction) {
 		}
 	} else {
 		// Valid move -> Broadcast new state
-		r.BroadcastState()
+		r.broadcastState()
 
-		// NEW: Check if game just ended
-		// We'll trust the game Phase to tell us.
-		// NOTE: This assumes Game.Phase switches to PhaseGameOver after a winning move.
-		if r.Game.Phase == game.PhaseFinished {
-			log.Printf("Game Over in Room %s! Winner: %s", r.ID, r.Game.WinnerID)
+		// Check Game Over
+		if r.game.Phase == game.PhaseFinished {
+			log.Printf("Game Over in Room %s! Winner: %s", r.ID, r.game.WinnerID)
 
 			// 1. Record in SQLite
 			var playerIDs []string
-			for _, p := range r.Game.Participants {
+			for _, p := range r.game.Participants {
 				playerIDs = append(playerIDs, p.ID)
 			}
 			matchID := fmt.Sprintf("%s_%d", r.ID, time.Now().Unix())
 
-			// Simple duration (mocked as 60s for now, or track start time in Room later)
-			if err := db.RecordGameResult(matchID, playerIDs, r.Game.WinnerID, 120); err != nil {
+			if err := db.RecordGameResult(matchID, playerIDs, r.game.WinnerID, 120); err != nil {
 				log.Printf("Failed to record game result: %v", err)
 			}
 
-			// 2. Broadcast Updated Stats to each client
-			go r.BroadcastStats()
+			// 2. Broadcast Updated Stats
+			// Note: broadcastStats requires mutex because it iterates clients.
+			// Currently we HOLD mutex here (called from Run).
+			// So internal helper should NOT lock.
+			r.broadcastStats()
 		}
 	}
 }
 
-func (r *Room) BroadcastStats() {
-	for client := range r.Clients {
+func (r *Room) broadcastStats() {
+	for client := range r.clients {
 		stats, err := db.GetOrCreateUser(client.ID, "") // Name ignored on fetch
 		if err == nil {
 			msg := protocol.NewMessage("STATS_UPDATE", stats)
 			bytes, _ := json.Marshal(msg)
-			client.Send <- bytes
+			select {
+			case client.Send <- bytes:
+			default:
+			}
 		}
 	}
 }
 
-func (r *Room) BroadcastVoiceState() {
-	msg := protocol.NewMessage(protocol.MsgTypeVoiceState, r.Voice)
+func (r *Room) broadcastVoiceState() {
+	msg := protocol.NewMessage(protocol.MsgTypeVoiceState, r.voice)
 	bytes, _ := json.Marshal(msg)
 
-	for client := range r.Clients {
+	for client := range r.clients {
 		select {
 		case client.Send <- bytes:
 		default:
@@ -324,23 +363,23 @@ func (r *Room) BroadcastVoiceState() {
 	}
 }
 
-func (r *Room) BroadcastState() {
+func (r *Room) broadcastState() {
 	defer func() {
 		if err := recover(); err != nil {
 			log.Printf("Recovered from panic in BroadcastState: %v", err)
 		}
 	}()
 
-	for client := range r.Clients {
+	for client := range r.clients {
 		if client.IsSpectator {
 			// Spectator View
 			view := map[string]interface{}{
-				"phase":          r.Game.Phase,
-				"myHand":         []interface{}{}, // Empty hand for spectators
-				"participants":   r.Game.Participants,
-				"pileCount":      r.Game.PileCount,
-				"activePlayerId": r.Game.ActivePlayerID(),
-				"declaredRank":   r.Game.DeclaredRank,
+				"phase":          r.game.Phase,
+				"myHand":         []interface{}{},
+				"participants":   r.game.Participants,
+				"pileCount":      r.game.PileCount,
+				"activePlayerId": r.game.ActivePlayerID(),
+				"declaredRank":   r.game.DeclaredRank,
 				"isSpectator":    true,
 			}
 			msg := protocol.NewMessage(protocol.MsgTypeGameState, view)
@@ -352,18 +391,18 @@ func (r *Room) BroadcastState() {
 			continue
 		}
 
-		p := r.Game.PlayerMap[client.ID]
+		p := r.game.PlayerMap[client.ID]
 		if p == nil {
 			continue
 		}
 
 		view := map[string]interface{}{
-			"phase":          r.Game.Phase,
+			"phase":          r.game.Phase,
 			"myHand":         p.Hand,
-			"participants":   r.Game.Participants,
-			"pileCount":      r.Game.PileCount,
-			"activePlayerId": r.Game.ActivePlayerID(),
-			"declaredRank":   r.Game.DeclaredRank,
+			"participants":   r.game.Participants,
+			"pileCount":      r.game.PileCount,
+			"activePlayerId": r.game.ActivePlayerID(),
+			"declaredRank":   r.game.DeclaredRank,
 		}
 
 		msg := protocol.NewMessage(protocol.MsgTypeGameState, view)
@@ -377,39 +416,46 @@ func (r *Room) BroadcastState() {
 	}
 }
 
-func (r *Room) BroadcastRoomInfo() {
+func (r *Room) broadcastRoomInfo() {
 	roomInfo := map[string]interface{}{
-		"roomCode":    r.Code,
-		"roomName":    r.Name,
-		"hostId":      r.HostID,
-		"maxPlayers":  r.MaxPlayers,
-		"bootAmount":  r.BootAmount,
-		"playerCount": len(r.Clients),
+		"roomCode":    r.code,
+		"roomName":    r.name,
+		"hostId":      r.hostID,
+		"maxPlayers":  r.maxPlayers,
+		"bootAmount":  r.bootAmount,
+		"playerCount": len(r.clients),
 	}
 
 	// Participants List
 	var participants []map[string]interface{}
-	for client := range r.Clients {
+	for client := range r.clients {
 		p := map[string]interface{}{
 			"id":       client.ID,
-			"name":     "Player " + client.ID, // Or fetch real name
+			"name":     "Player " + client.ID,
 			"isActive": true,
 		}
-		if r.Game.PlayerMap[client.ID] != nil {
-			p["name"] = r.Game.PlayerMap[client.ID].Name
+		if r.game.PlayerMap[client.ID] != nil {
+			p["name"] = r.game.PlayerMap[client.ID].Name
 		}
 		participants = append(participants, p)
 	}
 	roomInfo["participants"] = participants
-	roomInfo["isGameStarted"] = r.Game.Phase != game.PhaseLobby
+	roomInfo["isGameStarted"] = r.game.Phase != game.PhaseLobby
 
 	msg := protocol.NewMessage(protocol.MsgTypeRoomUpdate, roomInfo)
 	bytes, _ := json.Marshal(msg)
 
-	for client := range r.Clients {
+	for client := range r.clients {
 		select {
 		case client.Send <- bytes:
 		default:
 		}
 	}
+}
+
+// ForceBroadcastState allows external triggers (e.g. from Manager) to safely broadcast state.
+func (r *Room) ForceBroadcastState() {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.broadcastState()
 }

@@ -1,7 +1,7 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter_webrtc/flutter_webrtc.dart';
 import 'package:permission_handler/permission_handler.dart';
-import '../../../../core/engine/data/handlers/websocket_session_handler.dart';
+import '../../../../core/engine/engine.dart';
 
 class VoiceAudioManager {
   // Singleton
@@ -11,11 +11,11 @@ class VoiceAudioManager {
 
   RTCPeerConnection? _peerConnection;
   MediaStream? _localStream;
-  WebSocketSessionHandler? _signaling;
+  GameSessionHandler? _signaling;
 
   bool _isMicEnabled = true;
 
-  Future<void> initialize(WebSocketSessionHandler signaling) async {
+  Future<void> initialize(GameSessionHandler signaling) async {
     _signaling = signaling;
     await _requestPermissions();
     await _createPeerConnection();

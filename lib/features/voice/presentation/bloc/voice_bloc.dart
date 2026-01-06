@@ -1,5 +1,7 @@
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:equatable/equatable.dart';
+import '../../../../core/engine/engine.dart';
+import '../../data/voice_audio_manager.dart';
 
 // -- Events --
 abstract class VoiceEvent extends Equatable {
@@ -69,9 +71,27 @@ class VoiceState extends Equatable {
 // -- Bloc --
 class VoiceBloc extends Bloc<VoiceEvent, VoiceState> {
   final String myUserId;
+  final GameSessionHandler handler;
 
-  VoiceBloc({required this.myUserId}) : super(const VoiceState()) {
+  VoiceBloc({required this.myUserId, required this.handler})
+    : super(const VoiceState()) {
+    // Usage: Register callback used by Handler to push updates to Bloc
+    handler.setVoiceCallback((data) => add(VoiceStateUpdated(data)));
+
+    // Initialize Manager
+    final audioManager = VoiceAudioManager();
+    audioManager.initialize(handler);
+    handler.setVoiceManager(audioManager);
+
     on<VoiceStateUpdated>(_onStateUpdated);
+  }
+
+  @override
+  Future<void> close() {
+    handler.setVoiceCallback(null);
+    handler.setVoiceManager(null);
+    VoiceAudioManager().dispose();
+    return super.close();
   }
 
   void _onStateUpdated(VoiceStateUpdated event, Emitter<VoiceState> emit) {

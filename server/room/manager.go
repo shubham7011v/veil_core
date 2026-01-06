@@ -52,7 +52,7 @@ func (m *Manager) Run() {
 				delete(m.Clients, client)
 				m.Queue.Remove(client) // Remove from queue if waiting
 				if client.CurrentRoom != nil {
-					client.CurrentRoom.Unregister <- client
+					client.CurrentRoom.Leave(client)
 				}
 				if !client.IsBot {
 					close(client.Send)
@@ -86,7 +86,7 @@ func (m *Manager) createMatchRoom(clients []*Client) {
 
 	for _, c := range clients {
 		c.CurrentRoom = room
-		room.Register <- c
+		room.Join(c)
 	}
 
 	// Wait briefly for registers then start
@@ -94,7 +94,7 @@ func (m *Manager) createMatchRoom(clients []*Client) {
 		time.Sleep(500 * time.Millisecond)
 		startMsg := protocol.BaseMessage{Type: protocol.MsgTypeStartGame}
 		// Send start triggering via first client
-		room.Actions <- GameAction{Client: clients[0], Message: startMsg}
+		room.HandleAction(GameAction{Client: clients[0], Message: startMsg})
 	}()
 }
 
@@ -173,11 +173,11 @@ func (m *Manager) HandleMessage(c *Client, message []byte) {
 			log.Printf("Friend accept error: %v", err)
 			return
 		}
-		addFriendListResponse(c)
+		m.addFriendListResponse(c)
 		return
 
 	case protocol.MsgTypeFriendList:
-		addFriendListResponse(c)
+		m.addFriendListResponse(c)
 		return
 
 	case "JOIN_ROOM":
@@ -185,7 +185,7 @@ func (m *Manager) HandleMessage(c *Client, message []byte) {
 		if c.CurrentRoom == nil {
 			m.Queue.Add(c)
 		} else {
-			c.CurrentRoom.BroadcastState()
+			c.CurrentRoom.ForceBroadcastState()
 		}
 		return
 
@@ -208,7 +208,7 @@ func (m *Manager) HandleMessage(c *Client, message []byte) {
 		return
 	case protocol.MsgTypeLeaveRoom:
 		if c.CurrentRoom != nil {
-			c.CurrentRoom.Unregister <- c
+			c.CurrentRoom.Leave(c)
 			c.CurrentRoom = nil
 		}
 		return
@@ -216,10 +216,10 @@ func (m *Manager) HandleMessage(c *Client, message []byte) {
 
 	// 3. Room-scoped Handlers (Play, Pass, etc)
 	if c.CurrentRoom != nil {
-		c.CurrentRoom.Actions <- GameAction{
+		c.CurrentRoom.HandleAction(GameAction{
 			Client:  c,
 			Message: baseMsg,
-		}
+		})
 	} else {
 		// Error: Not in room
 		errBytes, _ := json.Marshal(protocol.NewMessage(protocol.MsgTypeError, protocol.ErrorMessage{
@@ -230,7 +230,7 @@ func (m *Manager) HandleMessage(c *Client, message []byte) {
 	}
 }
 
-func addFriendListResponse(c *Client) {
+func (m *Manager) addFriendListResponse(c *Client) {
 	friends, err := db.GetFriends(c.ID)
 	if err != nil {
 		log.Printf("Friend list error: %v", err)
@@ -254,7 +254,7 @@ func (m *Manager) createPrivateRoom(c *Client, data protocol.CreatePrivateRoomMe
 	roomID := fmt.Sprintf("private_%s_%d", code, time.Now().Unix())
 
 	r := NewPrivateRoom(roomID, data.RoomName, code, data.Password, c.ID, data.MaxPlayers, data.BootAmount)
-	m.Rooms[code] = r // Index by Code for easy lookup! (Note: this overrides ID index effectively for lookup)
+	m.Rooms[code] = r
 	// Optionally also store by ID if needed, but Code is primary for joining.
 
 	go r.Run()
@@ -273,13 +273,11 @@ func (m *Manager) createPrivateRoom(c *Client, data protocol.CreatePrivateRoomMe
 
 	// Auto-join the creator
 	c.CurrentRoom = r
-	r.Register <- c
+	r.Join(c)
 }
 
 func (m *Manager) joinPrivateRoom(c *Client, data protocol.JoinPrivateRoomMessage) {
 	if c.CurrentRoom != nil {
-		// Leave current room first? Or error?
-		// For now, error
 		m.sendError(c, "ALREADY_IN_ROOM", "You are already in a room")
 		return
 	}
@@ -290,7 +288,7 @@ func (m *Manager) joinPrivateRoom(c *Client, data protocol.JoinPrivateRoomMessag
 		return
 	}
 
-	if r.Password != "" && r.Password != data.Password {
+	if !r.CheckPassword(data.Password) {
 		m.sendError(c, "INVALID_PASSWORD", "Incorrect password")
 		return
 	}
@@ -298,22 +296,25 @@ func (m *Manager) joinPrivateRoom(c *Client, data protocol.JoinPrivateRoomMessag
 	// Set Spectator Status
 	c.IsSpectator = data.IsSpectator
 
-	// Only check max players if NOT a spectator
-	if !c.IsSpectator && len(r.Game.Participants) >= r.MaxPlayers {
+	// Only check max players if NOT a spectator. Thread-safe check.
+	if !c.IsSpectator && r.IsFull() {
 		m.sendError(c, "ROOM_FULL", "Room is full")
 		return
 	}
 
 	// Success
 	c.CurrentRoom = r
-	r.Register <- c
+	r.Join(c)
 
 	// Send success message
-	// Client receives ROOM_JOINED with room info
+	// Client receives ROOM_JOINED with room info.
+
+	info := r.GetInfo()
+
 	response := map[string]interface{}{
-		"roomCode": r.Code,
-		"roomName": r.Name,
-		"hostId":   r.HostID,
+		"roomCode": info["roomCode"],
+		"roomName": info["roomName"],
+		"hostId":   info["hostId"],
 	}
 	bytes, _ := json.Marshal(protocol.NewMessage(protocol.MsgTypeRoomJoined, response))
 	c.Send <- bytes

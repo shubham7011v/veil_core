@@ -2,10 +2,10 @@ import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import '../../../../core/theme/colors.dart';
 import '../bloc/voice_bloc.dart';
-import '../../../../core/engine/data/handlers/websocket_session_handler.dart';
+import '../../../../core/engine/engine.dart';
 
 class VoiceOverlay extends StatelessWidget {
-  final WebSocketSessionHandler sessionHandler;
+  final GameSessionHandler sessionHandler;
 
   const VoiceOverlay({super.key, required this.sessionHandler});
 
