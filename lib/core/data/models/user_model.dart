@@ -84,4 +84,10 @@ class UserModel extends Equatable {
       isNameSet: isNameSet ?? this.isNameSet,
     );
   }
+
+  /// Returns the first name of the user if a full name is provided.
+  String get firstName {
+    if (name.isEmpty) return 'Mysterious Player';
+    return name.split(' ').first;
+  }
 }

@@ -10,6 +10,7 @@ import '../../../social/social.dart';
 import '../../../collection/collection.dart';
 import '../../../settings/settings.dart';
 import '../widgets/royal_name_modal.dart';
+import '../widgets/home_top_bar.dart';
 import '../../../../core/di/service_locator.dart';
 
 class HomeScreen extends StatefulWidget {
@@ -94,7 +95,7 @@ class _HomeScreenState extends State<HomeScreen> {
 
             return Column(
               children: [
-                _buildTopBar(context, user, authState, palette),
+                HomeTopBar(user: user, palette: palette),
                 Expanded(
                   child: SingleChildScrollView(
                     padding: const EdgeInsets.symmetric(horizontal: 24),
@@ -189,128 +190,6 @@ class _HomeScreenState extends State<HomeScreen> {
           },
         );
       },
-    );
-  }
-
-  Widget _buildTopBar(
-    BuildContext context,
-    dynamic user,
-    AuthState authState,
-    AppColorPalette palette,
-  ) {
-    String? photoUrl;
-    String displayName = 'Mysterious Player';
-    String rank = 'Novice';
-
-    if (authState is Authenticated) {
-      photoUrl = authState.user.photoURL;
-      displayName = authState.user.displayName ?? displayName;
-      rank = authState.stats?.rank ?? rank;
-    } else if (user != null) {
-      rank = user.rank;
-    }
-
-    // Only display the first name if a full name is provided
-    if (displayName.contains(' ')) {
-      displayName = displayName.split(' ').first;
-    }
-
-    String greeting = sl.greetingService.getTimeBasedGreeting();
-
-    return Container(
-      padding: const EdgeInsets.all(24),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      greeting.toUpperCase(),
-                      style: GoogleFonts.inter(
-                        color: palette.textTertiary,
-                        fontSize: 14,
-                        fontWeight: FontWeight.w600,
-                        letterSpacing: 1.5,
-                      ),
-                    ),
-                    Text(
-                      displayName,
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
-                      style: GoogleFonts.cinzel(
-                        color: palette.primary,
-                        fontSize: 24,
-                        fontWeight: FontWeight.bold,
-                        letterSpacing: 1,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              const SizedBox(width: 16),
-              // Non-tappable profile pic
-              CircleAvatar(
-                radius: 30,
-                backgroundColor: palette.primary.withValues(alpha: 0.1),
-                backgroundImage: photoUrl != null
-                    ? NetworkImage(photoUrl)
-                    : null,
-                child: photoUrl == null
-                    ? Icon(Icons.person, size: 20, color: palette.primary)
-                    : null,
-              ),
-            ],
-          ),
-          const SizedBox(height: 8),
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              _buildInfoChip('Rank', rank, palette.primary, palette),
-              _buildInfoChip(
-                'Coins',
-                '${user?.coins ?? 1000}',
-                palette.primary,
-                palette,
-              ),
-            ],
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildInfoChip(
-    String label,
-    String value,
-    Color color,
-    AppColorPalette palette,
-  ) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(
-          label.toUpperCase(),
-          style: GoogleFonts.inter(
-            color: palette.textTertiary,
-            fontSize: 10,
-            fontWeight: FontWeight.bold,
-            letterSpacing: 1,
-          ),
-        ),
-        Text(
-          value,
-          style: GoogleFonts.cinzel(
-            color: color,
-            fontSize: 16,
-            fontWeight: FontWeight.w500,
-          ),
-        ),
-      ],
     );
   }
 
