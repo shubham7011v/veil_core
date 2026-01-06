@@ -19,6 +19,7 @@ class SessionState extends Equatable {
   final String? activeParticipantId;
   final String? lastActionText; // e.g. "Rahul played 2 Units"
   final String? winnerId;
+  final UnitRank? currentRank;
 
   final int? turnTimerS;
 
@@ -35,6 +36,7 @@ class SessionState extends Equatable {
     this.lastActionText,
     this.winnerId,
     this.turnTimerS,
+    this.currentRank,
     this.isSpectator = false,
     this.error,
   });
@@ -50,6 +52,7 @@ class SessionState extends Equatable {
     lastActionText,
     winnerId,
     turnTimerS,
+    currentRank,
     isSpectator,
     error,
   ];
@@ -75,6 +78,7 @@ class SessionState extends Equatable {
     String? lastActionText,
     String? winnerId,
     int? turnTimerS,
+    UnitRank? currentRank,
     bool? isSpectator,
     SessionError? error,
     bool clearTimer = false,
@@ -90,6 +94,7 @@ class SessionState extends Equatable {
       lastActionText: lastActionText ?? this.lastActionText,
       winnerId: winnerId ?? this.winnerId,
       turnTimerS: clearTimer ? null : (turnTimerS ?? this.turnTimerS),
+      currentRank: currentRank ?? this.currentRank,
       isSpectator: isSpectator ?? this.isSpectator,
       error: clearError ? null : (error ?? this.error),
     );

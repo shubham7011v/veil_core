@@ -82,7 +82,11 @@ abstract class BaseAuthoritativeHandler implements GameSessionHandler {
   String? get lastPlayedById => _lastPlayedById;
 
   @protected
-  void setRoundRank(UnitRank rank) => _currentRank = rank;
+  void setRoundRank(UnitRank rank) {
+    _currentRank = rank;
+    _currentState = _currentState.copyWith(currentRank: rank);
+    emitState();
+  }
 
   // Helper for subclasses to get a specific hand
   @protected
@@ -112,6 +116,8 @@ abstract class BaseAuthoritativeHandler implements GameSessionHandler {
     _lastBluffWinnerId = null;
     _lastBluffLoserId = null;
     _isBluffSuccessful = null;
+
+    _currentState = _currentState.copyWith(currentRank: null);
 
     final actualPlayerCount = playerCount.clamp(2, 10);
     _addToLog("New game started with $actualPlayerCount players.");
@@ -166,13 +172,13 @@ abstract class BaseAuthoritativeHandler implements GameSessionHandler {
     );
     emitState();
 
-    // Phase 1.5: Shuffling (delayed slightly to ensure UI is ready)
-    Future.delayed(const Duration(milliseconds: 500), () {
+    // Phase 1.5: Shuffling (delayed to ensure UI is fully mounted and listening)
+    Future.delayed(const Duration(milliseconds: 800), () {
       _eventController.add(SessionEventType.shuffling);
     });
 
-    // Phase 2: Update state after shuffle completes (no separate deal event)
-    Future.delayed(const Duration(milliseconds: 1800), () {
+    // Phase 2: Update state after shuffle animation completes
+    Future.delayed(const Duration(milliseconds: 2000), () {
       _currentState = _currentState.copyWith(
         participants: participants,
         myHand: _hands['me']!,
@@ -181,6 +187,12 @@ abstract class BaseAuthoritativeHandler implements GameSessionHandler {
       );
       emitState();
       startTurnTimer();
+
+      // Trigger initial turn for the active participant (fixes bot-first hang)
+      final initialActiveId = _currentState.activeParticipantId;
+      if (initialActiveId != null) {
+        onTurnActive(initialActiveId);
+      }
     });
   }
 
@@ -321,7 +333,10 @@ abstract class BaseAuthoritativeHandler implements GameSessionHandler {
     _pile.addAll(units);
     _lastPlayedById = playerId;
     _passCount = 0;
-    _currentRank ??= declaredRank;
+    if (_currentRank == null) {
+      _currentRank = declaredRank;
+      _currentState = _currentState.copyWith(currentRank: declaredRank);
+    }
 
     _lastMove = GameMove(
       playerId: playerId,
@@ -433,6 +448,8 @@ abstract class BaseAuthoritativeHandler implements GameSessionHandler {
     _lastPlayedById = null;
     _passCount = 0;
     _pile.clear();
+
+    _currentState = _currentState.copyWith(currentRank: null);
 
     if (wasDiscarded) {
       _activeEventActorId = startId;

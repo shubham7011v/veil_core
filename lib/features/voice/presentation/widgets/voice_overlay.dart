@@ -5,7 +5,7 @@ import '../bloc/voice_bloc.dart';
 import '../../../../core/engine/engine.dart';
 
 class VoiceOverlay extends StatelessWidget {
-  final GameSessionHandler sessionHandler;
+  final VoiceSessionHandler sessionHandler;
 
   const VoiceOverlay({super.key, required this.sessionHandler});
 

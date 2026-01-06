@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:web_socket_channel/web_socket_channel.dart';
 import '../../domain/handlers/game_session_handler.dart';
+import '../../domain/handlers/voice_session_handler.dart';
 import '../../domain/models/session_state.dart';
 import '../../domain/models/session_enums.dart';
 import '../../domain/models/unit.dart';
@@ -21,7 +22,8 @@ enum ConnectionStatus {
   failed,
 }
 
-class WebSocketSessionHandler implements GameSessionHandler {
+class WebSocketSessionHandler
+    implements GameSessionHandler, VoiceSessionHandler {
   WebSocketChannel? _channel;
 
   final _stateController = StreamController<SessionState>.broadcast();
@@ -83,6 +85,9 @@ class WebSocketSessionHandler implements GameSessionHandler {
 
   @override
   Stream<SessionEventType> get eventStream => _eventController.stream;
+
+  @override
+  SessionState get currentState => _currentState;
 
   Stream<UserStats> get statsStream => _statsController.stream;
 
@@ -545,6 +550,6 @@ class WebSocketSessionHandler implements GameSessionHandler {
     await _leaderboardController.close();
     await _friendsController.close();
     await _roomEventController.close();
-    _voiceManager?.dispose();
+    await _voiceManager?.dispose();
   }
 }

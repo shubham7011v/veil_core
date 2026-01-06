@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import '../../../../core/theme/colors.dart';
 import '../../../../core/constants/dimens.dart';
@@ -30,11 +31,13 @@ class _CreateRoomScreenState extends State<CreateRoomScreen> {
   bool _spectatorMode = false;
   bool _isPrivate = true; // Default to private based on flow
   bool _isCreating = false;
+  StreamSubscription? _roomEventSubscription;
 
   @override
   void dispose() {
     _nameController.dispose();
     _passwordController.dispose();
+    _roomEventSubscription?.cancel();
     super.dispose();
   }
 
@@ -89,20 +92,14 @@ class _CreateRoomScreenState extends State<CreateRoomScreen> {
         spectatorMode: _spectatorMode,
       );
 
-      // 5. Listen for success
-      // We can listen to the stream here or in the Lobby.
-      // For smoother UX, let's wait for the event here before navigating.
-      handler.roomEventStream.listen((event) {
+      // 5. Listen for success - store subscription
+      _roomEventSubscription = handler.roomEventStream.listen((event) {
         if (event is RoomCreated) {
           if (mounted) {
             Navigator.pushReplacementNamed(context, '/lobby');
           }
         }
       });
-
-      // Cleanup subscription handled by stream closing or navigation?
-      // Ideally managing subscriptions is better, but for this one-shot navigation it's ok.
-      // The handler persists in the Bloc.
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(

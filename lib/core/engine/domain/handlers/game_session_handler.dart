@@ -21,6 +21,7 @@ abstract class GameSessionHandler {
   // UI Helper Properties (Generic)
   bool get isRevealingBluff;
   Map<String, String> get pNames;
+  SessionState get currentState;
 
   Future<void> startGame({int playerCount = 5, int thinkingTimeS = 10});
 
@@ -31,13 +32,6 @@ abstract class GameSessionHandler {
   /// Manual & Auto Sorting
   void sortHand();
   void reorderHand(int oldIndex, int newIndex);
-
-  /// Voice & WebRTC
-  void setVoiceCallback(Function(Map<String, dynamic> data)? callback);
-  void setVoiceManager(dynamic manager);
-  Future<void> raiseHand();
-  void sendVoiceSDP(Map<String, dynamic> data);
-  void sendVoiceICE(Map<String, dynamic> data);
 
   void dispose();
 }

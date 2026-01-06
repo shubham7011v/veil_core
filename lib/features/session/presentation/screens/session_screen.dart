@@ -16,6 +16,7 @@ import '../widgets/session_staging_area.dart';
 import '../widgets/session_bottom_controls.dart';
 import '../../../../core/theme/colors.dart';
 import 'package:veil_core/features/voice/presentation/widgets/voice_overlay.dart';
+import '../../../../core/di/service_locator.dart' as di;
 
 class SessionScreen extends StatefulWidget {
   const SessionScreen({super.key});
@@ -472,12 +473,14 @@ class _SessionScreenState extends State<SessionScreen>
                     ),
                   ),
 
-                  // Voice Overlay
-                  Positioned.fill(
-                    child: VoiceOverlay(
-                      sessionHandler: context.read<SessionBloc>().handler,
+                  // Voice Overlay - only for online matches
+                  if (context.read<SessionBloc>().handler
+                      is engine.VoiceSessionHandler)
+                    Positioned.fill(
+                      child: VoiceOverlay(
+                        sessionHandler: di.sl.voiceSessionHandler,
+                      ),
                     ),
-                  ),
                 ],
               ),
             ),

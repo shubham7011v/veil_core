@@ -79,7 +79,7 @@ class VoiceState extends Equatable {
 // -- Bloc --
 class VoiceBloc extends Bloc<VoiceEvent, VoiceState> {
   final String myUserId;
-  final GameSessionHandler handler;
+  final VoiceSessionHandler handler;
   int _stateVersion = 0; // Track state version for synchronization
 
   VoiceBloc({required this.myUserId, required this.handler})

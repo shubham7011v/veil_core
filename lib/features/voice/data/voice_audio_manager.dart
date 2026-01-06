@@ -11,11 +11,11 @@ class VoiceAudioManager {
 
   RTCPeerConnection? _peerConnection;
   MediaStream? _localStream;
-  GameSessionHandler? _signaling;
+  VoiceSessionHandler? _signaling;
 
   bool _isMicEnabled = true;
 
-  Future<void> initialize(GameSessionHandler signaling) async {
+  Future<void> initialize(VoiceSessionHandler signaling) async {
     _signaling = signaling;
     await _requestPermissions();
     await _createPeerConnection();
@@ -124,9 +124,33 @@ class VoiceAudioManager {
     }
   }
 
-  void dispose() {
-    _localStream?.dispose();
-    _peerConnection?.dispose();
+  Future<void> dispose() async {
+    _isMicEnabled = false; // Disable mic logic
+
+    // Stop tracks first
+    if (_localStream != null) {
+      for (var track in _localStream!.getTracks()) {
+        try {
+          track.stop();
+        } catch (e) {
+          debugPrint("Error stopping track: $e");
+        }
+      }
+    }
+
+    try {
+      await _localStream?.dispose();
+    } catch (e) {
+      debugPrint("Error disposing local stream: $e");
+    }
+
+    try {
+      await _peerConnection?.close(); // use close() before dispose()
+      await _peerConnection?.dispose();
+    } catch (e) {
+      debugPrint("Error disposing peer connection: $e");
+    }
+
     _localStream = null;
     _peerConnection = null;
   }

@@ -17,6 +17,7 @@ class ServiceLocator {
   late final UserRepository userRepository;
   late final OnboardingRepository onboardingRepository;
   late final GameSessionHandler gameSessionHandler;
+  late final VoiceSessionHandler voiceSessionHandler;
   late final GreetingService greetingService;
   late final SystemStatusService systemStatusService;
 
@@ -41,6 +42,7 @@ class ServiceLocator {
 
     // Default to local, but the app can switch
     gameSessionHandler = LocalBotSessionHandler();
+    voiceSessionHandler = _webSocketHandler;
   }
 
   void initializeSystemStatus(AuthBloc authBloc) {

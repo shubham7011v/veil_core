@@ -113,13 +113,24 @@ class _BotSettingsScreenState extends State<BotSettingsScreen> {
                   label: 'START BATTLE',
                   icon: Icons.play_arrow,
                   onPressed: () {
-                    context.read<SessionBloc>().add(
-                      SessionStartRequested(
-                        playerCount: _playerCount.toInt(),
-                        thinkingTimeS: _botThinkingTime.toInt(),
-                      ),
-                    );
-                    Navigator.pushReplacementNamed(context, '/session');
+                    final playerCount = _playerCount.toInt();
+                    final thinkingTime = _botThinkingTime.toInt();
+
+                    // Navigate first, then add event to the new SessionBloc
+                    Navigator.pushReplacementNamed(context, '/session').then((
+                      _,
+                    ) {
+                      // Find the SessionBloc in the new route's context
+                      final newContext = Navigator.of(context).context;
+                      if (newContext.mounted) {
+                        newContext.read<SessionBloc>().add(
+                          SessionStartRequested(
+                            playerCount: playerCount,
+                            thinkingTimeS: thinkingTime,
+                          ),
+                        );
+                      }
+                    });
                   },
                 ),
               ),

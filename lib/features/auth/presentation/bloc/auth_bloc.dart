@@ -24,7 +24,7 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
     on<AuthStatsUpdated>(_onAuthStatsUpdated);
 
     _authStateSubscription = _authRepository.authStateChanges.listen((user) {
-      if (user != null) {
+      if (!isClosed && user != null) {
         add(AuthCheckRequested());
       }
     });

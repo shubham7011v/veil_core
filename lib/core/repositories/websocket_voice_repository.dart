@@ -1,9 +1,9 @@
 import '../repositories/voice_repository.dart';
-import '../engine/domain/handlers/game_session_handler.dart';
+import '../engine/engine.dart';
 
 /// WebSocket implementation of VoiceRepository
 class WebSocketVoiceRepository implements VoiceRepository {
-  final GameSessionHandler _handler;
+  final VoiceSessionHandler _handler;
   final Stream<Map<String, dynamic>> _voiceStateStream;
 
   WebSocketVoiceRepository(this._handler, this._voiceStateStream);

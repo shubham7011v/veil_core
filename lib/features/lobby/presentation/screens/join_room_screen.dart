@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import '../../../../core/theme/colors.dart';
 import '../../../../core/constants/dimens.dart';
@@ -24,11 +25,13 @@ class _JoinRoomScreenState extends State<JoinRoomScreen> {
   final _passwordController = TextEditingController();
   bool _isJoining = false;
   bool _isSpectator = false;
+  StreamSubscription? _roomEventSubscription;
 
   @override
   void dispose() {
     _codeController.dispose();
     _passwordController.dispose();
+    _roomEventSubscription?.cancel();
     super.dispose();
   }
 
@@ -62,8 +65,8 @@ class _JoinRoomScreenState extends State<JoinRoomScreen> {
         isSpectator: _isSpectator,
       );
 
-      // 5. Listen for success
-      handler.roomEventStream.listen((event) {
+      // 5. Listen for success - store subscription
+      _roomEventSubscription = handler.roomEventStream.listen((event) {
         if (event is RoomJoined) {
           if (mounted) {
             Navigator.pushReplacementNamed(context, '/lobby');
@@ -77,7 +80,6 @@ class _JoinRoomScreenState extends State<JoinRoomScreen> {
           }
         }
       });
-      // Note: handler persists in Bloc, subscription can be managed if needed.
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(

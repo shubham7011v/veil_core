@@ -95,17 +95,21 @@ class SessionBloc extends Bloc<SessionEvent, SessionBlocState> {
 
   void _initHandler() {
     _stateSub = _handler.sessionStateStream.listen((newState) {
-      add(EngineStateUpdated(newState));
+      if (!isClosed) {
+        add(EngineStateUpdated(newState));
+      }
     });
 
     _eventSub = _handler.eventStream.listen((event) {
-      add(
-        EngineEventReceived(
-          event,
-          _handler.activeEventActorId,
-          cardCount: _handler.lastCountClaimed,
-        ),
-      );
+      if (!isClosed) {
+        add(
+          EngineEventReceived(
+            event,
+            _handler.activeEventActorId,
+            cardCount: _handler.lastCountClaimed,
+          ),
+        );
+      }
     });
   }
 
@@ -236,6 +240,7 @@ class SessionBloc extends Bloc<SessionEvent, SessionBlocState> {
   ) {
     emit(
       state.copyWith(
+        engineState: _handler.currentState,
         pNames: _handler.pNames,
         isRevealingBluff: _handler.isRevealingBluff,
         lastMove: _handler.lastMove,

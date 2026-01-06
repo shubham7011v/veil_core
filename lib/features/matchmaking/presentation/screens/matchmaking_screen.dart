@@ -24,6 +24,8 @@ class _MatchmakingScreenState extends State<MatchmakingScreen>
   bool _isMatchFound = false;
   bool _isConnecting = false;
   WebSocketSessionHandler? _handler;
+  StreamSubscription? _statsSubscription;
+  StreamSubscription? _sessionStateSubscription;
 
   final TextEditingController _urlController = TextEditingController(
     text: 'wss://rebelliously-unforgone-mandie.ngrok-free.dev/ws',
@@ -71,8 +73,8 @@ class _MatchmakingScreenState extends State<MatchmakingScreen>
       if (mounted) {
         context.read<SessionBloc>().add(SessionHandlerSwapped(handler));
 
-        // Listen for stats updates
-        handler.statsStream.listen((stats) {
+        // Listen for stats updates - store subscription
+        _statsSubscription = handler.statsStream.listen((stats) {
           if (mounted) {
             final authState = context.read<AuthBloc>().state;
             if (authState is Authenticated) {
@@ -81,7 +83,8 @@ class _MatchmakingScreenState extends State<MatchmakingScreen>
           }
         });
 
-        handler.sessionStateStream.listen((state) {
+        // Listen for session state - store subscription
+        _sessionStateSubscription = handler.sessionStateStream.listen((state) {
           if (mounted) {
             setState(() {
               _playersFound = state.participants.length;
@@ -126,6 +129,8 @@ class _MatchmakingScreenState extends State<MatchmakingScreen>
   void dispose() {
     _controller.dispose();
     _urlController.dispose();
+    _statsSubscription?.cancel();
+    _sessionStateSubscription?.cancel();
     super.dispose();
   }
 

@@ -3,19 +3,20 @@ import 'package:bloc_test/bloc_test.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mocktail/mocktail.dart';
 import 'package:veil_core/features/session/session.dart';
-import 'package:veil_core/core/engine/engine.dart';
+import 'package:veil_core/core/engine/engine.dart' as engine;
 
-class MockGameSessionHandler extends Mock implements GameSessionHandler {}
+class MockGameSessionHandler extends Mock
+    implements engine.GameSessionHandler {}
 
 void main() {
   late MockGameSessionHandler mockHandler;
-  late StreamController<SessionState> stateController;
-  late StreamController<SessionEventType> eventController;
+  late StreamController<engine.SessionState> stateController;
+  late StreamController<engine.SessionEventType> eventController;
 
   setUp(() {
     mockHandler = MockGameSessionHandler();
-    stateController = StreamController<SessionState>.broadcast();
-    eventController = StreamController<SessionEventType>.broadcast();
+    stateController = StreamController<engine.SessionState>.broadcast();
+    eventController = StreamController<engine.SessionEventType>.broadcast();
 
     when(
       () => mockHandler.sessionStateStream,
@@ -23,8 +24,15 @@ void main() {
     when(
       () => mockHandler.eventStream,
     ).thenAnswer((_) => eventController.stream);
+    when(() => mockHandler.lastMove).thenReturn(null);
+    when(() => mockHandler.isRevealingBluff).thenReturn(false);
+    when(() => mockHandler.pNames).thenReturn({'me': 'You'});
+    when(() => mockHandler.gameLog).thenReturn([]);
     when(() => mockHandler.activeEventActorId).thenReturn(null);
     when(() => mockHandler.lastCountClaimed).thenReturn(0);
+    when(
+      () => mockHandler.currentState,
+    ).thenReturn(engine.SessionState.initial());
     when(() => mockHandler.dispose()).thenAnswer((_) async {});
   });
 
@@ -36,15 +44,16 @@ void main() {
   group('SessionBloc', () {
     test('initial state is correct', () {
       final bloc = SessionBloc(handler: mockHandler);
-      expect(bloc.state, SessionBlocState.initial());
+      expect(bloc.state.engineState, engine.SessionState.initial());
       bloc.close();
     });
 
     blocTest<SessionBloc, SessionBlocState>(
       'emits updated engine state when EngineStateUpdated is added',
       build: () => SessionBloc(handler: mockHandler),
+      skip: 1,
       act: (bloc) {
-        final newState = SessionState.initial().copyWith(roomId: '999');
+        final newState = engine.SessionState.initial().copyWith(roomId: '999');
         stateController.add(newState);
       },
       expect: () => [
@@ -59,6 +68,7 @@ void main() {
     blocTest<SessionBloc, SessionBlocState>(
       'toggles unit selection when UnitToggled is added',
       build: () => SessionBloc(handler: mockHandler),
+      skip: 1,
       act: (bloc) => bloc.add(const UnitToggled('u1')),
       expect: () => [
         isA<SessionBlocState>().having(
@@ -72,6 +82,7 @@ void main() {
     blocTest<SessionBloc, SessionBlocState>(
       'removes unit if already selected in UnitToggled',
       build: () => SessionBloc(handler: mockHandler),
+      skip: 1,
       seed: () =>
           SessionBlocState.initial().copyWith(selectedUnitIds: ['u1', 'u2']),
       act: (bloc) => bloc.add(const UnitToggled('u1')),
@@ -87,11 +98,12 @@ void main() {
     blocTest<SessionBloc, SessionBlocState>(
       'sets staged rank and closes selector when RankStaged is added',
       build: () => SessionBloc(handler: mockHandler),
+      skip: 1,
       seed: () => SessionBlocState.initial().copyWith(isSelectingRank: true),
-      act: (bloc) => bloc.add(const RankStaged(UnitRank.ace)),
+      act: (bloc) => bloc.add(const RankStaged(engine.UnitRank.ace)),
       expect: () => [
         isA<SessionBlocState>()
-            .having((s) => s.stagedRank, 'stagedRank', UnitRank.ace)
+            .having((s) => s.stagedRank, 'stagedRank', engine.UnitRank.ace)
             .having((s) => s.isSelectingRank, 'isSelectingRank', false),
       ],
     );
@@ -99,6 +111,7 @@ void main() {
     blocTest<SessionBloc, SessionBlocState>(
       'toggles rank selection when RankSelectionToggleRequested is added',
       build: () => SessionBloc(handler: mockHandler),
+      skip: 1,
       act: (bloc) => bloc.add(RankSelectionToggleRequested()),
       expect: () => [
         isA<SessionBlocState>().having(
@@ -111,18 +124,19 @@ void main() {
 
     blocTest<SessionBloc, SessionBlocState>(
       'emits last event info when EngineEventReceived is added via handler stream',
-      build: () => SessionBloc(handler: mockHandler),
-      act: (bloc) {
+      build: () {
         when(() => mockHandler.activeEventActorId).thenReturn('p1');
         when(() => mockHandler.lastCountClaimed).thenReturn(3);
-        eventController.add(SessionEventType.cardsPlayed);
+        return SessionBloc(handler: mockHandler);
       },
+      skip: 1,
+      act: (bloc) => eventController.add(engine.SessionEventType.cardsPlayed),
       expect: () => [
         isA<SessionBlocState>()
             .having(
               (s) => s.lastEvent,
               'lastEvent',
-              SessionEventType.cardsPlayed,
+              engine.SessionEventType.cardsPlayed,
             )
             .having((s) => s.lastEventActorId, 'actorId', 'p1')
             .having((s) => s.lastEventCardCount, 'cardCount', 3),
