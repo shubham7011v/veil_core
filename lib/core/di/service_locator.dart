@@ -17,6 +17,11 @@ class ServiceLocator {
   late final GameSessionHandler gameSessionHandler;
   late final GreetingService greetingService;
 
+  // Explicitly expose WebSocket handler for specialized calls (like updateNickname)
+  late final WebSocketSessionHandler _webSocketHandler;
+
+  WebSocketSessionHandler get webSocketSessionHandler => _webSocketHandler;
+
   Future<void> setup() async {
     final prefs = await SharedPreferences.getInstance();
 
@@ -27,13 +32,18 @@ class ServiceLocator {
     authRepository = AuthRepository();
     userRepository = UserRepository();
     onboardingRepository = OnboardingRepository(prefs);
-    gameSessionHandler = createSessionHandler(online: false);
+
+    // Initialize the singleton WS handler
+    _webSocketHandler = WebSocketSessionHandler();
+
+    // Default to local, but the app can switch
+    gameSessionHandler = LocalBotSessionHandler();
   }
 
   /// Factory method to create session handler based on mode
   GameSessionHandler createSessionHandler({bool online = false}) {
     if (online) {
-      return WebSocketSessionHandler();
+      return _webSocketHandler;
     }
     return LocalBotSessionHandler();
   }

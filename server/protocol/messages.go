@@ -5,11 +5,12 @@ import "encoding/json"
 // Message Type Constants
 const (
 	// Client -> Server
-	MsgTypeAuth      = "AUTH"
-	MsgTypePlayCards = "PLAY_CARDS"
-	MsgTypePass      = "PASS"
-	MsgTypeChallenge = "CHALLENGE"
-	MsgTypeStartGame = "START_GAME"
+	MsgTypeAuth       = "AUTH"
+	MsgTypePlayCards  = "PLAY_CARDS"
+	MsgTypePass       = "PASS"
+	MsgTypeChallenge  = "CHALLENGE"
+	MsgTypeStartGame  = "START_GAME"
+	MsgTypeUpdateName = "UPDATE_NAME"
 
 	// Private Room (Client -> Server)
 	MsgTypeCreatePrivateRoom = "CREATE_PRIVATE_ROOM"
@@ -59,6 +60,10 @@ type BaseMessage struct {
 
 type AuthMessage struct {
 	Token string `json:"token"`
+}
+
+type UpdateNameMessage struct {
+	Name string `json:"name"`
 }
 
 type PlayCardsMessage struct {

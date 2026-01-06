@@ -130,20 +130,33 @@ func (m *Manager) HandleMessage(c *Client, message []byte) {
 		stats, err := db.GetOrCreateUser(c.ID, "Player "+c.ID[:4])
 		if err != nil {
 			log.Printf("DB Error: %v", err)
-			stats = &db.UserStats{UserID: c.ID, Name: "Unknown", Rank: "Novice"}
+			stats = &db.UserStats{UserID: c.ID, Name: "Unknown", Rank: "Novice", Coins: 1000}
 		}
 
-		responseMap := map[string]interface{}{
-			"playerId":   c.ID,
-			"stats":      stats,
-			"serverTime": time.Now(),
-		}
-
-		msg := protocol.NewMessage(protocol.MsgTypeAuthOk, responseMap)
-		bytes, _ := json.Marshal(msg)
-		c.Send <- bytes
+		m.sendAuthOk(c, stats)
 
 		return // Handled
+
+	case protocol.MsgTypeUpdateName:
+		var payload protocol.UpdateNameMessage
+		if err := json.Unmarshal(baseMsg.Data, &payload); err != nil {
+			log.Printf("Update Name parse error: %v", err)
+			return
+		}
+
+		// Update in DB
+		if err := db.UpdateUserName(c.ID, payload.Name); err != nil {
+			log.Printf("DB Update error: %v", err)
+			return
+		}
+
+		// Fetch updated stats to confirm to client
+		stats, err := db.GetOrCreateUser(c.ID, payload.Name)
+		if err == nil {
+			// This forces a refresh on the client side
+			m.sendAuthOk(c, stats)
+		}
+		return
 
 	case protocol.MsgTypeLeaderboardGet:
 		leaderboard, err := db.GetLeaderboard()
@@ -338,4 +351,16 @@ func (m *Manager) sendError(c *Client, code, message string) {
 	case c.Send <- errBytes:
 	default:
 	}
+}
+
+func (m *Manager) sendAuthOk(c *Client, stats *db.UserStats) {
+	responseMap := map[string]interface{}{
+		"playerId":   c.ID,
+		"stats":      stats,
+		"serverTime": time.Now(),
+	}
+
+	msg := protocol.NewMessage(protocol.MsgTypeAuthOk, responseMap)
+	bytes, _ := json.Marshal(msg)
+	c.Send <- bytes
 }

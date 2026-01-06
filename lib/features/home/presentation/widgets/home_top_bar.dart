@@ -103,6 +103,19 @@ class _HomeTopBarState extends State<HomeTopBar> {
                     ),
                     GestureDetector(
                       onTap: _toggleNameDisplay,
+                      onLongPress: () {
+                        if (_showNickName) {
+                          _showEditNicknameDialog(context);
+                        } else {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(
+                              content: Text(
+                                'Switch to Nickname (tap) to edit it.',
+                              ),
+                            ),
+                          );
+                        }
+                      },
                       child: Text(
                         displayName,
                         maxLines: 2,
@@ -185,6 +198,66 @@ class _HomeTopBarState extends State<HomeTopBar> {
           ),
         ),
       ],
+    );
+  }
+
+  void _showEditNicknameDialog(BuildContext context) {
+    final TextEditingController controller = TextEditingController.fromValue(
+      TextEditingValue(
+        text: widget.stats?.name ?? '',
+        selection: TextSelection.collapsed(
+          offset: widget.stats?.name.length ?? 0,
+        ),
+      ),
+    );
+
+    showDialog(
+      context: context,
+      builder: (context) {
+        return AlertDialog(
+          backgroundColor: widget.palette.surface,
+          title: Text(
+            'Edit Nickname',
+            style: GoogleFonts.cinzel(color: widget.palette.primary),
+          ),
+          content: TextField(
+            controller: controller,
+            style: GoogleFonts.inter(color: widget.palette.textPrimary),
+            decoration: InputDecoration(
+              labelText: 'New Nickname',
+              labelStyle: TextStyle(color: widget.palette.textSecondary),
+              enabledBorder: UnderlineInputBorder(
+                borderSide: BorderSide(color: widget.palette.primary),
+              ),
+              focusedBorder: UnderlineInputBorder(
+                borderSide: BorderSide(color: widget.palette.primary),
+              ),
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: Text(
+                'Cancel',
+                style: TextStyle(color: widget.palette.textSecondary),
+              ),
+            ),
+            TextButton(
+              onPressed: () {
+                final newName = controller.text.trim();
+                if (newName.isNotEmpty) {
+                  sl.webSocketSessionHandler.updateNickname(newName);
+                  Navigator.pop(context);
+                }
+              },
+              child: Text(
+                'Save',
+                style: TextStyle(color: widget.palette.primary),
+              ),
+            ),
+          ],
+        );
+      },
     );
   }
 }

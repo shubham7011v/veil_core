@@ -453,6 +453,13 @@ class WebSocketSessionHandler implements GameSessionHandler {
 
   // -- Social & Competitive Methods --
 
+  void updateNickname(String newName) {
+    _send({
+      'type': 'UPDATE_NAME',
+      'data': {'name': newName},
+    });
+  }
+
   void requestLeaderboard() {
     _send({'type': 'LEADERBOARD_GET'});
   }
