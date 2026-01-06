@@ -29,6 +29,8 @@ on:
         type: string
         default: ""
     secrets:
+      google_services_json_base64:
+        required: true
       keystore_base64:
         required: true
       keystore_password:
@@ -63,13 +65,17 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-gradle-
 
-      - name: Setup Keystore
+      - name: Setup Secrets
         run: |
+          # Keystore
           echo "${{ secrets.keystore_base64 }}" | base64 --decode > android/app/upload-keystore.jks
           echo "storeFile=upload-keystore.jks" > android/key.properties
           echo "storePassword=${{ secrets.keystore_password }}" >> android/key.properties
           echo "keyPassword=${{ secrets.key_password }}" >> android/key.properties
           echo "keyAlias=${{ secrets.key_alias }}" >> android/key.properties
+
+          # Google Services JSON
+          echo "${{ secrets.google_services_json_base64 }}" | base64 --decode > android/app/src/${{ inputs.flavor }}/google-services.json
 
       - name: Build App
         env:

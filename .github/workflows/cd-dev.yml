@@ -30,6 +30,7 @@ jobs:
       artifact_path: build/app/outputs/flutter-apk/app-dev-release.apk
       dart_defines: "--dart-define=ENV=development"
     secrets:
+      google_services_json_base64: ${{ secrets.DEV_GOOGLE_SERVICES_JSON_BASE64 }}
       keystore_base64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
       keystore_password: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
       key_alias: ${{ secrets.ANDROID_KEY_ALIAS }}
