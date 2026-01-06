@@ -12,7 +12,6 @@ import '../../../settings/settings.dart';
 import '../widgets/royal_name_modal.dart';
 import '../widgets/home_top_bar.dart';
 import '../widgets/coming_soon_modal.dart';
-import '../../../../core/di/service_locator.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
