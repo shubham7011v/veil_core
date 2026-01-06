@@ -151,6 +151,9 @@ class WebSocketSessionHandler
     );
 
     try {
+      // Close existing connection if any to prevent leaks
+      await _channel?.sink.close();
+
       _channel = WebSocketChannel.connect(Uri.parse(_lastUrl!));
       _setupMessageListener(firebaseToken, displayName: displayName);
       _reconnectAttempts = 0; // Reset on success

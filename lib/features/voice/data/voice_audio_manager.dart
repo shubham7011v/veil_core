@@ -16,6 +16,10 @@ class VoiceAudioManager {
   bool _isMicEnabled = true;
 
   Future<void> initialize(VoiceSessionHandler signaling) async {
+    // Ensure any existing resources are cleaned up to prevent leaks
+    await dispose();
+    _isMicEnabled = true; // Reset mic state for new session
+
     _signaling = signaling;
     await _requestPermissions();
     await _createPeerConnection();
