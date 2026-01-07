@@ -161,6 +161,7 @@ class WebSocketSessionHandler
       _setupMessageListener(firebaseToken, displayName: displayName);
       _reconnectAttempts = 0; // Reset on success
     } catch (e) {
+      // TODO: Implement exponential backoff for reconnection attempts in _handleConnectionFailure
       debugPrint('Connection attempt failed: $e');
       _handleConnectionFailure(firebaseToken, displayName: displayName);
     }
@@ -278,6 +279,7 @@ class WebSocketSessionHandler
           break;
 
         case 'AUTH_FAIL':
+          // TODO: Implement better handling for AUTH_FAIL (e.g., notify user via event stream)
           debugPrint('Auth failed: ${msg['data']}');
           break;
 
@@ -287,6 +289,7 @@ class WebSocketSessionHandler
 
         case 'ERROR':
           final errorData = msg['data'] as Map<String, dynamic>;
+          // TODO: Propagate server errors to the UI via an error stream or notification bloc
           debugPrint('Server Error: ${errorData['message']}');
           break;
 

@@ -100,6 +100,7 @@ class SystemStatusService {
 
     try {
       // Use a short timeout to prevent long DNS hangs that pin the UI to "Initializing..."
+      // TODO: Implement exponential backoff for these pings to reduce network load when offline
       final result = await InternetAddress.lookup(
         'google.com',
       ).timeout(const Duration(seconds: 2));

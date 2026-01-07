@@ -58,7 +58,7 @@ class AudioServiceImpl implements AudioService {
       );
 
       _bgmPlayer.setReleaseMode(ReleaseMode.loop);
-
+      // TODO: Pre-cache frequently used sound effects (e.g., cardSlide, turnAlert) to minimize latency
       // Load initial settings from storage
       _loadInitialSettings();
     } catch (e) {

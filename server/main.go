@@ -39,6 +39,7 @@ func main() {
 	http.HandleFunc("/admin/rooms/close", admin.AdminMiddleware(admin.CloseRoom))
 
 	log.Printf("Veil Server listening on :%s", port)
+	// TODO: Implement graceful shutdown handling for better reliability
 	if err := http.ListenAndServe(":"+port, nil); err != nil {
 		log.Fatal("ListenAndServe:", err)
 	}

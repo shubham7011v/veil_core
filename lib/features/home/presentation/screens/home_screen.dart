@@ -33,6 +33,7 @@ class _HomeScreenState extends State<HomeScreen> {
 
   void _startLobbyMusic() {
     // Delay slightly to ensure audio service is fully initialized
+    // TODO: Replace this hardcoded delay with a proper 'isInitialized' check from AudioService
     Future.delayed(const Duration(milliseconds: 500), () {
       if (mounted) {
         sl.audioService.playBgm(SoundAssets.lobbyAmbience);
@@ -153,7 +154,10 @@ class _HomeScreenState extends State<HomeScreen> {
                             context,
                             'FRIENDS\nMATCH',
                             Icons.people_outline,
-                            () => _showComingSoonModal(context, palette),
+                            () {
+                              // TODO: Implement Friends Match (Offline Hotspot Mode) logic
+                              _showComingSoonModal(context, palette);
+                            },
                             palette,
                           ),
                         ),
@@ -171,6 +175,7 @@ class _HomeScreenState extends State<HomeScreen> {
                     ),
                     const SizedBox(height: 32),
                     _buildDailyChallenge(palette),
+                    // TODO: Implement Daily Challenge feature and its related screens
                     const SizedBox(height: 32),
                   ],
                 ),
@@ -344,7 +349,10 @@ class _HomeScreenState extends State<HomeScreen> {
       child: Material(
         color: Colors.transparent,
         child: InkWell(
-          onTap: () => _showDailyChallengeComingSoon(context, palette),
+          onTap: () {
+            // TODO: Implement Daily Challenge logic and entry point
+            _showDailyChallengeComingSoon(context, palette);
+          },
           borderRadius: BorderRadius.circular(16),
           child: Padding(
             padding: const EdgeInsets.all(20),

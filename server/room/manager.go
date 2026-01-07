@@ -101,10 +101,13 @@ func (m *Manager) createMatchRoom(clients []*Client) {
 }
 
 // HandleMessage routes incoming messages from clients
+// TODO: Refactor this large switch statement into a map-based handler system
+// or separate message handlers for better modularity and testability.
 func (m *Manager) HandleMessage(c *Client, message []byte) {
 	// 1. Parse ONLY the type first
 	var baseMsg protocol.BaseMessage
 	if err := json.Unmarshal(message, &baseMsg); err != nil {
+		// TODO: Implement more robust error reporting to the client for invalid messages
 		log.Printf("Invalid JSON: %v", err)
 		return
 	}
