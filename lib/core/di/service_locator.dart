@@ -8,6 +8,7 @@ import '../repositories/websocket_session_repository.dart';
 import '../services/audio/audio_service_interface.dart';
 import '../services/audio/audio_service_impl.dart';
 import '../services/system_status_service.dart';
+import '../notifications/bloc/app_notification_bloc.dart';
 import '../../features/auth/auth.dart';
 import '../../features/profile/profile.dart';
 
@@ -28,6 +29,7 @@ class ServiceLocator {
   late final GreetingService greetingService;
   late final SystemStatusService systemStatusService;
   late final AudioService audioService;
+  late final AppNotificationBloc notificationBloc;
 
   // Explicitly expose WebSocket handler for specialized calls (like updateNickname)
   late final WebSocketSessionHandler _webSocketHandler;
@@ -40,6 +42,9 @@ class ServiceLocator {
     navigationService = NavigationService();
     storageService = StorageService(prefs);
     greetingService = GreetingService();
+
+    // Initialize Notification Bloc
+    notificationBloc = AppNotificationBloc();
 
     // Initialize Audio Service
     audioService = AudioServiceImpl();

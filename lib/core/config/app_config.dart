@@ -1,4 +1,5 @@
 import 'package:flutter/foundation.dart';
+import 'dart:io' show Platform;
 import 'remote_config_service.dart';
 
 /// Environment-based configuration management
@@ -79,14 +80,30 @@ class AppConfig {
         defaultValue: 'https://your-production-server.com/api',
       );
     } else {
-      serverUrl = const String.fromEnvironment(
+      var defaultServerUrl = const String.fromEnvironment(
         'SERVER_URL',
         defaultValue: 'ws://localhost:8080/ws',
       );
-      apiBaseUrl = const String.fromEnvironment(
+      var defaultApiUrl = const String.fromEnvironment(
         'API_URL',
         defaultValue: 'http://localhost:8080/api',
       );
+
+      // Handle Android Emulator localhost (10.0.2.2)
+      if (!kIsWeb && Platform.isAndroid) {
+        if (defaultServerUrl.contains('localhost')) {
+          defaultServerUrl = defaultServerUrl.replaceFirst(
+            'localhost',
+            '10.0.2.2',
+          );
+        }
+        if (defaultApiUrl.contains('localhost')) {
+          defaultApiUrl = defaultApiUrl.replaceFirst('localhost', '10.0.2.2');
+        }
+      }
+
+      serverUrl = defaultServerUrl;
+      apiBaseUrl = defaultApiUrl;
     }
 
     // Reconnection Settings

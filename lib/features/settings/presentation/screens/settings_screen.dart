@@ -11,6 +11,8 @@ import '../../../../core/constants/dimens.dart';
 import '../../../auth/auth.dart';
 import '../../../../core/di/service_locator.dart';
 import '../../../../core/services/audio/audio_service_interface.dart';
+import '../../../../core/constants/sound_assets.dart';
+import 'dart:async';
 
 class SettingsScreen extends StatefulWidget {
   final VoidCallback? onBack;
@@ -28,6 +30,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
   double _sfxVolume = 70;
   bool _music = true;
   bool _sfx = true;
+  int _sfxVariant = 1;
 
   // Gameplay
   bool _shuffleAnimation = true;
@@ -40,6 +43,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
   // Performance
   String _graphics = 'Medium';
   bool _dataSaver = false;
+
+  Timer? _volumePreviewTimer;
 
   @override
   void initState() {
@@ -64,7 +69,27 @@ class _SettingsScreenState extends State<SettingsScreen> {
       _autoSort = storage.getBool('pref_auto_sort') ?? true;
       _graphics = storage.getString('pref_graphics') ?? 'Medium';
       _dataSaver = storage.getBool('pref_data_saver') ?? false;
+      _sfxVariant = storage.getInt('pref_sfx_variant') ?? 1;
     });
+
+    // Apply initial settings to Audio Engine
+    _applyAudioSettings();
+  }
+
+  void _applyAudioSettings() {
+    sl.audioService.updateVolumes(
+      AudioSettings(
+        masterVolume: _masterVolume / 100,
+        musicVolume: _musicVolume / 100,
+        sfxVolume: _sfxVolume / 100,
+        voiceVolume: _voiceVolume / 100,
+        isMusicEnabled: _music,
+        isSfxEnabled: _sfx,
+        isVoiceEnabled: true,
+        isHapticEnabled: _haptics,
+        sfxVariantIndex: _sfxVariant,
+      ),
+    );
   }
 
   void _updateSetting(String key, dynamic value) {
@@ -75,28 +100,15 @@ class _SettingsScreenState extends State<SettingsScreen> {
     if (value is double) storage.setInt(key, value.toInt());
 
     // Update Audio Engine real-time
-    sl.audioService.updateVolumes(
-      AudioSettings(
-        masterVolume: _masterVolume / 100,
-        musicVolume:
-            0.35, // Fixed internal mix as per plan, or add slider if needed? Plan said "Music: 35% (BGM)" as default but we have toggle only.
-        // Wait, user asked for "Music Volume (Slider)" in the "Audio Settings UI" diagram.
-        // My code mainly had Toggles. I should add sliders if I want to match the diagram strictly.
-        // The diagram: Master, Music, Sound Effects, Voice Chat (Sliders) AND ON/OFF toggles? That's a lot.
-        // "Audio Settings UI... Master Volume (Slider)... Music Volume (Slider)..."
-        // My current UI has Master Volume Slider, and Toggles for others.
-        // I will stick to the current UI + Voice Slider for now to avoid massive UI rewrite,
-        // but I will map the Toggles to 0.0 or 1.0 (multiplied by internal mix).
-        // Let's assume the toggles enablement.
-        sfxVolume: 0.7, // Internal mix
-        voiceVolume: _voiceVolume / 100,
-        isMusicEnabled: _music,
-        isSfxEnabled: _sfx,
-        isVoiceEnabled:
-            true, // No separate toggle for voice yet, maybe imply from volume?
-        isHapticEnabled: _haptics,
-      ),
-    );
+    _applyAudioSettings();
+  }
+
+  void _playVolumePreview() {
+    // Debounce to avoid spamming sounds while sliding
+    _volumePreviewTimer?.cancel();
+    _volumePreviewTimer = Timer(const Duration(milliseconds: 150), () {
+      sl.audioService.playSfx(SoundAssets.buttonTap);
+    });
   }
 
   Future<void> _launchURL(String url) async {
@@ -221,24 +233,28 @@ class _SettingsScreenState extends State<SettingsScreen> {
           setState(() {
             _masterVolume = v;
             _updateSetting('pref_master_volume', v);
+            _playVolumePreview();
           });
         }, palette),
         _buildVolumeSlider('Voice Volume', _voiceVolume, (v) {
           setState(() {
             _voiceVolume = v;
             _updateSetting('pref_voice_volume', v);
+            _playVolumePreview();
           });
         }, palette),
         _buildVolumeSlider('Music Volume', _musicVolume, (v) {
           setState(() {
             _musicVolume = v;
             _updateSetting('pref_music_volume', v);
+            _playVolumePreview();
           });
         }, palette),
         _buildVolumeSlider('SFX Volume', _sfxVolume, (v) {
           setState(() {
             _sfxVolume = v;
             _updateSetting('pref_sfx_volume', v);
+            _playVolumePreview();
           });
         }, palette),
         _buildDivider(palette),
@@ -265,7 +281,86 @@ class _SettingsScreenState extends State<SettingsScreen> {
             _updateSetting('pref_sfx', v);
           }),
         ),
+        _buildDivider(palette),
+        _buildVariantSelector(
+          'SFX Style',
+          _sfxVariant,
+          (index) => setState(() {
+            _sfxVariant = index;
+            _updateSetting('pref_sfx_variant', index);
+          }),
+          palette,
+        ),
       ],
+    );
+  }
+
+  Widget _buildVariantSelector(
+    String label,
+    int currentValue,
+    ValueChanged<int> onChanged,
+    AppColorPalette palette,
+  ) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(
+        horizontal: AppDimens.paddingM,
+        vertical: 12,
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            label,
+            style: TextStyle(
+              color: palette.textPrimary,
+              fontWeight: FontWeight.w600,
+              fontSize: 14,
+            ),
+          ),
+          const SizedBox(height: 12),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: List.generate(4, (index) {
+              final variant = index + 1;
+              final isSelected = variant == currentValue;
+              return GestureDetector(
+                onTap: () => onChanged(variant),
+                child: Container(
+                  width: 60,
+                  height: 40,
+                  decoration: BoxDecoration(
+                    color: isSelected ? palette.primary : palette.surface,
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(
+                      color: isSelected ? palette.primary : palette.divider,
+                      width: 1.5,
+                    ),
+                    boxShadow: isSelected
+                        ? [
+                            BoxShadow(
+                              color: palette.primary.withValues(alpha: 0.3),
+                              blurRadius: 8,
+                              offset: const Offset(0, 4),
+                            ),
+                          ]
+                        : null,
+                  ),
+                  alignment: Alignment.center,
+                  child: Text(
+                    'V$variant',
+                    style: TextStyle(
+                      color: isSelected ? Colors.white : palette.textSecondary,
+                      fontWeight: isSelected
+                          ? FontWeight.bold
+                          : FontWeight.normal,
+                    ),
+                  ),
+                ),
+              );
+            }),
+          ),
+        ],
+      ),
     );
   }
 
@@ -712,7 +807,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
           : null,
       value: value,
       onChanged: onChanged,
-      activeColor: palette.primary,
+      activeThumbColor: palette.primary,
       contentPadding: const EdgeInsets.symmetric(
         horizontal: AppDimens.paddingM,
       ),

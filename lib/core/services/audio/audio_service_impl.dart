@@ -1,9 +1,9 @@
 import 'dart:async';
 import 'package:audioplayers/audioplayers.dart';
 import 'package:flutter/services.dart';
-import 'audio_service_interface.dart';
-
 import 'package:flutter/foundation.dart';
+import 'audio_service_interface.dart';
+import '../../di/service_locator.dart';
 
 class AudioServiceImpl implements AudioService {
   // --- Players ---
@@ -14,7 +14,17 @@ class AudioServiceImpl implements AudioService {
   // Ideally, for high-frequency concurrent SFX, we might need a pool, but let's start simple.
 
   // --- State ---
-  AudioSettings? _currentSettings;
+  AudioSettings _currentSettings = const AudioSettings(
+    masterVolume: 0.75,
+    musicVolume: 0.35,
+    sfxVolume: 0.70,
+    voiceVolume: 0.85,
+    isMusicEnabled: true,
+    isSfxEnabled: true,
+    isVoiceEnabled: true,
+    isHapticEnabled: true,
+    sfxVariantIndex: 1,
+  );
   bool _isDucked = false;
   String? _currentBgmFile;
   bool _isPlayingBgm = false;
@@ -29,7 +39,7 @@ class AudioServiceImpl implements AudioService {
 
   @override
   Future<void> initialize() async {
-    // Set Audio Context (keep playing if possible, or respect silent mode)
+    // Set Audio Context
     await AudioPlayer.global.setAudioContext(
       AudioContext(
         android: const AudioContextAndroid(
@@ -40,34 +50,83 @@ class AudioServiceImpl implements AudioService {
           audioFocus: AndroidAudioFocus.gain,
         ),
         iOS: AudioContextIOS(
-          category: AVAudioSessionCategory
-              .ambient, // Mix with other apps? Or playback?
-          // playback usually stops other apps. ambient mixes but silences on mute switch.
-          // User requested "Respect system silent mode" -> 'ambient' or 'soloAmbient'
-          options: {AVAudioSessionOptions.mixWithOthers},
+          category: AVAudioSessionCategory.ambient,
+          options: {},
         ),
       ),
     );
 
     _bgmPlayer.setReleaseMode(ReleaseMode.loop);
+
+    // Load initial settings from storage
+    _loadInitialSettings();
+  }
+
+  void _loadInitialSettings() {
+    try {
+      final storage = sl.storageService;
+      _currentSettings = AudioSettings(
+        masterVolume: (storage.getInt('pref_master_volume') ?? 75) / 100,
+        voiceVolume: (storage.getInt('pref_voice_volume') ?? 85) / 100,
+        musicVolume: (storage.getInt('pref_music_volume') ?? 35) / 100,
+        sfxVolume: (storage.getInt('pref_sfx_volume') ?? 70) / 100,
+        isMusicEnabled: storage.getBool('pref_music') ?? true,
+        isSfxEnabled: storage.getBool('pref_sfx') ?? true,
+        isVoiceEnabled: storage.getBool('pref_voice') ?? true,
+        isHapticEnabled: storage.getBool('pref_haptics') ?? true,
+        sfxVariantIndex: storage.getInt('pref_sfx_variant') ?? 1,
+      );
+      debugPrint('Audio settings loaded from storage');
+    } catch (e) {
+      debugPrint('Error loading audio settings: $e');
+    }
   }
 
   @override
   Future<void> playBgm(String filename) async {
+    if (_currentBgmFile == filename &&
+        _bgmPlayer.state == PlayerState.playing) {
+      return;
+    }
+
     _currentBgmFile = filename;
     _isPlayingBgm = true;
 
-    if (_currentSettings != null && !_currentSettings!.isMusicEnabled) {
+    if (!_currentSettings.isMusicEnabled) {
       return; // Don't play if disabled, but store intent
     }
 
     try {
-      debugPrint('Playing BGM: $_currentBgmFile');
+      debugPrint('Playing BGM: filename=$filename');
       await _bgmPlayer.play(AssetSource('$_musicPath$filename'));
       await _updateBgmVolume();
-    } catch (e) {
-      // debugPrint('Error playing BGM: $e');
+    } catch (e, stackTrace) {
+      debugPrint('Error playing BGM: $e');
+      debugPrint('Stack trace: $stackTrace');
+      _isPlayingBgm = false; // Graceful degradation
     }
+  }
+
+  String _resolveFilename(String filename, int variantIndex) {
+    if (filename.isEmpty) return '';
+
+    // SFX files are expected to have variants like 'filename_1.wav'
+    // This method splits the extension and appends the variant index.
+    final lastDot = filename.lastIndexOf('.');
+
+    if (lastDot == -1) {
+      return '${filename}_$variantIndex';
+    }
+
+    final name = filename.substring(0, lastDot);
+    final ext = filename.substring(lastDot);
+
+    // Prevent double suffixing if the filename already has the index
+    if (name.endsWith('_$variantIndex')) {
+      return filename;
+    }
+
+    return '${name}_$variantIndex$ext';
   }
 
   @override
@@ -87,7 +146,7 @@ class AudioServiceImpl implements AudioService {
   Future<void> resumeBgm() async {
     if (_isPlayingBgm) {
       // Only resume if we were conceptually playing
-      if (_currentSettings != null && _currentSettings!.isMusicEnabled) {
+      if (_currentSettings.isMusicEnabled) {
         await _bgmPlayer.resume();
       }
     }
@@ -95,63 +154,64 @@ class AudioServiceImpl implements AudioService {
 
   @override
   Future<void> playSfx(String filename) async {
-    if (_currentSettings != null && !_currentSettings!.isSfxEnabled) {
+    if (!_currentSettings.isSfxEnabled) {
       return;
     }
 
-    // For overlapping sounds, creating a temporary player is safer than reusing one,
-    // though heavier. AudioPlayers 'play' creates a new player if using static AudioPlayer.play?
-    // No, instance method.
-    // Best practice for low-latency UI SFX is usually creating a new player or using a pool.
-    // AudioPlayers 6.0: "AudioPlayer.play" is for playing.
-    // To allow overlap:
-    final player = AudioPlayer();
+    try {
+      final player = AudioPlayer();
 
-    // Auto-dispose player after completion
-    player.onPlayerComplete.listen((event) {
-      player.dispose();
-    });
+      // Auto-dispose player after completion
+      player.onPlayerComplete.listen((event) {
+        player.dispose();
+      });
 
-    // Calculate volume
-    double vol = _currentSettings?.masterVolume ?? 1.0;
-    vol *= _currentSettings?.sfxVolume ?? 1.0;
-    if (_isDucked) vol *= _duckSfxMultiplier;
+      // Calculate volume
+      double vol = _currentSettings.masterVolume;
+      vol *= _currentSettings.sfxVolume;
+      if (_isDucked) vol *= _duckSfxMultiplier;
 
-    await player.setVolume(vol.clamp(0.0, 1.0));
-    await player.play(
-      AssetSource('$_sfxPath$filename'),
-      mode: PlayerMode.lowLatency,
-    );
+      await player.setVolume(vol.clamp(0.0, 1.0));
+
+      final resolved = _resolveFilename(
+        filename,
+        _currentSettings.sfxVariantIndex,
+      );
+      await player.play(
+        AssetSource('$_sfxPath$resolved'),
+        mode: PlayerMode.lowLatency,
+      );
+    } catch (e, stackTrace) {
+      debugPrint('Error playing SFX: $e');
+      debugPrint('Stack trace: $stackTrace');
+      // Graceful degradation: continue silently
+    }
   }
 
   @override
   Future<void> updateVolumes(AudioSettings settings) async {
     _currentSettings = settings;
-    await _updateBgmVolume();
 
-    // SFX volume is applied at play-time for new sounds.
-    // Active SFX won't change volume, which is fine for short sounds.
+    // Apply volumes
+    await _updateBgmVolume();
   }
 
   Future<void> _updateBgmVolume() async {
-    if (_currentSettings == null) return;
-
-    if (!_currentSettings!.isMusicEnabled) {
+    if (!_currentSettings.isMusicEnabled) {
+      // If we are currently playing, stop/pause it?
+      // For now just zero volume.
       await _bgmPlayer.setVolume(0);
-      // _bgmPlayer.pause(); // Optional: pause to save CPU? or just fade?
-      // User might toggle ON/OFF quickly, zero volume is safer flow.
       return;
     }
 
-    // Resume if it was supposed to be playing but was silenced/stopped
-    if (_isPlayingBgm && _bgmPlayer.state != PlayerState.playing) {
-      // Unless paused by app lifecycle
-      // This logic can be tricky. Let's assume playBgm handles start.
-      // If we are "playing" but player is stopped/paused ONLY due to mute, resume.
-      // But simpler: just set volume.
+    // If we should be playing but are not (e.g. was disabled then enabled)
+    if (_isPlayingBgm &&
+        _bgmPlayer.state != PlayerState.playing &&
+        _currentBgmFile != null) {
+      await _bgmPlayer.play(AssetSource('$_musicPath$_currentBgmFile'));
     }
 
-    double vol = _currentSettings!.masterVolume * _currentSettings!.musicVolume;
+    double vol = _currentSettings.masterVolume * _currentSettings.musicVolume;
     if (_isDucked) vol *= _duckBgmMultiplier;
 
     await _bgmPlayer.setVolume(vol.clamp(0.0, 1.0));
@@ -170,7 +230,7 @@ class AudioServiceImpl implements AudioService {
 
   @override
   Future<void> triggerHaptic(HapticType type) async {
-    if (_currentSettings != null && !_currentSettings!.isHapticEnabled) return;
+    if (!_currentSettings.isHapticEnabled) return;
 
     switch (type) {
       case HapticType.light:

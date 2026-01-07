@@ -34,15 +34,23 @@ Future<void> mainCommon(AppConfig config) async {
   await RemoteConfigService.instance.initialize();
 
   // Activate App Check
-  await FirebaseAppCheck.instance.activate(
-    providerAndroid: config.environment == Environment.dev
-        ? const AndroidDebugProvider()
-        : const AndroidPlayIntegrityProvider(),
-    providerApple: const AppleDeviceCheckProvider(),
-  );
+  try {
+    await FirebaseAppCheck.instance.activate(
+      providerAndroid: config.environment == Environment.dev
+          ? const AndroidDebugProvider()
+          : const AndroidPlayIntegrityProvider(),
+      providerApple: const AppleDeviceCheckProvider(),
+    );
+    debugPrint('Firebase App Check activated');
+  } catch (e) {
+    debugPrint('Firebase App Check activation failed: $e');
+  }
 
   // Initialize Service Locator
   await di.sl.setup();
+
+  // Note: BGM will be started after successful authentication in HomeScreen
+  // to avoid crashes during initialization
 
   runApp(VeilApp(config: config));
 }
@@ -55,6 +63,7 @@ class VeilApp extends StatelessWidget {
   Widget build(BuildContext context) {
     return MultiBlocProvider(
       providers: [
+        BlocProvider(create: (_) => di.sl.notificationBloc),
         BlocProvider(create: (_) => ThemeBloc()..add(ThemeLoadRequested())),
         BlocProvider(
           create: (context) {

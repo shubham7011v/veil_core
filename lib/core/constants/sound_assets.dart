@@ -1,7 +1,11 @@
 class SoundAssets {
+  // NOTE: SFX files below require 4 variants in assets/audio/sfx/ (e.g. card_flip_1.wav to _4.wav)
+  // Music files are static and do not use variants.
+  // The AudioService automatically appends the suffix for SFX based on user settings.
+
   // --- Music ---
-  static const String lobbyAmbience = 'lobby_ambience.mp3';
-  static const String gameBgm = 'game_bgm.mp3';
+  static const String lobbyAmbience = 'main_bgm.mp3';
+  static const String gameBgm = 'main_bgm.mp3';
 
   // --- SFX: Core Game ---
   static const String cardFlip = 'card_flip.wav';

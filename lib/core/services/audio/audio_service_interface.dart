@@ -8,6 +8,7 @@ class AudioSettings {
   final bool isSfxEnabled;
   final bool isVoiceEnabled;
   final bool isHapticEnabled;
+  final int sfxVariantIndex; // 1-4
 
   const AudioSettings({
     required this.masterVolume,
@@ -18,6 +19,7 @@ class AudioSettings {
     required this.isSfxEnabled,
     required this.isVoiceEnabled,
     required this.isHapticEnabled,
+    this.sfxVariantIndex = 1,
   });
 }
 
