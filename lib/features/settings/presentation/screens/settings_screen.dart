@@ -12,6 +12,7 @@ import '../../../auth/auth.dart';
 import '../../../../core/di/service_locator.dart';
 import '../../../../core/services/audio/audio_service_interface.dart';
 import '../../../../core/constants/sound_assets.dart';
+import 'package:package_info_plus/package_info_plus.dart';
 import 'dart:async';
 
 class SettingsScreen extends StatefulWidget {
@@ -44,12 +45,31 @@ class _SettingsScreenState extends State<SettingsScreen> {
   String _graphics = 'Medium';
   bool _dataSaver = false;
 
+  // Version Info
+  String _version = '2.4.1'; // Fallback
+  String _buildNumber = '890'; // Fallback
+
   Timer? _volumePreviewTimer;
 
   @override
   void initState() {
     super.initState();
     _loadSettings();
+    _initPackageInfo();
+  }
+
+  Future<void> _initPackageInfo() async {
+    try {
+      final info = await PackageInfo.fromPlatform();
+      if (mounted) {
+        setState(() {
+          _version = info.version.isNotEmpty ? info.version : '2.4.1';
+          _buildNumber = info.buildNumber.isNotEmpty ? info.buildNumber : '890';
+        });
+      }
+    } catch (e) {
+      debugPrint('Failed to get package info: $e');
+    }
   }
 
   Future<void> _loadSettings() async {
@@ -770,7 +790,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
         ),
         const SizedBox(height: 4),
         Text(
-          'Version 2.4.1 • Build 890',
+          'Version $_version • Build $_buildNumber',
           style: TextStyle(color: palette.textTertiary, fontSize: 10),
         ),
         if (AppConfig.instance.isDevelopment) ...[
