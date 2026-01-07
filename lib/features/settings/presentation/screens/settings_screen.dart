@@ -516,65 +516,75 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 ),
               ),
               const SizedBox(height: 12),
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: AppThemeMode.values.map((mode) {
-                  final isSelected = themeState.mode == mode;
-                  final modePalette = AppColors.getPalette(mode);
-                  return GestureDetector(
-                    onTap: () =>
-                        context.read<ThemeBloc>().add(ThemeChanged(mode)),
-                    child: Container(
-                      width: 100,
-                      padding: const EdgeInsets.all(8),
-                      decoration: BoxDecoration(
-                        color: isSelected
-                            ? palette.primary.withValues(alpha: 0.1)
-                            : Colors.transparent,
-                        borderRadius: BorderRadius.circular(12),
-                        border: Border.all(
-                          color: isSelected ? palette.primary : palette.divider,
-                        ),
-                      ),
-                      child: Column(
-                        children: [
-                          Container(
-                            width: 30,
-                            height: 30,
-                            decoration: BoxDecoration(
-                              color: modePalette.background,
-                              shape: BoxShape.circle,
-                              border: Border.all(color: modePalette.divider),
-                            ),
-                            child: Center(
-                              child: Container(
-                                width: 14,
-                                height: 14,
-                                decoration: BoxDecoration(
-                                  color: modePalette.primary,
-                                  shape: BoxShape.circle,
-                                ),
-                              ),
-                            ),
-                          ),
-                          const SizedBox(height: 8),
-                          Text(
-                            mode.name.toUpperCase(),
-                            style: TextStyle(
+              SingleChildScrollView(
+                scrollDirection: Axis.horizontal,
+                physics: const BouncingScrollPhysics(),
+                child: Row(
+                  children: AppThemeMode.values.map((mode) {
+                    final isSelected = themeState.mode == mode;
+                    final modePalette = AppColors.getPalette(mode);
+                    return Padding(
+                      padding: const EdgeInsets.only(right: 12),
+                      child: GestureDetector(
+                        onTap: () =>
+                            context.read<ThemeBloc>().add(ThemeChanged(mode)),
+                        child: Container(
+                          width: 100,
+                          padding: const EdgeInsets.all(8),
+                          decoration: BoxDecoration(
+                            color: isSelected
+                                ? palette.primary.withValues(alpha: 0.1)
+                                : Colors.transparent,
+                            borderRadius: BorderRadius.circular(12),
+                            border: Border.all(
                               color: isSelected
                                   ? palette.primary
-                                  : palette.textSecondary,
-                              fontSize: 10,
-                              fontWeight: isSelected
-                                  ? FontWeight.bold
-                                  : FontWeight.normal,
+                                  : palette.divider,
                             ),
                           ),
-                        ],
+                          child: Column(
+                            children: [
+                              Container(
+                                width: 30,
+                                height: 30,
+                                decoration: BoxDecoration(
+                                  color: modePalette.background,
+                                  shape: BoxShape.circle,
+                                  border: Border.all(
+                                    color: modePalette.divider,
+                                  ),
+                                ),
+                                child: Center(
+                                  child: Container(
+                                    width: 14,
+                                    height: 14,
+                                    decoration: BoxDecoration(
+                                      color: modePalette.primary,
+                                      shape: BoxShape.circle,
+                                    ),
+                                  ),
+                                ),
+                              ),
+                              const SizedBox(height: 8),
+                              Text(
+                                mode.name.toUpperCase(),
+                                style: TextStyle(
+                                  color: isSelected
+                                      ? palette.primary
+                                      : palette.textSecondary,
+                                  fontSize: 10,
+                                  fontWeight: isSelected
+                                      ? FontWeight.bold
+                                      : FontWeight.normal,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
                       ),
-                    ),
-                  );
-                }).toList(),
+                    );
+                  }).toList(),
+                ),
               ),
             ],
           ),

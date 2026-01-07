@@ -7,12 +7,14 @@ import '../../../../core/utils/error_messages.dart';
 import '../../../../core/error/failure.dart' as f;
 import 'auth_event.dart';
 import 'auth_state.dart';
+import '../../../../core/di/service_locator.dart' as di;
 
 class AuthBloc extends Bloc<AuthEvent, AuthState> {
   final AuthRepository _authRepository;
   final UserRepository _userRepository;
   final SessionRepository _sessionRepository;
   StreamSubscription? _authStateSubscription;
+  StreamSubscription? _statsSubscription;
 
   AuthBloc({
     required AuthRepository authRepository,
@@ -32,6 +34,14 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
     _authStateSubscription = _authRepository.authStateChanges.listen((user) {
       if (!isClosed && user != null) {
         add(AuthCheckRequested());
+      }
+    });
+
+    _statsSubscription = di.sl.webSocketSessionHandler.statsStream.listen((
+      stats,
+    ) {
+      if (!isClosed) {
+        add(AuthStatsUpdated(stats));
       }
     });
   }
@@ -145,6 +155,7 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
   @override
   Future<void> close() {
     _authStateSubscription?.cancel();
+    _statsSubscription?.cancel();
     return super.close();
   }
 }

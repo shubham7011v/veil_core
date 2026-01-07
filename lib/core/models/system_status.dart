@@ -6,6 +6,7 @@ enum SystemStatusType {
   serverDown,
   authIssue,
   syncing,
+  reconnecting,
   failed,
 }
 
@@ -64,11 +65,20 @@ class SystemStatus {
 
   factory SystemStatus.syncing() => const SystemStatus(
     type: SystemStatusType.syncing,
-    label: 'Syncing...',
+    label: 'Initializing...',
     description: 'Linking with global services...',
     actionLabel: 'PLEASE WAIT',
     icon: Icons.sync_rounded,
     statusColor: Colors.blueAccent,
+  );
+
+  factory SystemStatus.reconnecting() => const SystemStatus(
+    type: SystemStatusType.reconnecting,
+    label: 'Reconnecting...',
+    description: 'Lost link. Attempting to restore...',
+    actionLabel: 'RETRY NOW',
+    icon: Icons.sync_problem_rounded,
+    statusColor: Color(0xFFFF9800),
   );
 
   factory SystemStatus.failed() => const SystemStatus(
