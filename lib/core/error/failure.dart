@@ -19,7 +19,7 @@ class ServerFailure extends Failure {
 /// Network connectivity failure (e.g. no internet, timeout).
 class NetworkFailure extends Failure {
   const NetworkFailure([
-    super.message = 'No internet connection',
+    super.message = 'Connectivity lost. Please check your signal.',
     super.originalError,
   ]);
 }
@@ -37,7 +37,7 @@ class CacheFailure extends Failure {
 /// Unknown/Unexpected failure.
 class UnknownFailure extends Failure {
   const UnknownFailure([
-    super.message = 'An unexpected error occurred',
+    super.message = 'Something went wrong. We are looking into it.',
     super.originalError,
   ]);
 }

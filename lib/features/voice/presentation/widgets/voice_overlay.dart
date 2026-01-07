@@ -3,6 +3,8 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import '../../../../core/theme/colors.dart';
 import '../bloc/voice_bloc.dart';
 import '../../../../core/engine/engine.dart';
+import '../../../../core/notifications/bloc/app_notification_bloc.dart';
+import '../../../../core/notifications/bloc/app_notification_event.dart';
 
 class VoiceOverlay extends StatelessWidget {
   final VoiceSessionHandler sessionHandler;
@@ -11,36 +13,48 @@ class VoiceOverlay extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return BlocBuilder<VoiceBloc, VoiceState>(
-      builder: (context, state) {
-        return Stack(
-          children: [
-            // 1. Queue List (Top Right or custom position)
-            if (state.queue.isNotEmpty)
-              Positioned(
-                top: 80,
-                right: 16,
-                child: _buildQueueIndicator(state),
-              ),
-
-            // 2. Active Speaker Ring / Announcement
-            if (state.currentSpeakerId != null)
-              Positioned(
-                top: 40,
-                left: 0,
-                right: 0,
-                child: Center(child: _buildSpeakerBanner(state)),
-              ),
-
-            // 3. Action Button (Bottom Right FAB style)
-            Positioned(
-              bottom: 100,
-              right: 20,
-              child: _buildActionButton(context, state),
-            ),
-          ],
-        );
+    return BlocListener<VoiceBloc, VoiceState>(
+      listener: (context, state) {
+        if (state.failure != null) {
+          context.read<AppNotificationBloc>().add(
+            ShowErrorNotification(state.failure!.message),
+          );
+          // In a real app we might want a VoiceErrorCleared event,
+          // but for now, the Bloc handles it via state.copyWith(failure: null)
+          // if we add such an event.
+        }
       },
+      child: BlocBuilder<VoiceBloc, VoiceState>(
+        builder: (context, state) {
+          return Stack(
+            children: [
+              // 1. Queue List (Top Right or custom position)
+              if (state.queue.isNotEmpty)
+                Positioned(
+                  top: 80,
+                  right: 16,
+                  child: _buildQueueIndicator(state),
+                ),
+
+              // 2. Active Speaker Ring / Announcement
+              if (state.currentSpeakerId != null)
+                Positioned(
+                  top: 40,
+                  left: 0,
+                  right: 0,
+                  child: Center(child: _buildSpeakerBanner(state)),
+                ),
+
+              // 3. Action Button (Bottom Right FAB style)
+              Positioned(
+                bottom: 100,
+                right: 20,
+                child: _buildActionButton(context, state),
+              ),
+            ],
+          );
+        },
+      ),
     );
   }
 

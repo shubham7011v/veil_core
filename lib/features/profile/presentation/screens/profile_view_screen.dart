@@ -7,6 +7,9 @@ import '../bloc/profile_state.dart';
 import '../../../../core/theme/colors.dart';
 import '../../../../core/theme/bloc/theme_bloc.dart';
 import '../../../../core/theme/bloc/theme_state.dart';
+import '../../../../shared/components/app_error_widget.dart';
+import '../../../../core/notifications/bloc/app_notification_bloc.dart';
+import '../../../../core/notifications/bloc/app_notification_event.dart';
 import '../../../../core/di/service_locator.dart' as di;
 
 class ProfileViewScreen extends StatelessWidget {
@@ -43,36 +46,13 @@ class ProfileViewScreen extends StatelessWidget {
                 }
 
                 if (state is ProfileError) {
-                  return Center(
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Icon(
-                          Icons.error_outline,
-                          color: palette.danger,
-                          size: 64,
-                        ),
-                        const SizedBox(height: 16),
-                        Text(
-                          state.failure.message,
-                          textAlign: TextAlign.center,
-                          style: TextStyle(color: palette.textSecondary),
-                        ),
-                        const SizedBox(height: 24),
-                        ElevatedButton(
-                          onPressed: () {
-                            context.read<ProfileBloc>().add(
-                              ProfileViewRequested(userId),
-                            );
-                          },
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: palette.primary,
-                            foregroundColor: Colors.black,
-                          ),
-                          child: const Text('RETRY'),
-                        ),
-                      ],
-                    ),
+                  return AppErrorWidget(
+                    message: state.failure.message,
+                    onRetry: () {
+                      context.read<ProfileBloc>().add(
+                        ProfileViewRequested(userId),
+                      );
+                    },
                   );
                 }
 
@@ -241,8 +221,8 @@ class ProfileViewScreen extends StatelessWidget {
                 child: ElevatedButton.icon(
                   onPressed: () {
                     context.read<ProfileBloc>().add(ProfileFriendAdded(userId));
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(content: Text('Friend request sent')),
+                    context.read<AppNotificationBloc>().add(
+                      const ShowInfoNotification('Friend request sent'),
                     );
                   },
                   icon: const Icon(Icons.person_add),
@@ -264,9 +244,9 @@ class ProfileViewScreen extends StatelessWidget {
                   onPressed: profile.isOnline
                       ? () {
                           // TODO: Implement challenge logic
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            const SnackBar(
-                              content: Text('Challenge feature coming soon!'),
+                          context.read<AppNotificationBloc>().add(
+                            const ShowInfoNotification(
+                              'Challenge feature coming soon!',
                             ),
                           );
                         }
@@ -291,8 +271,8 @@ class ProfileViewScreen extends StatelessWidget {
                     context.read<ProfileBloc>().add(
                       ProfileFriendRemoved(userId),
                     );
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(content: Text('Friend removed')),
+                    context.read<AppNotificationBloc>().add(
+                      const ShowInfoNotification('Friend removed'),
                     );
                   },
                   icon: const Icon(Icons.person_remove),

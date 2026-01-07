@@ -1,5 +1,6 @@
 import 'package:equatable/equatable.dart';
 import '../../../../core/engine/engine.dart' as engine;
+import '../../../../core/error/failure.dart';
 
 class SessionBlocState extends Equatable {
   final engine.SessionState engineState;
@@ -25,7 +26,7 @@ class SessionBlocState extends Equatable {
   final List<String> gameLog;
 
   // -- Error State --
-  final engine.SessionError? error;
+  final Failure? failure;
 
   const SessionBlocState({
     required this.engineState,
@@ -40,7 +41,7 @@ class SessionBlocState extends Equatable {
     this.lastEventTimestamp = 0,
     required this.pNames,
     required this.gameLog,
-    this.error,
+    this.failure,
   });
 
   factory SessionBlocState.initial() => SessionBlocState(
@@ -67,10 +68,10 @@ class SessionBlocState extends Equatable {
     int? lastEventTimestamp,
     Map<String, String>? pNames,
     List<String>? gameLog,
-    engine.SessionError? error,
+    Failure? failure,
     bool clearStagedRank = false,
     bool clearLastMove = false,
-    bool clearError = false,
+    bool clearFailure = false,
   }) {
     return SessionBlocState(
       engineState: engineState ?? this.engineState,
@@ -85,7 +86,7 @@ class SessionBlocState extends Equatable {
       lastEventTimestamp: lastEventTimestamp ?? this.lastEventTimestamp,
       pNames: pNames ?? this.pNames,
       gameLog: gameLog ?? this.gameLog,
-      error: clearError ? null : (error ?? this.error),
+      failure: clearFailure ? null : (failure ?? this.failure),
     );
   }
 
@@ -127,6 +128,6 @@ class SessionBlocState extends Equatable {
     lastEventTimestamp,
     pNames,
     gameLog,
-    error,
+    failure,
   ];
 }

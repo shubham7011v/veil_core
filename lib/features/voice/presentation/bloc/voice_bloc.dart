@@ -1,9 +1,9 @@
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:equatable/equatable.dart';
 import '../../../../core/engine/engine.dart';
+import '../../../../core/error/failure.dart';
 import '../../data/voice_audio_manager.dart';
 import '../../../../core/utils/app_logger.dart';
-import '../../domain/models/voice_error.dart';
 
 // -- Events --
 abstract class VoiceEvent extends Equatable {
@@ -19,6 +19,13 @@ class VoiceStateUpdated extends VoiceEvent {
   List<Object?> get props => [data];
 }
 
+class VoiceErrorOccurred extends VoiceEvent {
+  final Failure failure;
+  const VoiceErrorOccurred(this.failure);
+  @override
+  List<Object?> get props => [failure];
+}
+
 class VoiceHandRaised extends VoiceEvent {}
 
 class VoiceMicToggled extends VoiceEvent {} // For Phase 2
@@ -31,7 +38,7 @@ class VoiceState extends Equatable {
   final bool isMyTurn;
   final int myQueuePosition; // -1 if not in queue
   final bool isMuted; // Local mute fallback
-  final VoiceError? error;
+  final Failure? failure;
 
   const VoiceState({
     this.currentSpeakerId,
@@ -40,7 +47,7 @@ class VoiceState extends Equatable {
     this.isMyTurn = false,
     this.myQueuePosition = -1,
     this.isMuted = true,
-    this.error,
+    this.failure,
   });
 
   VoiceState copyWith({
@@ -50,8 +57,8 @@ class VoiceState extends Equatable {
     bool? isMyTurn,
     int? myQueuePosition,
     bool? isMuted,
-    VoiceError? error,
-    bool clearError = false,
+    Failure? failure,
+    bool clearFailure = false,
   }) {
     return VoiceState(
       currentSpeakerId: currentSpeakerId ?? this.currentSpeakerId,
@@ -60,7 +67,7 @@ class VoiceState extends Equatable {
       isMyTurn: isMyTurn ?? this.isMyTurn,
       myQueuePosition: myQueuePosition ?? this.myQueuePosition,
       isMuted: isMuted ?? this.isMuted,
-      error: clearError ? null : (error ?? this.error),
+      failure: clearFailure ? null : (failure ?? this.failure),
     );
   }
 
@@ -72,7 +79,7 @@ class VoiceState extends Equatable {
     isMyTurn,
     myQueuePosition,
     isMuted,
-    error,
+    failure,
   ];
 }
 
@@ -89,10 +96,16 @@ class VoiceBloc extends Bloc<VoiceEvent, VoiceState> {
 
     // Initialize Manager
     final audioManager = VoiceAudioManager();
-    audioManager.initialize(handler);
+    audioManager.initialize(
+      handler,
+      onError: (msg, err) => add(VoiceErrorOccurred(UnknownFailure(msg, err))),
+    );
     handler.setVoiceManager(audioManager);
 
     on<VoiceStateUpdated>(_onStateUpdated);
+    on<VoiceErrorOccurred>((event, emit) {
+      emit(state.copyWith(failure: event.failure));
+    });
   }
 
   @override

@@ -4,6 +4,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import '../../../../core/data/data.dart';
 import '../../../../core/repositories/session_repository.dart';
 import '../../../../core/utils/error_messages.dart';
+import '../../../../core/error/failure.dart' as f;
 import 'auth_event.dart';
 import 'auth_state.dart';
 
@@ -63,25 +64,29 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
         emit(Unauthenticated());
       }
     } on FirebaseAuthException catch (e) {
-      String message = 'Sign-in failed. Please try again.';
+      f.Failure failure;
       switch (e.code) {
         case 'ERROR_ABORTED_BY_USER':
         case 'canceled':
-          message = 'Sign-in was cancelled.';
+          failure = const f.AuthFailure('Sign-in was cancelled.');
           break;
         case 'network-request-failed':
-          message = 'No internet connection.';
+          failure = const f.NetworkFailure();
           break;
         case 'invalid-credential':
-          message = 'Invalid credentials. Try again.';
+          failure = const f.AuthFailure('Invalid credentials. Try again.');
           break;
         case 'user-disabled':
-          message = 'This account has been disabled.';
+          failure = const f.AuthFailure('This account has been disabled.');
           break;
+        default:
+          failure = f.AuthFailure(
+            e.message ?? 'Sign-in failed. Please try again.',
+          );
       }
-      emit(AuthFailure(message));
+      emit(AuthFailure(failure));
     } catch (e) {
-      emit(AuthFailure(ErrorMessages.getFromException(e)));
+      emit(AuthFailure(f.UnknownFailure(ErrorMessages.getFromException(e))));
     }
   }
 
@@ -126,7 +131,7 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
 
       emit(Unauthenticated());
     } catch (e) {
-      emit(AuthFailure(ErrorMessages.getFromException(e)));
+      emit(AuthFailure(f.UnknownFailure(ErrorMessages.getFromException(e))));
     }
   }
 

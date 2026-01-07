@@ -17,6 +17,8 @@ import '../widgets/session_bottom_controls.dart';
 import '../../../../core/theme/colors.dart';
 import 'package:veil_core/features/voice/presentation/widgets/voice_overlay.dart';
 import '../../../../core/di/service_locator.dart' as di;
+import '../../../../core/notifications/bloc/app_notification_bloc.dart';
+import '../../../../core/notifications/bloc/app_notification_event.dart';
 
 class SessionScreen extends StatefulWidget {
   const SessionScreen({super.key});
@@ -239,6 +241,15 @@ class _SessionScreenState extends State<SessionScreen>
           curr.lastEvent != engine.SessionEventType.none &&
           prev.lastEventTimestamp != curr.lastEventTimestamp,
       listener: (context, state) {
+        // Handle Failures
+        if (state.failure != null) {
+          context.read<AppNotificationBloc>().add(
+            ShowErrorNotification(state.failure!.message),
+          );
+          // Auto-clear error after showing notification
+          context.read<SessionBloc>().add(const SessionErrorCleared());
+        }
+
         if (state.lastEvent != engine.SessionEventType.none) {
           _handleGameEvents(state.lastEvent, state);
         }

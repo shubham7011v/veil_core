@@ -11,6 +11,9 @@ import '../bloc/session_bloc.dart'; // Correct relative path
 
 import '../bloc/session_state.dart'; // Ensure SessionBlocState is available
 import '../../../../core/engine/data/handlers/websocket_session_handler.dart';
+import '../bloc/session_event.dart';
+import '../../../../core/notifications/bloc/app_notification_bloc.dart';
+import '../../../../core/notifications/bloc/app_notification_event.dart';
 import '../widgets/participant_avatar.dart';
 
 class LobbyScreen extends StatefulWidget {
@@ -27,6 +30,15 @@ class _LobbyScreenState extends State<LobbyScreen> {
 
     return BlocConsumer<SessionBloc, SessionBlocState>(
       listener: (context, state) {
+        // Handle Failures
+        if (state.failure != null) {
+          context.read<AppNotificationBloc>().add(
+            ShowErrorNotification(state.failure!.message),
+          );
+          // Auto-clear error after showing notification
+          context.read<SessionBloc>().add(const SessionErrorCleared());
+        }
+
         // If game starts, navigate to session
         if (state.engineState.currentPhase != SessionPhase.lobby) {
           Navigator.pushReplacementNamed(context, '/session');

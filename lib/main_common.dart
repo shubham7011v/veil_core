@@ -14,6 +14,7 @@ import 'core/navigation/app_router.dart';
 import 'core/config/remote_config_service.dart';
 import 'core/error/global_error_handler.dart';
 import 'core/notifications/widgets/app_notification_listener.dart';
+import 'shared/components/error_boundary.dart';
 
 import 'package:flutter_native_splash/flutter_native_splash.dart';
 
@@ -93,7 +94,9 @@ class VeilApp extends StatelessWidget {
             theme: AppTheme.getTheme(themeState.mode),
             initialRoute: AppRouter.splash,
             builder: (context, child) {
-              return AppNotificationListener(child: child!);
+              return AppNotificationListener(
+                child: ErrorBoundary(child: child!),
+              );
             },
             routes: {
               ...AppRouter.routes,
