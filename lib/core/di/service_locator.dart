@@ -3,6 +3,10 @@ import '../data/data.dart';
 import '../services/services.dart';
 import '../engine/engine.dart';
 import '../engine/data/handlers/websocket_session_handler.dart';
+import '../repositories/session_repository.dart';
+import '../repositories/websocket_session_repository.dart';
+import '../services/audio/audio_service_interface.dart';
+import '../services/audio/audio_service_impl.dart';
 import '../services/system_status_service.dart';
 import '../../features/auth/auth.dart';
 import '../../features/profile/profile.dart';
@@ -17,11 +21,13 @@ class ServiceLocator {
   late final AuthRepository authRepository;
   late final UserRepository userRepository;
   late final OnboardingRepository onboardingRepository;
+  late final SessionRepository sessionRepository;
   late final ProfileRepository profileRepository;
   late final GameSessionHandler gameSessionHandler;
   late final VoiceSessionHandler voiceSessionHandler;
   late final GreetingService greetingService;
   late final SystemStatusService systemStatusService;
+  late final AudioService audioService;
 
   // Explicitly expose WebSocket handler for specialized calls (like updateNickname)
   late final WebSocketSessionHandler _webSocketHandler;
@@ -35,12 +41,18 @@ class ServiceLocator {
     storageService = StorageService(prefs);
     greetingService = GreetingService();
 
+    // Initialize Audio Service
+    audioService = AudioServiceImpl();
+    await audioService.initialize();
+
     authRepository = AuthRepository();
     userRepository = UserRepository();
     onboardingRepository = OnboardingRepository(prefs);
 
     // Initialize the singleton WS handler
     _webSocketHandler = WebSocketSessionHandler();
+
+    sessionRepository = WebSocketSessionRepository(_webSocketHandler);
 
     // Initialize ProfileRepository with WebSocket handler
     profileRepository = ProfileRepository(_webSocketHandler);

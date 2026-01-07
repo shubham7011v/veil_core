@@ -2,6 +2,7 @@ import 'dart:async';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import '../../../../core/data/data.dart';
+import '../../../../core/repositories/session_repository.dart';
 import '../../../../core/utils/error_messages.dart';
 import 'auth_event.dart';
 import 'auth_state.dart';
@@ -9,17 +10,21 @@ import 'auth_state.dart';
 class AuthBloc extends Bloc<AuthEvent, AuthState> {
   final AuthRepository _authRepository;
   final UserRepository _userRepository;
+  final SessionRepository _sessionRepository;
   StreamSubscription? _authStateSubscription;
 
   AuthBloc({
     required AuthRepository authRepository,
     required UserRepository userRepository,
+    required SessionRepository sessionRepository,
   }) : _authRepository = authRepository,
        _userRepository = userRepository,
+       _sessionRepository = sessionRepository,
        super(AuthInitial()) {
     on<AuthCheckRequested>(_onAuthCheckRequested);
     on<GoogleSignInRequested>(_onGoogleSignInRequested);
     on<SignOutRequested>(_onSignOutRequested);
+    on<DeleteAccountRequested>(_onDeleteAccountRequested);
     on<AuthSilentSignInRequested>(_onAuthSilentSignInRequested);
     on<AuthStatsUpdated>(_onAuthStatsUpdated);
 
@@ -105,6 +110,24 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
     emit(AuthLoading());
     await _authRepository.signOut();
     emit(Unauthenticated());
+  }
+
+  Future<void> _onDeleteAccountRequested(
+    DeleteAccountRequested event,
+    Emitter<AuthState> emit,
+  ) async {
+    emit(AuthLoading());
+    try {
+      // 1. Notify Backend to scrub data
+      await _sessionRepository.deleteAccount();
+
+      // 2. Delete from Firebase (handles re-auth internally)
+      await _authRepository.deleteAccount();
+
+      emit(Unauthenticated());
+    } catch (e) {
+      emit(AuthFailure(ErrorMessages.getFromException(e)));
+    }
   }
 
   void _onAuthStatsUpdated(AuthStatsUpdated event, Emitter<AuthState> emit) {

@@ -342,3 +342,29 @@ func CalculateRank(wins int) string {
 		return "Legend"
 	}
 }
+
+// DeleteUser removes all user data from the database
+func DeleteUser(userID string) error {
+	tx, err := DB.Begin()
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+
+	// 1. Delete from users table
+	_, err = tx.Exec("DELETE FROM users WHERE user_id = ?", userID)
+	if err != nil {
+		return err
+	}
+
+	// 2. Delete from friends table (both ways)
+	_, err = tx.Exec("DELETE FROM friends WHERE user_id = ? OR friend_id = ?", userID, userID)
+	if err != nil {
+		return err
+	}
+
+	// Note: We keep match history (matches table) but the player info in players_json 
+	// will just refer to a non-existent user ID, which is fine for history preservation.
+
+	return tx.Commit()
+}

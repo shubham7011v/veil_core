@@ -251,6 +251,20 @@ func (m *Manager) HandleMessage(c *Client, message []byte) {
 			c.CurrentRoom = nil
 		}
 		return
+	case protocol.MsgTypeDeleteAccount:
+		log.Printf("User %s requested account deletion", c.ID)
+		if err := db.DeleteUser(c.ID); err != nil {
+			log.Printf("Error deleting user: %v", err)
+			m.sendError(c, "DELETE_FAILED", "Could not delete account data")
+			return
+		}
+		// Confirm and disconnect
+		m.sendError(c, "ACCOUNT_DELETED", "Your account has been permanently deleted")
+		// Force disconnect
+		if c.CurrentRoom != nil {
+			c.CurrentRoom.Leave(c)
+		}
+		return
 	}
 
 	// 3. Room-scoped Handlers (Play, Pass, etc)

@@ -57,6 +57,11 @@ class WebSocketSessionRepository implements SessionRepository {
   }
 
   @override
+  Future<void> deleteAccount() async {
+    _handler.deleteAccount();
+  }
+
+  @override
   Future<void> dispose() async {
     await _handler.dispose();
   }

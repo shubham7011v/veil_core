@@ -13,6 +13,9 @@ import '../../../../features/auth/domain/models/user_stats.dart';
 import '../../../../features/social/domain/models/friend_record.dart';
 import '../../domain/models/room_event.dart';
 import '../../../../features/voice/data/voice_audio_manager.dart';
+import '../../../../core/di/service_locator.dart';
+import '../../../../core/constants/sound_assets.dart';
+import '../../../../core/services/audio/audio_service_interface.dart';
 
 enum ConnectionStatus {
   disconnected,
@@ -251,6 +254,9 @@ class WebSocketSessionHandler
 
         // Send JOIN_ROOM after auth
         _send({'type': 'JOIN_ROOM'});
+
+        // Start Lobby Music
+        sl.audioService.playBgm(SoundAssets.lobbyAmbience);
         break;
 
       case 'STATS_UPDATE':
@@ -350,6 +356,35 @@ class WebSocketSessionHandler
       orElse: () => SessionPhase.lobby,
     );
 
+    // Audio Triggers based on State Changes
+    final previousPhase = _currentState.currentPhase;
+    // Detect Turn Start
+    if (previousPhase != SessionPhase.thinking &&
+        phase == SessionPhase.thinking) {
+      final activeId = stateData['activePlayerId'] as String?;
+      final myId = sl.authRepository.currentUser?.uid;
+      if (activeId == myId) {
+        sl.audioService.playSfx(SoundAssets.turnAlert);
+        sl.audioService.triggerHaptic(HapticType.heavy);
+      }
+    }
+    // Detect Challenge
+    if (previousPhase != SessionPhase.challenging &&
+        phase == SessionPhase.challenging) {
+      sl.audioService.playSfx(SoundAssets.challenge);
+      sl.audioService.triggerHaptic(HapticType.error); // Alert vibration
+    }
+
+    // BGM Lifecycle
+    // Stop BGM when entering active gameplay
+    if (previousPhase == SessionPhase.lobby && phase != SessionPhase.lobby) {
+      sl.audioService.stopBgm();
+    }
+    // Resume BGM when returning to lobby
+    if (previousPhase != SessionPhase.lobby && phase == SessionPhase.lobby) {
+      sl.audioService.playBgm(SoundAssets.lobbyAmbience);
+    }
+
     // Parse participants
     final participantsList = stateData['participants'] as List<dynamic>? ?? [];
     final participants = participantsList.map((p) {
@@ -431,16 +466,22 @@ class WebSocketSessionHandler
       'type': 'PLAY_CARDS',
       'data': {'cardIds': unitIds, 'declaredRank': declaredRank.name},
     });
+    sl.audioService.playSfx(SoundAssets.cardSlide);
+    sl.audioService.triggerHaptic(HapticType.light);
   }
 
   @override
   void passTurn() {
     _send({'type': 'PASS'});
+    sl.audioService.playSfx(SoundAssets.buttonTap);
+    sl.audioService.triggerHaptic(HapticType.medium);
   }
 
   @override
   void raiseChallenge() {
     _send({'type': 'CHALLENGE'});
+    sl.audioService.playSfx(SoundAssets.buttonTap);
+    sl.audioService.triggerHaptic(HapticType.heavy);
   }
 
   @override
@@ -543,6 +584,10 @@ class WebSocketSessionHandler
       'type': 'LEAVE_ROOM',
       'data': {'roomCode': roomCode},
     });
+  }
+
+  void deleteAccount() {
+    _send({'type': 'DELETE_ACCOUNT'});
   }
 
   @override

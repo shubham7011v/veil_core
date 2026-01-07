@@ -61,6 +61,7 @@ class VeilApp extends StatelessWidget {
             final authBloc = AuthBloc(
               authRepository: di.sl.authRepository,
               userRepository: di.sl.userRepository,
+              sessionRepository: di.sl.sessionRepository,
             )..add(AuthCheckRequested());
             di.sl.initializeSystemStatus(authBloc);
             return authBloc;

@@ -31,6 +31,9 @@ abstract class SessionRepository {
   /// Leave the current room
   Future<void> leaveRoom();
 
+  /// Request account deletion from backend
+  Future<void> deleteAccount();
+
   /// Dispose resources
   Future<void> dispose();
 }
