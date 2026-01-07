@@ -41,9 +41,7 @@ class WebSocketSessionRepository implements SessionRepository {
 
   @override
   Future<void> pass() async {
-    // Pass is handled by sending empty cards with current rank
-    // This is a simplified implementation
-    // In practice, you might want to add a dedicated pass method to the handler
+    _handler.passTurn();
   }
 
   @override
