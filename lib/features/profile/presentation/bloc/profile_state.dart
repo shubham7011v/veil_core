@@ -1,5 +1,6 @@
 import 'package:equatable/equatable.dart';
 import '../../domain/models/user_profile.dart';
+import '../../../../core/error/failure.dart';
 
 abstract class ProfileState extends Equatable {
   const ProfileState();
@@ -23,10 +24,10 @@ class ProfileLoaded extends ProfileState {
 }
 
 class ProfileError extends ProfileState {
-  final String message;
+  final Failure failure;
 
-  const ProfileError(this.message);
+  const ProfileError(this.failure);
 
   @override
-  List<Object?> get props => [message];
+  List<Object?> get props => [failure];
 }

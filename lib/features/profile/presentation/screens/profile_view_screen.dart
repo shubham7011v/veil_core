@@ -54,7 +54,7 @@ class ProfileViewScreen extends StatelessWidget {
                         ),
                         const SizedBox(height: 16),
                         Text(
-                          state.message,
+                          state.failure.message,
                           textAlign: TextAlign.center,
                           style: TextStyle(color: palette.textSecondary),
                         ),

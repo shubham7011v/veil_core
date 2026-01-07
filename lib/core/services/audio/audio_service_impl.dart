@@ -39,27 +39,32 @@ class AudioServiceImpl implements AudioService {
 
   @override
   Future<void> initialize() async {
-    // Set Audio Context
-    await AudioPlayer.global.setAudioContext(
-      AudioContext(
-        android: const AudioContextAndroid(
-          isSpeakerphoneOn: true,
-          stayAwake: true,
-          contentType: AndroidContentType.music,
-          usageType: AndroidUsageType.game,
-          audioFocus: AndroidAudioFocus.gain,
+    try {
+      // Set Audio Context
+      await AudioPlayer.global.setAudioContext(
+        AudioContext(
+          android: const AudioContextAndroid(
+            isSpeakerphoneOn: true,
+            stayAwake: true,
+            contentType: AndroidContentType.music,
+            usageType: AndroidUsageType.game,
+            audioFocus: AndroidAudioFocus.gain,
+          ),
+          iOS: AudioContextIOS(
+            category: AVAudioSessionCategory.ambient,
+            options: {},
+          ),
         ),
-        iOS: AudioContextIOS(
-          category: AVAudioSessionCategory.ambient,
-          options: {},
-        ),
-      ),
-    );
+      );
 
-    _bgmPlayer.setReleaseMode(ReleaseMode.loop);
+      _bgmPlayer.setReleaseMode(ReleaseMode.loop);
 
-    // Load initial settings from storage
-    _loadInitialSettings();
+      // Load initial settings from storage
+      _loadInitialSettings();
+    } catch (e) {
+      debugPrint('AudioService initialization failed: $e');
+      // We don't rethrow here to allow app to proceed without audio
+    }
   }
 
   void _loadInitialSettings() {
@@ -132,13 +137,21 @@ class AudioServiceImpl implements AudioService {
   @override
   Future<void> stopBgm() async {
     _isPlayingBgm = false;
-    await _bgmPlayer.stop();
+    try {
+      await _bgmPlayer.stop();
+    } catch (e) {
+      debugPrint('Error stopping BGM: $e');
+    }
   }
 
   @override
   Future<void> pauseBgm() async {
     if (_isPlayingBgm) {
-      await _bgmPlayer.pause();
+      try {
+        await _bgmPlayer.pause();
+      } catch (e) {
+        debugPrint('Error pausing BGM: $e');
+      }
     }
   }
 
@@ -147,7 +160,11 @@ class AudioServiceImpl implements AudioService {
     if (_isPlayingBgm) {
       // Only resume if we were conceptually playing
       if (_currentSettings.isMusicEnabled) {
-        await _bgmPlayer.resume();
+        try {
+          await _bgmPlayer.resume();
+        } catch (e) {
+          debugPrint('Error resuming BGM: $e');
+        }
       }
     }
   }

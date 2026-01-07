@@ -12,6 +12,8 @@ import 'features/profile/profile.dart';
 import 'core/di/service_locator.dart' as di;
 import 'core/navigation/app_router.dart';
 import 'core/config/remote_config_service.dart';
+import 'core/error/global_error_handler.dart';
+import 'core/notifications/widgets/app_notification_listener.dart';
 
 import 'package:flutter_native_splash/flutter_native_splash.dart';
 
@@ -52,7 +54,9 @@ Future<void> mainCommon(AppConfig config) async {
   // Note: BGM will be started after successful authentication in HomeScreen
   // to avoid crashes during initialization
 
-  runApp(VeilApp(config: config));
+  GlobalErrorHandler.run(() {
+    runApp(VeilApp(config: config));
+  });
 }
 
 class VeilApp extends StatelessWidget {
@@ -88,6 +92,9 @@ class VeilApp extends StatelessWidget {
             debugShowCheckedModeBanner: config.isDev,
             theme: AppTheme.getTheme(themeState.mode),
             initialRoute: AppRouter.splash,
+            builder: (context, child) {
+              return AppNotificationListener(child: child!);
+            },
             routes: {
               ...AppRouter.routes,
               // LobbyScreen is now self-sufficient via Bloc

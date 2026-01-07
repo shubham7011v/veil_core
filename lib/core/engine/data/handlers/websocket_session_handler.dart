@@ -228,123 +228,140 @@ class WebSocketSessionHandler
   }
 
   void _handleMessage(dynamic data) {
-    final msg = jsonDecode(data as String) as Map<String, dynamic>;
-    final type = msg['type'] as String;
+    try {
+      final msg = jsonDecode(data as String) as Map<String, dynamic>;
+      final type = msg['type'] as String;
 
-    switch (type) {
-      case 'AUTH_OK':
-        debugPrint('Auth successful: ${msg['data']}');
-        _updateConnectionStatus(ConnectionStatus.connected);
+      switch (type) {
+        case 'AUTH_OK':
+          debugPrint('Auth successful: ${msg['data']}');
+          _updateConnectionStatus(ConnectionStatus.connected);
 
-        // Parse stats from AUTH_OK response
-        final authData = msg['data'] as Map<String, dynamic>;
-        if (authData.containsKey('stats')) {
+          // Parse stats from AUTH_OK response
+          final authData = msg['data'] as Map<String, dynamic>;
+          if (authData.containsKey('stats')) {
+            try {
+              final stats = UserStats.fromJson(
+                authData['stats'] as Map<String, dynamic>,
+              );
+              _statsController.add(stats);
+              debugPrint(
+                'User stats loaded: ${stats.wins} wins, ${stats.rank} rank',
+              );
+            } catch (e) {
+              debugPrint('Failed to parse stats: $e');
+            }
+          }
+
+          // Send JOIN_ROOM after auth
+          _send({'type': 'JOIN_ROOM'});
+
+          // Start Lobby Music
+          try {
+            sl.audioService.playBgm(SoundAssets.lobbyAmbience);
+          } catch (e) {
+            debugPrint('Failed to start lobby ambience: $e');
+          }
+          break;
+
+        case 'STATS_UPDATE':
+          // Handle real-time stats updates (e.g., after game end)
           try {
             final stats = UserStats.fromJson(
-              authData['stats'] as Map<String, dynamic>,
+              msg['data'] as Map<String, dynamic>,
             );
             _statsController.add(stats);
-            debugPrint(
-              'User stats loaded: ${stats.wins} wins, ${stats.rank} rank',
-            );
+            debugPrint('Stats updated: ${stats.wins} wins, ${stats.rank} rank');
           } catch (e) {
-            debugPrint('Failed to parse stats: $e');
+            debugPrint('Failed to parse stats update: $e');
           }
-        }
+          break;
 
-        // Send JOIN_ROOM after auth
-        _send({'type': 'JOIN_ROOM'});
+        case 'AUTH_FAIL':
+          debugPrint('Auth failed: ${msg['data']}');
+          break;
 
-        // Start Lobby Music
-        sl.audioService.playBgm(SoundAssets.lobbyAmbience);
-        break;
+        case 'GAME_STATE':
+          _handleGameState(msg['data'] as Map<String, dynamic>);
+          break;
 
-      case 'STATS_UPDATE':
-        // Handle real-time stats updates (e.g., after game end)
-        try {
-          final stats = UserStats.fromJson(msg['data'] as Map<String, dynamic>);
-          _statsController.add(stats);
-          debugPrint('Stats updated: ${stats.wins} wins, ${stats.rank} rank');
-        } catch (e) {
-          debugPrint('Failed to parse stats update: $e');
-        }
-        break;
+        case 'ERROR':
+          final errorData = msg['data'] as Map<String, dynamic>;
+          debugPrint('Server Error: ${errorData['message']}');
+          break;
 
-      case 'AUTH_FAIL':
-        debugPrint('Auth failed: ${msg['data']}');
-        break;
+        case 'LEADERBOARD_DATA':
+          try {
+            final data = msg['data'] as List<dynamic>;
+            final leaderboard = data
+                .map((u) => UserStats.fromJson(u as Map<String, dynamic>))
+                .toList();
+            _leaderboardController.add(leaderboard);
+          } catch (e) {
+            debugPrint('Failed to parse leaderboard: $e');
+          }
+          break;
 
-      case 'GAME_STATE':
-        _handleGameState(msg['data'] as Map<String, dynamic>);
-        break;
+        case 'FRIEND_LIST':
+          try {
+            final data = msg['data'] as List<dynamic>;
+            final friends = data
+                .map((f) => FriendRecord.fromJson(f as Map<String, dynamic>))
+                .toList();
+            _friendsController.add(friends);
+          } catch (e) {
+            debugPrint('Failed to parse friend list: $e');
+          }
+          break;
 
-      case 'ERROR':
-        final errorData = msg['data'] as Map<String, dynamic>;
-        debugPrint('Server Error: ${errorData['message']}');
-        break;
+        case 'ROOM_CREATED':
+          try {
+            final evt = RoomCreated.fromJson(
+              msg['data'] as Map<String, dynamic>,
+            );
+            _roomEventController.add(evt);
+          } catch (e) {
+            debugPrint('Failed to parse ROOM_CREATED: $e');
+          }
+          break;
 
-      case 'LEADERBOARD_DATA':
-        try {
-          final data = msg['data'] as List<dynamic>;
-          final leaderboard = data
-              .map((u) => UserStats.fromJson(u as Map<String, dynamic>))
-              .toList();
-          _leaderboardController.add(leaderboard);
-        } catch (e) {
-          debugPrint('Failed to parse leaderboard: $e');
-        }
-        break;
+        case 'ROOM_JOINED':
+          try {
+            final evt = RoomJoined.fromJson(
+              msg['data'] as Map<String, dynamic>,
+            );
+            _roomEventController.add(evt);
+          } catch (e) {
+            debugPrint('Failed to parse ROOM_JOINED: $e');
+          }
+          break;
 
-      case 'FRIEND_LIST':
-        try {
-          final data = msg['data'] as List<dynamic>;
-          final friends = data
-              .map((f) => FriendRecord.fromJson(f as Map<String, dynamic>))
-              .toList();
-          _friendsController.add(friends);
-        } catch (e) {
-          debugPrint('Failed to parse friend list: $e');
-        }
-        break;
+        case 'ROOM_UPDATE':
+          try {
+            final evt = RoomUpdated.fromJson(
+              msg['data'] as Map<String, dynamic>,
+            );
+            _roomEventController.add(evt);
+          } catch (e) {
+            debugPrint('Failed to parse ROOM_UPDATE: $e');
+          }
+          break;
 
-      case 'ROOM_CREATED':
-        try {
-          final evt = RoomCreated.fromJson(msg['data'] as Map<String, dynamic>);
-          _roomEventController.add(evt);
-        } catch (e) {
-          debugPrint('Failed to parse ROOM_CREATED: $e');
-        }
-        break;
+        case 'VOICE_SDP':
+          if (_voiceManager != null) {
+            _voiceManager!.handleAnswer(msg['data'] as Map<String, dynamic>);
+          }
+          break;
 
-      case 'ROOM_JOINED':
-        try {
-          final evt = RoomJoined.fromJson(msg['data'] as Map<String, dynamic>);
-          _roomEventController.add(evt);
-        } catch (e) {
-          debugPrint('Failed to parse ROOM_JOINED: $e');
-        }
-        break;
-
-      case 'ROOM_UPDATE':
-        try {
-          final evt = RoomUpdated.fromJson(msg['data'] as Map<String, dynamic>);
-          _roomEventController.add(evt);
-        } catch (e) {
-          debugPrint('Failed to parse ROOM_UPDATE: $e');
-        }
-        break;
-
-      case 'VOICE_SDP':
-        if (_voiceManager != null) {
-          _voiceManager!.handleAnswer(msg['data'] as Map<String, dynamic>);
-        }
-        break;
-
-      case 'VOICE_ICE':
-        if (_voiceManager != null) {
-          _voiceManager!.handleCandidate(msg['data'] as Map<String, dynamic>);
-        }
-        break;
+        case 'VOICE_ICE':
+          if (_voiceManager != null) {
+            _voiceManager!.handleCandidate(msg['data'] as Map<String, dynamic>);
+          }
+          break;
+      }
+    } catch (e, stack) {
+      debugPrint('Error handling WebSocket message: $e');
+      debugPrint('Stack trace: $stack');
     }
   }
 
