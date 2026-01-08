@@ -195,9 +195,10 @@ class WebSocketSessionHandler
   void _handleConnectionFailure(String firebaseToken, {String? displayName}) {
     if (_reconnectAttempts < _maxReconnectAttempts) {
       _reconnectAttempts++;
-      final delay =
-          _baseReconnectDelay *
-          (1 << (_reconnectAttempts - 1)); // Exponential backoff
+      final baseDelay = _baseReconnectDelay * (1 << (_reconnectAttempts - 1));
+      // Add random jitter (0-500ms) to prevent Thundering Herd
+      final jitter = Duration(milliseconds: DateTime.now().millisecond % 500);
+      final delay = baseDelay + jitter;
 
       debugPrint(
         'Reconnecting in ${delay.inSeconds}s (attempt $_reconnectAttempts/$_maxReconnectAttempts)',
