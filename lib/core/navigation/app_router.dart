@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
-import '../engine/data/handlers/websocket_session_handler.dart';
 import '../di/service_locator.dart' as di;
 import '../../features/voice/presentation/bloc/voice_bloc.dart';
 import '../../features/session/session.dart';
@@ -48,11 +47,11 @@ class AppRouter {
         BlocProvider(
           create: (_) => SessionBloc(handler: di.sl.gameSessionHandler),
         ),
-        if (di.sl.gameSessionHandler is WebSocketSessionHandler)
+        if (di.sl.voiceSessionHandler != null)
           BlocProvider(
             create: (_) => VoiceBloc(
               myUserId: di.sl.authRepository.currentUser?.uid ?? 'unknown',
-              handler: di.sl.voiceSessionHandler,
+              handler: di.sl.voiceSessionHandler!,
             ),
           ),
       ],

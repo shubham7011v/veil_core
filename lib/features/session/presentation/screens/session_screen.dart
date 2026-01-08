@@ -490,12 +490,11 @@ class _SessionScreenState extends State<SessionScreen>
                     ),
                   ),
 
-                  // Voice Overlay - only for online matches
-                  if (context.read<SessionBloc>().handler
-                      is engine.VoiceSessionHandler)
+                  // Voice Overlay - only when voice is enabled
+                  if (di.sl.voiceSessionHandler != null)
                     Positioned.fill(
                       child: VoiceOverlay(
-                        sessionHandler: di.sl.voiceSessionHandler,
+                        sessionHandler: di.sl.voiceSessionHandler!,
                       ),
                     ),
                 ],

@@ -1,4 +1,5 @@
 import 'package:shared_preferences/shared_preferences.dart';
+import '../config/feature_flags.dart';
 import '../data/data.dart';
 import '../services/services.dart';
 import '../engine/engine.dart';
@@ -25,7 +26,7 @@ class ServiceLocator {
   late final SessionRepository sessionRepository;
   late final ProfileRepository profileRepository;
   late final GameSessionHandler gameSessionHandler;
-  late final VoiceSessionHandler voiceSessionHandler;
+  late final VoiceSessionHandler? voiceSessionHandler; // Nullable when disabled
   late final GreetingService greetingService;
   late final SystemStatusService systemStatusService;
   late final AudioService audioService;
@@ -64,7 +65,13 @@ class ServiceLocator {
 
     // Default to local, but the app can switch
     gameSessionHandler = LocalBotSessionHandler();
-    voiceSessionHandler = _webSocketHandler;
+
+    // Conditionally register voice based on feature flag
+    if (FeatureFlags.enableVoiceChat) {
+      voiceSessionHandler = _webSocketHandler;
+    } else {
+      voiceSessionHandler = null; // Voice disabled
+    }
   }
 
   void initializeSystemStatus(AuthBloc authBloc) {
