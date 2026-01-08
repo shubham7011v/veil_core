@@ -15,7 +15,12 @@ const (
 	charset = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789" // Excludes I, O, 0, 1
 )
 
-// Manager keeps track of all clients and rooms
+// ActiveRoomInfo for admin dashboard
+type ActiveRoomInfo struct {
+	ID          string `json:"id"`
+	PlayerCount int    `json:"playerCount"`
+	Phase       string `json:"phase"`
+}
 
 // Manager keeps track of all clients and rooms
 type Manager struct {
@@ -441,4 +446,21 @@ func (m *Manager) sendAuthOk(c *Client, stats *db.UserStats) {
 	msg := protocol.NewMessage(protocol.MsgTypeAuthOk, responseMap)
 	bytes, _ := json.Marshal(msg)
 	c.Send <- bytes
+}
+
+// GetActiveRooms returns a snapshot of all rooms
+func (m *Manager) GetActiveRooms() []ActiveRoomInfo {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+
+	var list []ActiveRoomInfo
+	for id, r := range m.Rooms {
+		info := ActiveRoomInfo{
+			ID:          id,
+			PlayerCount: r.GetClientCount(),
+			Phase:       r.GetGamePhase(),
+		}
+		list = append(list, info)
+	}
+	return list
 }

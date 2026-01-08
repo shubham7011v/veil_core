@@ -1,197 +1,196 @@
 import 'package:flutter/material.dart';
-import '../../../../core/theme/colors.dart';
-import '../../../../core/theme/bloc/theme_bloc.dart';
-import '../../../../core/theme/bloc/theme_state.dart';
-import '../../../../core/constants/dimens.dart';
-import '../../../../core/services/admin_service.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
+import '../../../../core/di/service_locator.dart';
+import '../bloc/admin_bloc.dart';
 
-class AdminScreen extends StatefulWidget {
+class AdminScreen extends StatelessWidget {
   const AdminScreen({super.key});
 
   @override
-  State<AdminScreen> createState() => _AdminScreenState();
+  Widget build(BuildContext context) {
+    return BlocProvider(
+      create: (context) =>
+          AdminBloc(sl.adminRepository), // sl() must resolve AdminRepository
+      child: const _AdminView(),
+    );
+  }
 }
 
-class _AdminScreenState extends State<AdminScreen> {
-  Map<String, dynamic>? _stats;
-  List<dynamic>? _rooms;
-  bool _isLoading = false;
+class _AdminView extends StatefulWidget {
+  const _AdminView();
 
   @override
-  void initState() {
-    super.initState();
-    _refreshData();
-  }
+  State<_AdminView> createState() => _AdminViewState();
+}
 
-  Future<void> _refreshData() async {
-    setState(() => _isLoading = true);
-    try {
-      final stats = await AdminService.instance.getServerStats();
-      final rooms = await AdminService.instance.listRooms();
-      setState(() {
-        _stats = stats;
-        _rooms = rooms;
-        _isLoading = false;
-      });
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text('Error: $e')));
-      }
-      setState(() => _isLoading = false);
-    }
-  }
+class _AdminViewState extends State<_AdminView> {
+  final _keyController = TextEditingController();
 
-  Future<void> _closeRoom(String roomId) async {
-    try {
-      await AdminService.instance.closeRoom(roomId);
-      _refreshData();
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text('Failed to close room: $e')));
-      }
-    }
+  @override
+  void dispose() {
+    _keyController.dispose();
+    super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
-    return BlocBuilder<ThemeBloc, ThemeState>(
-      builder: (context, themeState) {
-        final palette = AppColors.getPalette(themeState.mode);
-
-        return Scaffold(
-          backgroundColor: palette.background,
-          appBar: AppBar(
-            title: const Text('ADMIN DASHBOARD'),
-            backgroundColor: Colors.transparent,
-            elevation: 0,
-            actions: [
-              IconButton(
-                icon: const Icon(Icons.refresh),
-                onPressed: _refreshData,
-              ),
-            ],
+    return Scaffold(
+      backgroundColor: Colors.black, // Matrix style
+      appBar: AppBar(
+        title: const Text('SERVER ADMIN'),
+        backgroundColor: Colors.black,
+        foregroundColor: Colors.greenAccent,
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.refresh),
+            onPressed: () {
+              context.read<AdminBloc>().add(LoadAdminData());
+            },
           ),
-          body: _isLoading
-              ? const Center(child: CircularProgressIndicator())
-              : ListView(
-                  padding: const EdgeInsets.all(AppDimens.paddingM),
-                  children: [
-                    _buildStatsCard(palette),
-                    const SizedBox(height: AppDimens.paddingL),
-                    const Text(
-                      'ACTIVE ROOMS',
-                      style: TextStyle(
-                        fontWeight: FontWeight.bold,
-                        letterSpacing: 1.2,
-                      ),
-                    ),
-                    const SizedBox(height: AppDimens.paddingM),
-                    if (_rooms == null || _rooms!.isEmpty)
-                      const Center(child: Text('No active rooms'))
-                    else
-                      ..._rooms!.map((room) => _buildRoomTile(room, palette)),
-                  ],
-                ),
-        );
-      },
-    );
-  }
-
-  Widget _buildStatsCard(AppColorPalette palette) {
-    return Container(
-      padding: const EdgeInsets.all(AppDimens.paddingL),
-      decoration: BoxDecoration(
-        color: palette.surfaceLight,
-        borderRadius: BorderRadius.circular(AppDimens.radiusM),
-      ),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceAround,
-        children: [
-          _buildStatItem(
-            'Rooms',
-            _stats?['total_rooms']?.toString() ?? '0',
-            palette,
-          ),
-          _buildStatItem(
-            'Players',
-            _stats?['total_players']?.toString() ?? '0',
-            palette,
+          IconButton(
+            icon: const Icon(Icons.logout),
+            onPressed: () {
+              context.read<AdminBloc>().add(AdminLogout());
+            },
           ),
         ],
       ),
+      body: BlocBuilder<AdminBloc, AdminState>(
+        builder: (context, state) {
+          if (state is AdminInitial || state is AdminError) {
+            if (state is AdminError) {
+              WidgetsBinding.instance.addPostFrameCallback((_) {
+                ScaffoldMessenger.of(
+                  context,
+                ).showSnackBar(SnackBar(content: Text(state.message)));
+              });
+            }
+            return _buildLogin(context);
+          }
+
+          if (state is AdminLoading) {
+            return const Center(
+              child: CircularProgressIndicator(color: Colors.greenAccent),
+            );
+          }
+
+          if (state is AdminAuthenticated) {
+            return _buildDashboard(context, state);
+          }
+
+          return const SizedBox.shrink();
+        },
+      ),
     );
   }
 
-  Widget _buildStatItem(String label, String value, AppColorPalette palette) {
-    return Column(
+  Widget _buildLogin(BuildContext context) {
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(32.0),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            const Icon(Icons.security, size: 64, color: Colors.greenAccent),
+            const SizedBox(height: 32),
+            TextField(
+              controller: _keyController,
+              decoration: const InputDecoration(
+                labelText: 'MASTER KEY',
+                labelStyle: TextStyle(color: Colors.greenAccent),
+                enabledBorder: OutlineInputBorder(
+                  borderSide: BorderSide(color: Colors.greenAccent),
+                ),
+                focusedBorder: OutlineInputBorder(
+                  borderSide: BorderSide(color: Colors.white),
+                ),
+              ),
+              style: const TextStyle(color: Colors.white),
+              obscureText: true,
+            ),
+            const SizedBox(height: 16),
+            ElevatedButton(
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.greenAccent,
+                foregroundColor: Colors.black,
+              ),
+              onPressed: () {
+                context.read<AdminBloc>().add(AdminLogin(_keyController.text));
+              },
+              child: const Text('ACCESS MAINFRAME'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildDashboard(BuildContext context, AdminAuthenticated state) {
+    return ListView(
+      padding: const EdgeInsets.all(16),
       children: [
-        Text(
-          value,
+        // Stats
+        _buildStatCard("UPTIME", "${state.stats['uptime_sec']}s"),
+        _buildStatCard("GOROUTINES", "${state.stats['goroutines']}"),
+
+        const Divider(color: Colors.greenAccent, height: 40),
+
+        const Text(
+          "ACTIVE ROOMS",
           style: TextStyle(
-            fontSize: 24,
+            color: Colors.greenAccent,
             fontWeight: FontWeight.bold,
-            color: palette.primary,
           ),
         ),
-        Text(
-          label,
-          style: TextStyle(color: palette.textSecondary, fontSize: 12),
+        const SizedBox(height: 10),
+
+        if (state.rooms.isEmpty)
+          const Text("No active rooms", style: TextStyle(color: Colors.grey)),
+
+        ...state.rooms.map(
+          (room) => Card(
+            color: Colors.grey[900],
+            child: ListTile(
+              title: Text(
+                "Room: ${room['id']}",
+                style: const TextStyle(color: Colors.white),
+              ),
+              subtitle: Text(
+                "Players: ${room['playerCount']} | Phase: ${room['phase']}",
+                style: const TextStyle(color: Colors.grey),
+              ),
+              trailing: IconButton(
+                icon: const Icon(Icons.delete_forever, color: Colors.red),
+                onPressed: () {
+                  context.read<AdminBloc>().add(CloseRoomEvent(room['id']));
+                },
+              ),
+            ),
+          ),
         ),
       ],
     );
   }
 
-  Widget _buildRoomTile(Map<String, dynamic> room, AppColorPalette palette) {
-    final id = room['id'] as String;
-    final playerCount = room['player_count'] as int;
-    final isPrivate = room['is_private'] as bool;
-    final gameStarted = room['game_started'] as bool;
-
+  Widget _buildStatCard(String label, String value) {
     return Card(
-      color: palette.surface,
-      margin: const EdgeInsets.only(bottom: AppDimens.paddingM),
-      child: ListTile(
-        title: Text('Room ID: ${id.substring(0, 8)}...'),
-        subtitle: Text(
-          'Players: $playerCount | Private: $isPrivate | Active: $gameStarted',
-        ),
-        trailing: IconButton(
-          icon: const Icon(Icons.close, color: Colors.red),
-          onPressed: () => _confirmCloseRoom(id),
-        ),
-      ),
-    );
-  }
-
-  void _confirmCloseRoom(String roomId) {
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Close Room?'),
-        content: Text(
-          'This will forcefully disconnect all players in room $roomId.',
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Cancel'),
-          ),
-          TextButton(
-            onPressed: () {
-              Navigator.pop(context);
-              _closeRoom(roomId);
-            },
-            child: const Text(
-              'Close Room',
-              style: TextStyle(color: Colors.red),
+      color: Colors.grey[900],
+      child: Padding(
+        padding: const EdgeInsets.all(16.0),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            Text(label, style: const TextStyle(color: Colors.greenAccent)),
+            Text(
+              value,
+              style: const TextStyle(
+                color: Colors.white,
+                fontSize: 20,
+                fontWeight: FontWeight.bold,
+              ),
             ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }

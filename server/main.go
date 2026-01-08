@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"os"
 
+	"veil_server/api"
 	"veil_server/db"
 	"veil_server/room"
 )
@@ -33,10 +34,10 @@ func main() {
 	})
 
 	// Admin API
-	admin := room.NewAdminHandler(manager)
-	http.HandleFunc("/admin/stats", admin.AdminMiddleware(admin.GetStats))
-	http.HandleFunc("/admin/rooms", admin.AdminMiddleware(admin.ListRooms))
-	http.HandleFunc("/admin/rooms/close", admin.AdminMiddleware(admin.CloseRoom))
+	adminHandler := api.NewAdminHandler(manager)
+	http.HandleFunc("/api/admin/stats", adminHandler.AdminMiddleware(adminHandler.GetStats))
+	http.HandleFunc("/api/admin/rooms", adminHandler.AdminMiddleware(adminHandler.ListRooms))
+	http.HandleFunc("/api/admin/rooms/close", adminHandler.AdminMiddleware(adminHandler.CloseRoom))
 
 	log.Printf("Veil Server listening on :%s", port)
 	// TODO: Implement graceful shutdown handling for better reliability

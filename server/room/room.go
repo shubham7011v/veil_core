@@ -136,6 +136,18 @@ func (r *Room) GetUnicastActionChannel(client *Client) chan<- GameAction {
 	return r.actions
 }
 
+func (r *Room) GetGamePhase() string {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	return string(r.game.Phase)
+}
+
+func (r *Room) GetClientCount() int {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	return len(r.clients)
+}
+
 func (r *Room) Run() {
 	ticker := time.NewTicker(200 * time.Millisecond)
 	defer func() {
