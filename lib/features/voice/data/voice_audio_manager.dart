@@ -12,19 +12,29 @@ class VoiceAudioManager {
   RTCPeerConnection? _peerConnection;
   MediaStream? _localStream;
   VoiceSessionHandler? _signaling;
+  Function(String message, dynamic error)? _onError;
 
   bool _isMicEnabled = true;
 
-  Future<void> initialize(VoiceSessionHandler signaling) async {
-    // Ensure any existing resources are cleaned up to prevent leaks
-    await dispose();
-    _isMicEnabled = true; // Reset mic state for new session
+  Future<void> initialize(
+    VoiceSessionHandler signaling, {
+    Function(String message, dynamic error)? onError,
+  }) async {
+    _onError = onError;
+    try {
+      // Ensure any existing resources are cleaned up to prevent leaks
+      await dispose();
+      _isMicEnabled = true; // Reset mic state for new session
 
-    _signaling = signaling;
-    await _requestPermissions();
-    await _createPeerConnection();
-    await _getUserMedia();
-    await _connect();
+      _signaling = signaling;
+      await _requestPermissions();
+      await _createPeerConnection();
+      await _getUserMedia();
+      await _connect();
+    } catch (e) {
+      debugPrint("VoiceAudioManager initialization failed: $e");
+      _onError?.call("Voice initialization failed", e);
+    }
   }
 
   Future<void> _requestPermissions() async {
@@ -42,25 +52,26 @@ class VoiceAudioManager {
     _peerConnection = await createPeerConnection(config, {});
 
     _peerConnection!.onIceCandidate = (candidate) {
-      if (_signaling != null) {
-        _signaling!.sendVoiceICE({
-          'candidate': candidate.candidate,
-          'sdpMid': candidate.sdpMid,
-          'sdpMLineIndex': candidate.sdpMLineIndex,
-        });
+      try {
+        if (_signaling != null) {
+          _signaling!.sendVoiceICE({
+            'candidate': candidate.candidate,
+            'sdpMid': candidate.sdpMid,
+            'sdpMLineIndex': candidate.sdpMLineIndex,
+          });
+        }
+      } catch (e) {
+        debugPrint("Error sending IceCandidate: $e");
       }
     };
 
     _peerConnection!.onTrack = (event) {
-      if (event.track.kind == 'audio') {
-        // Play audio!
-        // Flutter WebRTC usually auto-plays if the stream is attached to a renderer,
-        // OR we can just set the track enabled.
-        // For audio-only, usually we don't need a renderer widget if we use the helper helper.
-        // But let's see. Helper usually needed.
-        // Actually, creating a helper renderer is good practice to ensure audio routing.
-        // For now, we rely on the native plugin handling audio routing for tracks.
-        event.streams[0].getAudioTracks()[0].enabled = true;
+      try {
+        if (event.track.kind == 'audio') {
+          event.streams[0].getAudioTracks()[0].enabled = true;
+        }
+      } catch (e) {
+        debugPrint("Error handling remote track: $e");
       }
     };
   }
@@ -113,12 +124,16 @@ class VoiceAudioManager {
   }
 
   Future<void> handleCandidate(Map<String, dynamic> data) async {
-    final candidate = RTCIceCandidate(
-      data['candidate'],
-      data['sdpMid'],
-      data['sdpMLineIndex'],
-    );
-    await _peerConnection!.addCandidate(candidate);
+    try {
+      final candidate = RTCIceCandidate(
+        data['candidate'],
+        data['sdpMid'],
+        data['sdpMLineIndex'],
+      );
+      await _peerConnection?.addCandidate(candidate);
+    } catch (e) {
+      debugPrint("Error handling candidate: $e");
+    }
   }
 
   void toggleMic() {

@@ -1,9 +1,15 @@
 import 'package:shared_preferences/shared_preferences.dart';
+import '../config/feature_flags.dart';
 import '../data/data.dart';
 import '../services/services.dart';
 import '../engine/engine.dart';
 import '../engine/data/handlers/websocket_session_handler.dart';
+import '../repositories/session_repository.dart';
+import '../repositories/websocket_session_repository.dart';
+import '../services/audio/audio_service_interface.dart';
+import '../services/audio/audio_service_impl.dart';
 import '../services/system_status_service.dart';
+import '../notifications/bloc/app_notification_bloc.dart';
 import '../../features/auth/auth.dart';
 import '../../features/profile/profile.dart';
 
@@ -17,11 +23,14 @@ class ServiceLocator {
   late final AuthRepository authRepository;
   late final UserRepository userRepository;
   late final OnboardingRepository onboardingRepository;
+  late final SessionRepository sessionRepository;
   late final ProfileRepository profileRepository;
   late final GameSessionHandler gameSessionHandler;
-  late final VoiceSessionHandler voiceSessionHandler;
+  late final VoiceSessionHandler? voiceSessionHandler; // Nullable when disabled
   late final GreetingService greetingService;
   late final SystemStatusService systemStatusService;
+  late final AudioService audioService;
+  late final AppNotificationBloc notificationBloc;
 
   // Explicitly expose WebSocket handler for specialized calls (like updateNickname)
   late final WebSocketSessionHandler _webSocketHandler;
@@ -35,6 +44,13 @@ class ServiceLocator {
     storageService = StorageService(prefs);
     greetingService = GreetingService();
 
+    // Initialize Notification Bloc
+    notificationBloc = AppNotificationBloc();
+
+    // Initialize Audio Service
+    audioService = AudioServiceImpl();
+    await audioService.initialize();
+
     authRepository = AuthRepository();
     userRepository = UserRepository();
     onboardingRepository = OnboardingRepository(prefs);
@@ -42,12 +58,20 @@ class ServiceLocator {
     // Initialize the singleton WS handler
     _webSocketHandler = WebSocketSessionHandler();
 
+    sessionRepository = WebSocketSessionRepository(_webSocketHandler);
+
     // Initialize ProfileRepository with WebSocket handler
     profileRepository = ProfileRepository(_webSocketHandler);
 
     // Default to local, but the app can switch
     gameSessionHandler = LocalBotSessionHandler();
-    voiceSessionHandler = _webSocketHandler;
+
+    // Conditionally register voice based on feature flag
+    if (FeatureFlags.enableVoiceChat) {
+      voiceSessionHandler = _webSocketHandler;
+    } else {
+      voiceSessionHandler = null; // Voice disabled
+    }
   }
 
   void initializeSystemStatus(AuthBloc authBloc) {

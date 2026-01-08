@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
-import '../engine/data/handlers/websocket_session_handler.dart';
 import '../di/service_locator.dart' as di;
 import '../../features/voice/presentation/bloc/voice_bloc.dart';
 import '../../features/session/session.dart';
@@ -14,6 +13,7 @@ import '../../features/matchmaking/matchmaking.dart';
 import '../../features/social/social.dart';
 import '../../features/lobby/presentation/screens/join_room_screen.dart';
 import '../../features/admin/presentation/screens/admin_screen.dart';
+import '../../features/settings/presentation/screens/sound_test_screen.dart';
 
 class AppRouter {
   static const String splash = '/splash';
@@ -30,6 +30,7 @@ class AppRouter {
   static const String botSettings = '/bot_settings';
   static const String matchmaking = '/matchmaking';
   static const String admin = '/admin';
+  static const String soundTest = '/sound_test';
 
   static Map<String, WidgetBuilder> get routes => {
     splash: (context) => const SplashScreen(),
@@ -46,11 +47,11 @@ class AppRouter {
         BlocProvider(
           create: (_) => SessionBloc(handler: di.sl.gameSessionHandler),
         ),
-        if (di.sl.gameSessionHandler is WebSocketSessionHandler)
+        if (di.sl.voiceSessionHandler != null)
           BlocProvider(
             create: (_) => VoiceBloc(
               myUserId: di.sl.authRepository.currentUser?.uid ?? 'unknown',
-              handler: di.sl.voiceSessionHandler,
+              handler: di.sl.voiceSessionHandler!,
             ),
           ),
       ],
@@ -60,6 +61,7 @@ class AppRouter {
     botSettings: (context) => const BotSettingsScreen(),
     matchmaking: (context) => const MatchmakingScreen(),
     admin: (context) => const AdminScreen(),
+    soundTest: (context) => const SoundTestScreen(),
     '/leaderboard': (context) => const LeaderboardScreen(),
     '/friends': (context) => const FriendsScreen(),
   };

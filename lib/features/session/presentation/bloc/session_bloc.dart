@@ -3,6 +3,7 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import '../../../../core/engine/engine.dart';
 import 'session_event.dart';
 import 'session_state.dart';
+import '../../../../core/error/failure.dart';
 import '../../../../core/di/service_locator.dart' as di;
 
 class SessionBloc extends Bloc<SessionEvent, SessionBlocState> {
@@ -265,13 +266,15 @@ class SessionBloc extends Bloc<SessionEvent, SessionBlocState> {
     SessionErrorOccurred event,
     Emitter<SessionBlocState> emit,
   ) {
-    emit(state.copyWith(error: event.error));
+    emit(
+      state.copyWith(failure: SessionFailure(event.error.message, event.error)),
+    );
   }
 
   void _onErrorCleared(
     SessionErrorCleared event,
     Emitter<SessionBlocState> emit,
   ) {
-    emit(state.copyWith(clearError: true));
+    emit(state.copyWith(clearFailure: true));
   }
 }

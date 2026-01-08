@@ -16,6 +16,8 @@ class GoogleSignInRequested extends AuthEvent {}
 
 class SignOutRequested extends AuthEvent {}
 
+class DeleteAccountRequested extends AuthEvent {}
+
 class AuthStatsUpdated extends AuthEvent {
   final UserStats stats;
   const AuthStatsUpdated(this.stats);

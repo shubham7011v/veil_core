@@ -11,7 +11,7 @@ import '../../../../core/theme/bloc/theme_bloc.dart';
 import '../../../../core/theme/bloc/theme_state.dart';
 import '../../../../core/di/service_locator.dart' as di;
 import '../../../../core/config/app_config.dart';
-import '../../../profile/profile.dart';
+import '../../../profile/presentation/screens/profile_view_screen.dart';
 
 class FriendsScreen extends StatefulWidget {
   final VoidCallback? onBack;

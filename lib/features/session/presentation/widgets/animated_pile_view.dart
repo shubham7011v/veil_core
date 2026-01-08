@@ -79,9 +79,28 @@ class AnimatedPileView extends StatelessWidget {
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
                   if (isShuffling)
-                    const CircularProgressIndicator(
-                      color: Color(0xFFE5A043),
-                      strokeWidth: 2,
+                    Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        const SizedBox(
+                          width: 16,
+                          height: 16,
+                          child: CircularProgressIndicator(
+                            color: Color(0xFFE5A043),
+                            strokeWidth: 2,
+                          ),
+                        ),
+                        const SizedBox(height: 8),
+                        const Text(
+                          "SHUFFLING",
+                          style: TextStyle(
+                            color: Color(0xFFE5A043),
+                            fontSize: 8,
+                            fontWeight: FontWeight.bold,
+                            letterSpacing: 1.0,
+                          ),
+                        ),
+                      ],
                     )
                   else ...[
                     Text(

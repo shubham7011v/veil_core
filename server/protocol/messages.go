@@ -12,6 +12,7 @@ const (
 	MsgTypeStartGame   = "START_GAME"
 	MsgTypeUpdateName  = "UPDATE_NAME"
 	MsgTypeRefillCoins = "REFILL_COINS"
+	MsgTypeDeleteAccount = "DELETE_ACCOUNT"
 
 	// Private Room (Client -> Server)
 	MsgTypeCreatePrivateRoom = "CREATE_PRIVATE_ROOM"

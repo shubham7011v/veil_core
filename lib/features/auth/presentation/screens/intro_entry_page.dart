@@ -5,6 +5,8 @@ import '../bloc/auth_bloc.dart';
 import '../bloc/auth_event.dart';
 import '../bloc/auth_state.dart';
 import '../../../../core/di/service_locator.dart' as di;
+import '../../../../core/notifications/bloc/app_notification_bloc.dart';
+import '../../../../core/notifications/bloc/app_notification_event.dart';
 
 class IntroEntryPage extends StatefulWidget {
   const IntroEntryPage({super.key});
@@ -45,12 +47,8 @@ class _IntroEntryPageState extends State<IntroEntryPage>
           di.sl.onboardingRepository.markIntroAsSeen();
           Navigator.of(context).pushReplacementNamed('/court_entry');
         } else if (state is AuthFailure) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text(state.message),
-              backgroundColor: Colors.redAccent,
-              behavior: SnackBarBehavior.floating,
-            ),
+          context.read<AppNotificationBloc>().add(
+            ShowErrorNotification(state.failure.message),
           );
         }
       },

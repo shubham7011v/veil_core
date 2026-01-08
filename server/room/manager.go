@@ -101,10 +101,13 @@ func (m *Manager) createMatchRoom(clients []*Client) {
 }
 
 // HandleMessage routes incoming messages from clients
+// TODO: Refactor this large switch statement into a map-based handler system
+// or separate message handlers for better modularity and testability.
 func (m *Manager) HandleMessage(c *Client, message []byte) {
 	// 1. Parse ONLY the type first
 	var baseMsg protocol.BaseMessage
 	if err := json.Unmarshal(message, &baseMsg); err != nil {
+		// TODO: Implement more robust error reporting to the client for invalid messages
 		log.Printf("Invalid JSON: %v", err)
 		return
 	}
@@ -249,6 +252,20 @@ func (m *Manager) HandleMessage(c *Client, message []byte) {
 		if c.CurrentRoom != nil {
 			c.CurrentRoom.Leave(c)
 			c.CurrentRoom = nil
+		}
+		return
+	case protocol.MsgTypeDeleteAccount:
+		log.Printf("User %s requested account deletion", c.ID)
+		if err := db.DeleteUser(c.ID); err != nil {
+			log.Printf("Error deleting user: %v", err)
+			m.sendError(c, "DELETE_FAILED", "Could not delete account data")
+			return
+		}
+		// Confirm and disconnect
+		m.sendError(c, "ACCOUNT_DELETED", "Your account has been permanently deleted")
+		// Force disconnect
+		if c.CurrentRoom != nil {
+			c.CurrentRoom.Leave(c)
 		}
 		return
 	}

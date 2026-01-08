@@ -8,15 +8,15 @@ class ErrorMessages {
         case 'permission-denied':
           return 'Access denied. Please sign in again.';
         case 'unavailable':
-          return 'The connection to the server is weak. Check your internet.';
+          return 'The connection to the server is weak. Please check your internet.';
         case 'not-found':
-          return 'Could not find your session...';
+          return 'We could not locate your session. It may have ended.';
         default:
-          return 'A mysterious error has occurred. Please try again.';
+          return 'A mysterious error occurred. Our team is investigating.';
       }
     }
 
     final detail = kDebugMode ? ': $e' : '';
-    return 'The server is currently busy. Please try again later.$detail';
+    return 'The server is currently occupied. Please try again in a moment.$detail';
   }
 }

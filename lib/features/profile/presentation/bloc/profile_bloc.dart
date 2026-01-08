@@ -3,6 +3,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'profile_event.dart';
 import 'profile_state.dart';
 import '../../data/repositories/profile_repository.dart';
+import '../../../../core/error/failure.dart';
 
 class ProfileBloc extends Bloc<ProfileEvent, ProfileState> {
   final ProfileRepository _repository;
@@ -28,7 +29,7 @@ class ProfileBloc extends Bloc<ProfileEvent, ProfileState> {
 
       emit(ProfileLoaded(profile: profile, isOwnProfile: isOwnProfile));
     } catch (e) {
-      emit(ProfileError('Failed to load profile: $e'));
+      emit(ProfileError(ServerFailure('Failed to load profile: $e')));
     }
   }
 
@@ -42,7 +43,7 @@ class ProfileBloc extends Bloc<ProfileEvent, ProfileState> {
       // Reload profile to update friend status
       add(ProfileViewRequested(event.userId));
     } catch (e) {
-      emit(ProfileError('Failed to add friend: $e'));
+      emit(ProfileError(UnknownFailure('Failed to add friend: $e')));
     }
   }
 
@@ -56,7 +57,7 @@ class ProfileBloc extends Bloc<ProfileEvent, ProfileState> {
       // Reload profile to update friend status
       add(ProfileViewRequested(event.userId));
     } catch (e) {
-      emit(ProfileError('Failed to remove friend: $e'));
+      emit(ProfileError(UnknownFailure('Failed to remove friend: $e')));
     }
   }
 }

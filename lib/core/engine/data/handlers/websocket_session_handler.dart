@@ -13,6 +13,9 @@ import '../../../../features/auth/domain/models/user_stats.dart';
 import '../../../../features/social/domain/models/friend_record.dart';
 import '../../domain/models/room_event.dart';
 import '../../../../features/voice/data/voice_audio_manager.dart';
+import '../../../../core/di/service_locator.dart';
+import '../../../../core/constants/sound_assets.dart';
+import '../../../../core/services/audio/audio_service_interface.dart';
 
 enum ConnectionStatus {
   disconnected,
@@ -158,6 +161,7 @@ class WebSocketSessionHandler
       _setupMessageListener(firebaseToken, displayName: displayName);
       _reconnectAttempts = 0; // Reset on success
     } catch (e) {
+      // TODO: Implement exponential backoff for reconnection attempts in _handleConnectionFailure
       debugPrint('Connection attempt failed: $e');
       _handleConnectionFailure(firebaseToken, displayName: displayName);
     }
@@ -191,9 +195,10 @@ class WebSocketSessionHandler
   void _handleConnectionFailure(String firebaseToken, {String? displayName}) {
     if (_reconnectAttempts < _maxReconnectAttempts) {
       _reconnectAttempts++;
-      final delay =
-          _baseReconnectDelay *
-          (1 << (_reconnectAttempts - 1)); // Exponential backoff
+      final baseDelay = _baseReconnectDelay * (1 << (_reconnectAttempts - 1));
+      // Add random jitter (0-500ms) to prevent Thundering Herd
+      final jitter = Duration(milliseconds: DateTime.now().millisecond % 500);
+      final delay = baseDelay + jitter;
 
       debugPrint(
         'Reconnecting in ${delay.inSeconds}s (attempt $_reconnectAttempts/$_maxReconnectAttempts)',
@@ -225,120 +230,142 @@ class WebSocketSessionHandler
   }
 
   void _handleMessage(dynamic data) {
-    final msg = jsonDecode(data as String) as Map<String, dynamic>;
-    final type = msg['type'] as String;
+    try {
+      final msg = jsonDecode(data as String) as Map<String, dynamic>;
+      final type = msg['type'] as String;
 
-    switch (type) {
-      case 'AUTH_OK':
-        debugPrint('Auth successful: ${msg['data']}');
-        _updateConnectionStatus(ConnectionStatus.connected);
+      switch (type) {
+        case 'AUTH_OK':
+          debugPrint('Auth successful: ${msg['data']}');
+          _updateConnectionStatus(ConnectionStatus.connected);
 
-        // Parse stats from AUTH_OK response
-        final authData = msg['data'] as Map<String, dynamic>;
-        if (authData.containsKey('stats')) {
+          // Parse stats from AUTH_OK response
+          final authData = msg['data'] as Map<String, dynamic>;
+          if (authData.containsKey('stats')) {
+            try {
+              final stats = UserStats.fromJson(
+                authData['stats'] as Map<String, dynamic>,
+              );
+              _statsController.add(stats);
+              debugPrint(
+                'User stats loaded: ${stats.wins} wins, ${stats.rank} rank',
+              );
+            } catch (e) {
+              debugPrint('Failed to parse stats: $e');
+            }
+          }
+
+          // Send JOIN_ROOM after auth
+          _send({'type': 'JOIN_ROOM'});
+
+          // Start Lobby Music
+          try {
+            sl.audioService.playBgm(SoundAssets.lobbyAmbience);
+          } catch (e) {
+            debugPrint('Failed to start lobby ambience: $e');
+          }
+          break;
+
+        case 'STATS_UPDATE':
+          // Handle real-time stats updates (e.g., after game end)
           try {
             final stats = UserStats.fromJson(
-              authData['stats'] as Map<String, dynamic>,
+              msg['data'] as Map<String, dynamic>,
             );
             _statsController.add(stats);
-            debugPrint(
-              'User stats loaded: ${stats.wins} wins, ${stats.rank} rank',
-            );
+            debugPrint('Stats updated: ${stats.wins} wins, ${stats.rank} rank');
           } catch (e) {
-            debugPrint('Failed to parse stats: $e');
+            debugPrint('Failed to parse stats update: $e');
           }
-        }
+          break;
 
-        // Send JOIN_ROOM after auth
-        _send({'type': 'JOIN_ROOM'});
-        break;
+        case 'AUTH_FAIL':
+          // TODO: Implement better handling for AUTH_FAIL (e.g., notify user via event stream)
+          debugPrint('Auth failed: ${msg['data']}');
+          break;
 
-      case 'STATS_UPDATE':
-        // Handle real-time stats updates (e.g., after game end)
-        try {
-          final stats = UserStats.fromJson(msg['data'] as Map<String, dynamic>);
-          _statsController.add(stats);
-          debugPrint('Stats updated: ${stats.wins} wins, ${stats.rank} rank');
-        } catch (e) {
-          debugPrint('Failed to parse stats update: $e');
-        }
-        break;
+        case 'GAME_STATE':
+          _handleGameState(msg['data'] as Map<String, dynamic>);
+          break;
 
-      case 'AUTH_FAIL':
-        debugPrint('Auth failed: ${msg['data']}');
-        break;
+        case 'ERROR':
+          final errorData = msg['data'] as Map<String, dynamic>;
+          // TODO: Propagate server errors to the UI via an error stream or notification bloc
+          debugPrint('Server Error: ${errorData['message']}');
+          break;
 
-      case 'GAME_STATE':
-        _handleGameState(msg['data'] as Map<String, dynamic>);
-        break;
+        case 'LEADERBOARD_DATA':
+          try {
+            final data = msg['data'] as List<dynamic>;
+            final leaderboard = data
+                .map((u) => UserStats.fromJson(u as Map<String, dynamic>))
+                .toList();
+            _leaderboardController.add(leaderboard);
+          } catch (e) {
+            debugPrint('Failed to parse leaderboard: $e');
+          }
+          break;
 
-      case 'ERROR':
-        final errorData = msg['data'] as Map<String, dynamic>;
-        debugPrint('Server Error: ${errorData['message']}');
-        break;
+        case 'FRIEND_LIST':
+          try {
+            final data = msg['data'] as List<dynamic>;
+            final friends = data
+                .map((f) => FriendRecord.fromJson(f as Map<String, dynamic>))
+                .toList();
+            _friendsController.add(friends);
+          } catch (e) {
+            debugPrint('Failed to parse friend list: $e');
+          }
+          break;
 
-      case 'LEADERBOARD_DATA':
-        try {
-          final data = msg['data'] as List<dynamic>;
-          final leaderboard = data
-              .map((u) => UserStats.fromJson(u as Map<String, dynamic>))
-              .toList();
-          _leaderboardController.add(leaderboard);
-        } catch (e) {
-          debugPrint('Failed to parse leaderboard: $e');
-        }
-        break;
+        case 'ROOM_CREATED':
+          try {
+            final evt = RoomCreated.fromJson(
+              msg['data'] as Map<String, dynamic>,
+            );
+            _roomEventController.add(evt);
+          } catch (e) {
+            debugPrint('Failed to parse ROOM_CREATED: $e');
+          }
+          break;
 
-      case 'FRIEND_LIST':
-        try {
-          final data = msg['data'] as List<dynamic>;
-          final friends = data
-              .map((f) => FriendRecord.fromJson(f as Map<String, dynamic>))
-              .toList();
-          _friendsController.add(friends);
-        } catch (e) {
-          debugPrint('Failed to parse friend list: $e');
-        }
-        break;
+        case 'ROOM_JOINED':
+          try {
+            final evt = RoomJoined.fromJson(
+              msg['data'] as Map<String, dynamic>,
+            );
+            _roomEventController.add(evt);
+          } catch (e) {
+            debugPrint('Failed to parse ROOM_JOINED: $e');
+          }
+          break;
 
-      case 'ROOM_CREATED':
-        try {
-          final evt = RoomCreated.fromJson(msg['data'] as Map<String, dynamic>);
-          _roomEventController.add(evt);
-        } catch (e) {
-          debugPrint('Failed to parse ROOM_CREATED: $e');
-        }
-        break;
+        case 'ROOM_UPDATE':
+          try {
+            final evt = RoomUpdated.fromJson(
+              msg['data'] as Map<String, dynamic>,
+            );
+            _roomEventController.add(evt);
+          } catch (e) {
+            debugPrint('Failed to parse ROOM_UPDATE: $e');
+          }
+          break;
 
-      case 'ROOM_JOINED':
-        try {
-          final evt = RoomJoined.fromJson(msg['data'] as Map<String, dynamic>);
-          _roomEventController.add(evt);
-        } catch (e) {
-          debugPrint('Failed to parse ROOM_JOINED: $e');
-        }
-        break;
+        case 'VOICE_SDP':
+          if (_voiceManager != null) {
+            _voiceManager!.handleAnswer(msg['data'] as Map<String, dynamic>);
+          }
+          break;
 
-      case 'ROOM_UPDATE':
-        try {
-          final evt = RoomUpdated.fromJson(msg['data'] as Map<String, dynamic>);
-          _roomEventController.add(evt);
-        } catch (e) {
-          debugPrint('Failed to parse ROOM_UPDATE: $e');
-        }
-        break;
-
-      case 'VOICE_SDP':
-        if (_voiceManager != null) {
-          _voiceManager!.handleAnswer(msg['data'] as Map<String, dynamic>);
-        }
-        break;
-
-      case 'VOICE_ICE':
-        if (_voiceManager != null) {
-          _voiceManager!.handleCandidate(msg['data'] as Map<String, dynamic>);
-        }
-        break;
+        case 'VOICE_ICE':
+          if (_voiceManager != null) {
+            _voiceManager!.handleCandidate(msg['data'] as Map<String, dynamic>);
+          }
+          break;
+      }
+    } catch (e, stack) {
+      debugPrint('Error handling WebSocket message: $e');
+      debugPrint('Stack trace: $stack');
     }
   }
 
@@ -349,6 +376,35 @@ class WebSocketSessionHandler
       (p) => p.name == phaseStr,
       orElse: () => SessionPhase.lobby,
     );
+
+    // Audio Triggers based on State Changes
+    final previousPhase = _currentState.currentPhase;
+    // Detect Turn Start
+    if (previousPhase != SessionPhase.thinking &&
+        phase == SessionPhase.thinking) {
+      final activeId = stateData['activePlayerId'] as String?;
+      final myId = sl.authRepository.currentUser?.uid;
+      if (activeId == myId) {
+        sl.audioService.playSfx(SoundAssets.turnAlert);
+        sl.audioService.triggerHaptic(HapticType.heavy);
+      }
+    }
+    // Detect Challenge
+    if (previousPhase != SessionPhase.challenging &&
+        phase == SessionPhase.challenging) {
+      sl.audioService.playSfx(SoundAssets.challenge);
+      sl.audioService.triggerHaptic(HapticType.error); // Alert vibration
+    }
+
+    // BGM Lifecycle
+    // Stop BGM when entering active gameplay
+    if (previousPhase == SessionPhase.lobby && phase != SessionPhase.lobby) {
+      sl.audioService.stopBgm();
+    }
+    // Resume BGM when returning to lobby
+    if (previousPhase != SessionPhase.lobby && phase == SessionPhase.lobby) {
+      sl.audioService.playBgm(SoundAssets.lobbyAmbience);
+    }
 
     // Parse participants
     final participantsList = stateData['participants'] as List<dynamic>? ?? [];
@@ -431,16 +487,22 @@ class WebSocketSessionHandler
       'type': 'PLAY_CARDS',
       'data': {'cardIds': unitIds, 'declaredRank': declaredRank.name},
     });
+    sl.audioService.playSfx(SoundAssets.cardSlide);
+    sl.audioService.triggerHaptic(HapticType.light);
   }
 
   @override
   void passTurn() {
     _send({'type': 'PASS'});
+    sl.audioService.playSfx(SoundAssets.buttonTap);
+    sl.audioService.triggerHaptic(HapticType.medium);
   }
 
   @override
   void raiseChallenge() {
     _send({'type': 'CHALLENGE'});
+    sl.audioService.playSfx(SoundAssets.buttonTap);
+    sl.audioService.triggerHaptic(HapticType.heavy);
   }
 
   @override
@@ -543,6 +605,10 @@ class WebSocketSessionHandler
       'type': 'LEAVE_ROOM',
       'data': {'roomCode': roomCode},
     });
+  }
+
+  void deleteAccount() {
+    _send({'type': 'DELETE_ACCOUNT'});
   }
 
   @override

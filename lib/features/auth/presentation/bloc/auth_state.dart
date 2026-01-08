@@ -1,6 +1,7 @@
 import 'package:equatable/equatable.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import '../../domain/models/user_stats.dart';
+import '../../../../core/error/failure.dart';
 
 abstract class AuthState extends Equatable {
   const AuthState();
@@ -30,9 +31,9 @@ class Authenticated extends AuthState {
 class Unauthenticated extends AuthState {}
 
 class AuthFailure extends AuthState {
-  final String message;
-  const AuthFailure(this.message);
+  final Failure failure;
+  const AuthFailure(this.failure);
 
   @override
-  List<Object?> get props => [message];
+  List<Object?> get props => [failure];
 }

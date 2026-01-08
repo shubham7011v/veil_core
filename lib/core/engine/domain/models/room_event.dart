@@ -86,6 +86,7 @@ class RoomUpdated extends RoomEvent {
         id: pMap['id'] as String,
         name: pMap['name'] as String,
         unitCount: pMap['cardCount'] as int? ?? 0,
+        // TODO: Dynamically determine isMe by comparing with current user ID from AuthBloc
         isMe: false,
         isActive: pMap['isActive'] as bool? ?? false,
       );

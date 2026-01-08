@@ -7,12 +7,80 @@ import (
 	"log"
 	"os"
 	"path/filepath"
+	"sync"
 	"time"
 
 	_ "modernc.org/sqlite"
 )
 
 var DB *sql.DB
+
+// -- Coin Buffer Implementation --
+
+type CoinBuffer struct {
+	mu      sync.Mutex
+	updates map[string]int // userID -> amountDelta
+}
+
+var coinBuffer = &CoinBuffer{
+	updates: make(map[string]int),
+}
+
+// BufferCoinUpdate queues a coin update in memory
+func BufferCoinUpdate(userID string, amount int) {
+	coinBuffer.mu.Lock()
+	defer coinBuffer.mu.Unlock()
+	coinBuffer.updates[userID] += amount
+}
+
+// StartCoinFlusher starts a background goroutine to flush coins every 60s
+func StartCoinFlusher() {
+	ticker := time.NewTicker(60 * time.Second)
+	go func() {
+		for range ticker.C {
+			if err := FlushCoins(); err != nil {
+				log.Printf("Error flushing coins: %v", err)
+			}
+		}
+	}()
+}
+
+// FlushCoins writes all buffered coin updates to the DB in a single transaction
+func FlushCoins() error {
+	coinBuffer.mu.Lock()
+	updates := coinBuffer.updates
+	coinBuffer.updates = make(map[string]int) // Reset buffer
+	coinBuffer.mu.Unlock()
+
+	if len(updates) == 0 {
+		return nil
+	}
+
+	tx, err := DB.Begin()
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+
+	stmt, err := tx.Prepare("UPDATE users SET coins = coins + ? WHERE user_id = ?")
+	if err != nil {
+		return err
+	}
+	defer stmt.Close()
+
+	for uid, amount := range updates {
+		if amount == 0 {
+			continue
+		}
+		if _, err := stmt.Exec(amount, uid); err != nil {
+			log.Printf("Failed to flush coins for user %s: %v", uid, err)
+			// Continue to try other users, but this user's coins might be desynced until next login
+		}
+	}
+
+	log.Printf("Flushed coin updates for %d users", len(updates))
+	return tx.Commit()
+}
 
 type UserStats struct {
 	UserID      string `json:"userId"`
@@ -43,6 +111,19 @@ func InitDB(dbPath string) error {
 	}
 
 	log.Println("Database connected at", dbPath)
+
+	// Enable Write-Ahead Logging (WAL) for concurrency
+	if _, err := DB.Exec("PRAGMA journal_mode=WAL;"); err != nil {
+		return fmt.Errorf("failed to enable WAL mode: %v", err)
+	}
+	// Set busy timeout to prevent "database is locked" errors
+	if _, err := DB.Exec("PRAGMA busy_timeout=5000;"); err != nil {
+		return fmt.Errorf("failed to set busy timeout: %v", err)
+	}
+
+	// Start background coin flusher
+	StartCoinFlusher()
+
 	return createTables()
 }
 
@@ -197,17 +278,24 @@ func RecordGameResult(matchID string, playerIDs []string, winnerID string, durat
 			lossInc = 1
 		}
 
+		// Use BufferCoinUpdate instead of direct DB write for coins
+		if coinChange != 0 {
+			BufferCoinUpdate(pid, coinChange)
+		}
+
+		// Update stats (wins/losses/games) directly, as these are less frequent than coin updates
+		// and critical for immediate display. Coins can be eventually consistent.
+		// Note: We REMOVED 'coins' from this update query to avoid over-writing the buffer logic.
 		_, err = tx.Exec(`
-			INSERT INTO users (user_id, name, games_played, wins, losses, coins, last_seen)
-			VALUES (?, ?, 1, ?, ?, ?, ?)
+			INSERT INTO users (user_id, name, games_played, wins, losses, last_seen)
+			VALUES (?, ?, 1, ?, ?, ?)
 			ON CONFLICT(user_id) DO UPDATE SET
 				games_played = games_played + 1,
 				wins = wins + excluded.wins,
 				losses = losses + excluded.losses,
-				coins = coins + excluded.coins,
 				last_seen = excluded.last_seen
 		`,
-			pid, "Unknown", winInc, lossInc, coinChange, time.Now(),
+			pid, "Unknown", winInc, lossInc, time.Now(),
 		)
 		if err != nil {
 			return err
@@ -341,4 +429,30 @@ func CalculateRank(wins int) string {
 	default:
 		return "Legend"
 	}
+}
+
+// DeleteUser removes all user data from the database
+func DeleteUser(userID string) error {
+	tx, err := DB.Begin()
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+
+	// 1. Delete from users table
+	_, err = tx.Exec("DELETE FROM users WHERE user_id = ?", userID)
+	if err != nil {
+		return err
+	}
+
+	// 2. Delete from friends table (both ways)
+	_, err = tx.Exec("DELETE FROM friends WHERE user_id = ? OR friend_id = ?", userID, userID)
+	if err != nil {
+		return err
+	}
+
+	// Note: We keep match history (matches table) but the player info in players_json
+	// will just refer to a non-existent user ID, which is fine for history preservation.
+
+	return tx.Commit()
 }

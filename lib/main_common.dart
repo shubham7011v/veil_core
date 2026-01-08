@@ -12,6 +12,9 @@ import 'features/profile/profile.dart';
 import 'core/di/service_locator.dart' as di;
 import 'core/navigation/app_router.dart';
 import 'core/config/remote_config_service.dart';
+import 'core/error/global_error_handler.dart';
+import 'core/notifications/widgets/app_notification_listener.dart';
+import 'shared/components/error_boundary.dart';
 
 import 'package:flutter_native_splash/flutter_native_splash.dart';
 
@@ -34,17 +37,27 @@ Future<void> mainCommon(AppConfig config) async {
   await RemoteConfigService.instance.initialize();
 
   // Activate App Check
-  await FirebaseAppCheck.instance.activate(
-    providerAndroid: config.environment == Environment.dev
-        ? const AndroidDebugProvider()
-        : const AndroidPlayIntegrityProvider(),
-    providerApple: const AppleDeviceCheckProvider(),
-  );
+  try {
+    await FirebaseAppCheck.instance.activate(
+      providerAndroid: config.environment == Environment.dev
+          ? const AndroidDebugProvider()
+          : const AndroidPlayIntegrityProvider(),
+      providerApple: const AppleDeviceCheckProvider(),
+    );
+    debugPrint('Firebase App Check activated');
+  } catch (e) {
+    debugPrint('Firebase App Check activation failed: $e');
+  }
 
   // Initialize Service Locator
   await di.sl.setup();
 
-  runApp(VeilApp(config: config));
+  // Note: BGM will be started after successful authentication in HomeScreen
+  // to avoid crashes during initialization
+
+  GlobalErrorHandler.run(() {
+    runApp(VeilApp(config: config));
+  });
 }
 
 class VeilApp extends StatelessWidget {
@@ -55,12 +68,14 @@ class VeilApp extends StatelessWidget {
   Widget build(BuildContext context) {
     return MultiBlocProvider(
       providers: [
+        BlocProvider(create: (_) => di.sl.notificationBloc),
         BlocProvider(create: (_) => ThemeBloc()..add(ThemeLoadRequested())),
         BlocProvider(
           create: (context) {
             final authBloc = AuthBloc(
               authRepository: di.sl.authRepository,
               userRepository: di.sl.userRepository,
+              sessionRepository: di.sl.sessionRepository,
             )..add(AuthCheckRequested());
             di.sl.initializeSystemStatus(authBloc);
             return authBloc;
@@ -78,6 +93,11 @@ class VeilApp extends StatelessWidget {
             debugShowCheckedModeBanner: config.isDev,
             theme: AppTheme.getTheme(themeState.mode),
             initialRoute: AppRouter.splash,
+            builder: (context, child) {
+              return AppNotificationListener(
+                child: ErrorBoundary(child: child!),
+              );
+            },
             routes: {
               ...AppRouter.routes,
               // LobbyScreen is now self-sufficient via Bloc
