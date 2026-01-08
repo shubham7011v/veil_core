@@ -29,6 +29,7 @@ const (
 	MsgTypeTurnPassed      = "TURN_PASSED"
 	MsgTypeChallengeResult = "CHALLENGE_RESULT"
 	MsgTypeGameOver        = "GAME_OVER"
+	MsgTypeSystemAlert     = "SYSTEM_ALERT"
 	MsgTypeError           = "ERROR"
 
 	// Private Room (Server -> Client)

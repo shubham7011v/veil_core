@@ -35,6 +35,7 @@ class RemoteConfigService {
             true, // Enabling by default since we implemented it
         'enable_private_rooms': true,
         'enable_friends_match': false, // Not implemented yet
+        'enable_friends_match_offline': false, // NEW
         'admin_uids': '', // Comma-separated UIDs
         'admin_api_key_runtime': 'VEIL_MASTER_KEY_2026', // Dynamic Key
       });

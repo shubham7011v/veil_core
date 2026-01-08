@@ -60,6 +60,11 @@ class _AdminViewState extends State<_AdminView> {
         foregroundColor: Colors.greenAccent,
         actions: [
           IconButton(
+            icon: const Icon(Icons.campaign, color: Colors.orangeAccent),
+            tooltip: 'Broadcast Message',
+            onPressed: () => _showBroadcastDialog(context),
+          ),
+          IconButton(
             icon: const Icon(Icons.refresh),
             onPressed: () {
               context.read<AdminBloc>().add(LoadAdminData());
@@ -145,6 +150,53 @@ class _AdminViewState extends State<_AdminView> {
     );
   }
 
+  void _showBroadcastDialog(BuildContext context) {
+    final controller = TextEditingController();
+    showDialog(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        backgroundColor: Colors.grey[900],
+        title: const Text(
+          'BROADCAST ALERT',
+          style: TextStyle(color: Colors.orangeAccent),
+        ),
+        content: TextField(
+          controller: controller,
+          maxLines: 3,
+          style: const TextStyle(color: Colors.white),
+          decoration: const InputDecoration(
+            hintText: 'Enter message to all users...',
+            hintStyle: TextStyle(color: Colors.grey),
+            enabledBorder: UnderlineInputBorder(
+              borderSide: BorderSide(color: Colors.greenAccent),
+            ),
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext),
+            child: const Text('CANCEL', style: TextStyle(color: Colors.grey)),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.orange),
+            onPressed: () {
+              if (controller.text.isNotEmpty) {
+                context.read<AdminBloc>().add(
+                  BroadcastMessageEvent(controller.text),
+                );
+                Navigator.pop(dialogContext);
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text('Broadcasting signal...')),
+                );
+              }
+            },
+            child: const Text('TRANSMIT'),
+          ),
+        ],
+      ),
+    );
+  }
+
   Widget _buildDashboard(BuildContext context, AdminAuthenticated state) {
     return ListView(
       padding: const EdgeInsets.all(16),
@@ -170,7 +222,9 @@ class _AdminViewState extends State<_AdminView> {
         ...state.rooms.map(
           (room) => Card(
             color: Colors.grey[900],
-            child: ListTile(
+            child: ExpansionTile(
+              iconColor: Colors.greenAccent,
+              collapsedIconColor: Colors.grey,
               title: Text(
                 "Room: ${room['id']}",
                 style: const TextStyle(color: Colors.white),
@@ -181,10 +235,37 @@ class _AdminViewState extends State<_AdminView> {
               ),
               trailing: IconButton(
                 icon: const Icon(Icons.delete_forever, color: Colors.red),
+                tooltip: 'Close Room',
                 onPressed: () {
                   context.read<AdminBloc>().add(CloseRoomEvent(room['id']));
                 },
               ),
+              children: [
+                if (room['playerIds'] != null)
+                  ...(room['playerIds'] as List).map(
+                    (pid) => ListTile(
+                      dense: true,
+                      title: Text(
+                        pid.toString(),
+                        style: const TextStyle(
+                          color: Colors.white70,
+                          fontSize: 12,
+                        ),
+                      ),
+                      trailing: TextButton(
+                        onPressed: () {
+                          context.read<AdminBloc>().add(
+                            BanUserEvent(pid.toString()),
+                          );
+                        },
+                        child: const Text(
+                          'BAN',
+                          style: TextStyle(color: Colors.red, fontSize: 10),
+                        ),
+                      ),
+                    ),
+                  ),
+              ],
             ),
           ),
         ),

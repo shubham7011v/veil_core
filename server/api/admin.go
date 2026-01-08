@@ -2,10 +2,12 @@ package api
 
 import (
 	"encoding/json"
+	"log"
 	"net/http"
 	"os"
 	"runtime"
 	"time"
+	"veil_server/db"
 	"veil_server/room"
 )
 
@@ -61,6 +63,56 @@ func (h *AdminHandler) ListRooms(w http.ResponseWriter, r *http.Request) {
 	rooms := h.Manager.GetActiveRooms()
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(rooms)
+}
+
+// Broadcast sends a system message to all connected clients
+func (h *AdminHandler) Broadcast(w http.ResponseWriter, r *http.Request) {
+	if r.Method != "POST" {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	var payload struct {
+		Message string `json:"message"`
+	}
+
+	if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
+		http.Error(w, "Invalid body", http.StatusBadRequest)
+		return
+	}
+
+	h.Manager.BroadcastSystemMessage(payload.Message)
+	w.WriteHeader(http.StatusOK)
+	w.Write([]byte(`{"status":"ok"}`))
+}
+
+// BanUser bans a user and kicks them if they are connected
+func (h *AdminHandler) BanUser(w http.ResponseWriter, r *http.Request) {
+	if r.Method != "POST" {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	var payload struct {
+		UserID string `json:"userId"`
+	}
+
+	if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
+		http.Error(w, "Invalid body", http.StatusBadRequest)
+		return
+	}
+
+	// 1. Mark as banned in DB
+	if err := db.BanUser(payload.UserID); err != nil {
+		log.Printf("Error banning user in DB: %v", err)
+	}
+	log.Printf("Banning user: %s", payload.UserID)
+
+	// 2. Kick from manager
+	h.Manager.KickUser(payload.UserID, "You have been banned by an administrator.")
+
+	w.WriteHeader(http.StatusOK)
+	w.Write([]byte(`{"status":"ok"}`))
 }
 
 // CloseRoom forcefully closes a room

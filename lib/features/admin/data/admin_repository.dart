@@ -63,4 +63,32 @@ class AdminRepository {
       throw Exception('Failed to close room: ${response.statusCode}');
     }
   }
+
+  Future<void> broadcastMessage(String message) async {
+    if (!isAuthenticated) throw Exception('Not Authenticated');
+
+    final response = await http.post(
+      Uri.parse('$_baseUrl/admin/broadcast'),
+      headers: {'X-Admin-Key': _adminKey!, 'Content-Type': 'application/json'},
+      body: json.encode({'message': message}),
+    );
+
+    if (response.statusCode != 200) {
+      throw Exception('Failed to broadcast: ${response.statusCode}');
+    }
+  }
+
+  Future<void> banUser(String userId) async {
+    if (!isAuthenticated) throw Exception('Not Authenticated');
+
+    final response = await http.post(
+      Uri.parse('$_baseUrl/admin/users/ban'),
+      headers: {'X-Admin-Key': _adminKey!, 'Content-Type': 'application/json'},
+      body: json.encode({'userId': userId}),
+    );
+
+    if (response.statusCode != 200) {
+      throw Exception('Failed to ban user: ${response.statusCode}');
+    }
+  }
 }

@@ -14,6 +14,7 @@ import '../../features/auth/auth.dart';
 import '../../features/profile/profile.dart';
 import '../../features/challenges/data/challenges_repository.dart';
 import '../../features/admin/data/admin_repository.dart';
+import '../../features/offline/offline.dart';
 
 class ServiceLocator {
   static final ServiceLocator _instance = ServiceLocator._internal();
@@ -35,6 +36,11 @@ class ServiceLocator {
   late final SystemStatusService systemStatusService;
   late final AudioService audioService;
   late final AppNotificationBloc notificationBloc;
+
+  // Offline Services
+  late final LocalGameEngine localGameEngine;
+  late final LocalServerService localServerService;
+  late final DiscoveryService discoveryService;
 
   // Explicitly expose WebSocket handler for specialized calls (like updateNickname)
   late final WebSocketSessionHandler _webSocketHandler;
@@ -79,6 +85,11 @@ class ServiceLocator {
     } else {
       voiceSessionHandler = null; // Voice disabled
     }
+
+    // Initialize Offline Services
+    localGameEngine = LocalGameEngine();
+    localServerService = LocalServerService(localGameEngine);
+    discoveryService = DiscoveryService();
   }
 
   void initializeSystemStatus(AuthBloc authBloc) {

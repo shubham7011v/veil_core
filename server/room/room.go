@@ -148,6 +148,17 @@ func (r *Room) GetClientCount() int {
 	return len(r.clients)
 }
 
+func (r *Room) GetPlayerIDs() []string {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+
+	var ids []string
+	for client := range r.clients {
+		ids = append(ids, client.ID)
+	}
+	return ids
+}
+
 func (r *Room) Run() {
 	ticker := time.NewTicker(200 * time.Millisecond)
 	defer func() {

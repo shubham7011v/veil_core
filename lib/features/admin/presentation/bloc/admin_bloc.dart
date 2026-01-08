@@ -20,6 +20,16 @@ class CloseRoomEvent extends AdminEvent {
   CloseRoomEvent(this.roomId);
 }
 
+class BroadcastMessageEvent extends AdminEvent {
+  final String message;
+  BroadcastMessageEvent(this.message);
+}
+
+class BanUserEvent extends AdminEvent {
+  final String userId;
+  BanUserEvent(this.userId);
+}
+
 class AdminLogout extends AdminEvent {}
 
 // --- States ---
@@ -58,6 +68,8 @@ class AdminBloc extends Bloc<AdminEvent, AdminState> {
     on<AdminLogin>(_onLogin);
     on<LoadAdminData>(_onLoadData);
     on<CloseRoomEvent>(_onCloseRoom);
+    on<BroadcastMessageEvent>(_onBroadcast);
+    on<BanUserEvent>(_onBanUser);
     on<AdminLogout>((_, emit) {
       repository.setKey(''); // Clear key
       emit(AdminInitial());
@@ -100,8 +112,30 @@ class AdminBloc extends Bloc<AdminEvent, AdminState> {
       await repository.closeRoom(event.roomId);
       add(LoadAdminData()); // Refresh list
     } catch (e) {
-      // Ideally show a snackbar via listener, but for now we just error state
       emit(AdminError("Failed to close room: $e"));
+    }
+  }
+
+  Future<void> _onBroadcast(
+    BroadcastMessageEvent event,
+    Emitter<AdminState> emit,
+  ) async {
+    try {
+      await repository.broadcastMessage(event.message);
+      // No state change needed, maybe a success notification later
+    } catch (e) {
+      emit(AdminError("Broadcast failed: $e"));
+    }
+  }
+
+  Future<void> _onBanUser(BanUserEvent event, Emitter<AdminState> emit) async {
+    try {
+      await repository.banUser(event.userId);
+      add(
+        LoadAdminData(),
+      ); // Refresh list to see if they are gone/status changes
+    } catch (e) {
+      emit(AdminError("Ban failed: $e"));
     }
   }
 }

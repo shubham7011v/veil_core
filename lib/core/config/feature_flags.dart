@@ -20,8 +20,12 @@ class FeatureFlags {
   /// Private Rooms
   static bool get enablePrivateRooms => _rc.getBool('enable_private_rooms');
 
-  /// Friends Match (Offline)
+  /// Friends Match (Online via Server)
   static bool get enableFriendsMatch => _rc.getBool('enable_friends_match');
+
+  /// Friends Match (Offline/Local/Hotspot)
+  static bool get enableFriendsMatchOffline =>
+      _rc.getBool('enable_friends_match_offline');
 
   /// Bot Players
   static const bool enableBotPlayers = true;

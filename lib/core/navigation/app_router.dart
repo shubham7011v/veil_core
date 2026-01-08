@@ -15,6 +15,7 @@ import '../../features/lobby/presentation/screens/join_room_screen.dart';
 import '../../features/admin/presentation/screens/admin_screen.dart';
 import '../../features/settings/presentation/screens/sound_test_screen.dart';
 import '../../features/challenges/presentation/challenges_screen.dart';
+import '../../features/offline/presentation/screens/offline_lobby_screen.dart';
 
 class AppRouter {
   static const String splash = '/splash';
@@ -33,6 +34,7 @@ class AppRouter {
   static const String admin = '/admin';
   static const String soundTest = '/sound_test';
   static const String challenges = '/challenges';
+  static const String offlineLobby = '/offline_lobby';
 
   static Map<String, WidgetBuilder> get routes => {
     splash: (context) => const SplashScreen(),
@@ -44,21 +46,29 @@ class AppRouter {
     rules: (context) => const RulesScreen(),
     deck: (context) => const DeckCollectionScreen(),
     lobby: (context) => const LobbyScreen(),
-    session: (context) => MultiBlocProvider(
-      providers: [
-        BlocProvider(
-          create: (_) => SessionBloc(handler: di.sl.gameSessionHandler),
-        ),
-        if (di.sl.voiceSessionHandler != null)
-          BlocProvider(
-            create: (_) => VoiceBloc(
-              myUserId: di.sl.authRepository.currentUser?.uid ?? 'unknown',
-              handler: di.sl.voiceSessionHandler!,
+    session: (context) {
+      final args =
+          ModalRoute.of(context)?.settings.arguments as Map<String, dynamic>?;
+      final useWebSocket = args?['useWebSocket'] ?? false;
+      final handler = useWebSocket
+          ? di.sl.webSocketSessionHandler
+          : di.sl.gameSessionHandler;
+
+      return MultiBlocProvider(
+        providers: [
+          BlocProvider(create: (_) => SessionBloc(handler: handler)),
+          if (di.sl.voiceSessionHandler != null)
+            BlocProvider(
+              create: (_) => VoiceBloc(
+                myUserId: di.sl.authRepository.currentUser?.uid ?? 'unknown',
+                handler: di.sl.voiceSessionHandler!,
+              ),
             ),
-          ),
-      ],
-      child: const SessionScreen(),
-    ),
+        ],
+        child: const SessionScreen(),
+      );
+    },
+    offlineLobby: (context) => const OfflineLobbyScreen(),
     joinRoom: (context) => const JoinRoomScreen(),
     botSettings: (context) => const BotSettingsScreen(),
     matchmaking: (context) => const MatchmakingScreen(),

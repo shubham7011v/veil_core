@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:google_fonts/google_fonts.dart';
+import '../../../../core/config/feature_flags.dart';
 import '../../../../core/theme/colors.dart';
+import '../../../../core/navigation/app_router.dart';
 import '../../../../core/theme/bloc/theme_bloc.dart';
 import '../../../../core/theme/bloc/theme_state.dart';
 import '../../../../core/notifications/widgets/app_notification_listener.dart';
@@ -13,7 +15,6 @@ import '../../../collection/collection.dart';
 import '../../../settings/settings.dart';
 import '../widgets/home_top_bar.dart';
 import '../widgets/coming_soon_modal.dart';
-import '../../../../core/config/feature_flags.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -154,15 +155,26 @@ class _HomeScreenState extends State<HomeScreen> {
                       const SizedBox(height: 48),
                       Row(
                         children: [
-                          if (FeatureFlags.enableFriendsMatch)
+                          if (FeatureFlags.enableFriendsMatch ||
+                              FeatureFlags.enableFriendsMatchOffline)
                             Expanded(
                               child: _buildMatchCard(
                                 context,
-                                'FRIENDS\nMATCH',
-                                Icons.people_outline,
+                                FeatureFlags.enableFriendsMatchOffline
+                                    ? 'FRIENDS\nMATCH (OFFLINE)'
+                                    : 'FRIENDS\nMATCH',
+                                FeatureFlags.enableFriendsMatchOffline
+                                    ? Icons.wifi_tethering
+                                    : Icons.people_outline,
                                 () {
-                                  // TODO: Implement Friends Match (Offline Hotspot Mode) logic
-                                  _showComingSoonModal(context, palette);
+                                  if (FeatureFlags.enableFriendsMatchOffline) {
+                                    Navigator.pushNamed(
+                                      context,
+                                      AppRouter.offlineLobby,
+                                    );
+                                  } else {
+                                    _showComingSoonModal(context, palette);
+                                  }
                                 },
                                 palette,
                               ),

@@ -40,6 +40,8 @@ func main() {
 	http.HandleFunc("/api/admin/stats", adminHandler.AdminMiddleware(adminHandler.GetStats))
 	http.HandleFunc("/api/admin/rooms", adminHandler.AdminMiddleware(adminHandler.ListRooms))
 	http.HandleFunc("/api/admin/rooms/close", adminHandler.AdminMiddleware(adminHandler.CloseRoom))
+	http.HandleFunc("/api/admin/broadcast", adminHandler.AdminMiddleware(adminHandler.Broadcast))
+	http.HandleFunc("/api/admin/users/ban", adminHandler.AdminMiddleware(adminHandler.BanUser))
 
 	// Public Config
 	http.HandleFunc("/api/config", func(w http.ResponseWriter, r *http.Request) {

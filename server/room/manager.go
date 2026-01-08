@@ -18,9 +18,10 @@ const (
 
 // ActiveRoomInfo for admin dashboard
 type ActiveRoomInfo struct {
-	ID          string `json:"id"`
-	PlayerCount int    `json:"playerCount"`
-	Phase       string `json:"phase"`
+	ID          string   `json:"id"`
+	PlayerCount int      `json:"playerCount"`
+	Phase       string   `json:"phase"`
+	PlayerIDs   []string `json:"playerIds"`
 }
 
 // Manager keeps track of all clients and rooms
@@ -468,8 +469,56 @@ func (m *Manager) GetActiveRooms() []ActiveRoomInfo {
 			ID:          id,
 			PlayerCount: r.GetClientCount(),
 			Phase:       r.GetGamePhase(),
+			PlayerIDs:   r.GetPlayerIDs(),
 		}
 		list = append(list, info)
 	}
 	return list
+}
+
+// BroadcastSystemMessage sends a popup alert to every single connected player
+func (m *Manager) BroadcastSystemMessage(message string) {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+
+	msg := protocol.NewMessage(protocol.MsgTypeSystemAlert, map[string]string{
+		"message": message,
+	})
+	bytes, _ := json.Marshal(msg)
+
+	for client := range m.Clients {
+		select {
+		case client.Send <- bytes:
+		default:
+			// Client's buffer full, handled by Run's unregister logic
+		}
+	}
+}
+
+// KickUser disconnects a specific user by ID
+func (m *Manager) KickUser(userID string, reason string) {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+
+	msg := protocol.NewMessage(protocol.MsgTypeError, protocol.ErrorMessage{
+		Code:    "KICKED",
+		Message: reason,
+	})
+	bytes, _ := json.Marshal(msg)
+
+	for client := range m.Clients {
+		if client.ID == userID {
+			// 1. Send reason
+			client.Send <- bytes
+			// 2. We don't close here to allow the client to read the error.
+			// The socket handler will eventually close after send or we can force it.
+			// Actually, closing the channel is safer.
+			log.Printf("Kicking user %s: %s", userID, reason)
+			// Small delay to let them see why they are kicked
+			go func(c *Client) {
+				time.Sleep(500 * time.Millisecond)
+				m.Unregister <- c
+			}(client)
+		}
+	}
 }

@@ -155,6 +155,7 @@ func createTables() error {
 		wins INTEGER DEFAULT 0,
 		losses INTEGER DEFAULT 0,
 		coins INTEGER DEFAULT 1000,
+		is_banned BOOLEAN DEFAULT 0,
 		last_seen TIMESTAMP
 	);`
 
@@ -210,6 +211,10 @@ func createTables() error {
 		PRIMARY KEY (user_id, challenge_id)
 	);`
 
+	// Migration: Add is_banned if it doesn't exist (SQLite doesn't support IF NOT EXISTS on ALTER TABLE easily)
+	// We'll just try to add it and ignore error if it exists
+	DB.Exec("ALTER TABLE users ADD COLUMN is_banned BOOLEAN DEFAULT 0;")
+
 	if _, err := DB.Exec(queryChallenges); err != nil {
 		return err
 	}
@@ -243,8 +248,14 @@ func GetOrCreateUser(userID string, name string) (*UserStats, error) {
 	var user UserStats
 	var dbName string
 
-	row := DB.QueryRow("SELECT user_id, name, games_played, wins, losses, coins FROM users WHERE user_id = ?", userID)
-	err := row.Scan(&user.UserID, &dbName, &user.GamesPlayed, &user.Wins, &user.Losses, &user.Coins)
+	var isBanned bool
+
+	row := DB.QueryRow("SELECT user_id, name, games_played, wins, losses, coins, is_banned FROM users WHERE user_id = ?", userID)
+	err := row.Scan(&user.UserID, &dbName, &user.GamesPlayed, &user.Wins, &user.Losses, &user.Coins, &isBanned)
+
+	if isBanned {
+		return nil, fmt.Errorf("USER_BANNED")
+	}
 
 	if err == sql.ErrNoRows {
 		// Create new user
@@ -646,4 +657,20 @@ func DeleteUser(userID string) error {
 	// will just refer to a non-existent user ID, which is fine for history preservation.
 
 	return tx.Commit()
+}
+
+// BanUser marks a user as banned
+func BanUser(userID string) error {
+	_, err := DB.Exec("UPDATE users SET is_banned = 1 WHERE user_id = ?", userID)
+	return err
+}
+
+// IsUserBanned checks if a user is banned
+func IsUserBanned(userID string) (bool, error) {
+	var isBanned bool
+	err := DB.QueryRow("SELECT is_banned FROM users WHERE user_id = ?", userID).Scan(&isBanned)
+	if err != nil {
+		return false, err
+	}
+	return isBanned, nil
 }

@@ -70,7 +70,7 @@ class _SliverAppBar extends StatelessWidget {
               begin: Alignment.topCenter,
               end: Alignment.bottomCenter,
               colors: [
-                AppColors.primary.withOpacity(0.2),
+                AppColors.primary.withValues(alpha: 0.2),
                 AppColors.background,
               ],
             ),
@@ -98,10 +98,10 @@ class _ChallengeCard extends StatelessWidget {
       decoration: BoxDecoration(
         color: AppColors.surface,
         borderRadius: BorderRadius.circular(24),
-        border: Border.all(color: statusColor.withOpacity(0.3), width: 2),
+        border: Border.all(color: statusColor.withValues(alpha: 0.3), width: 2),
         boxShadow: [
           BoxShadow(
-            color: statusColor.withOpacity(0.1),
+            color: statusColor.withValues(alpha: 0.1),
             blurRadius: 20,
             offset: const Offset(0, 10),
           ),
@@ -115,7 +115,7 @@ class _ChallengeCard extends StatelessWidget {
               Container(
                 padding: const EdgeInsets.all(12),
                 decoration: BoxDecoration(
-                  color: statusColor.withOpacity(0.1),
+                  color: statusColor.withValues(alpha: 0.1),
                   shape: BoxShape.circle,
                 ),
                 child: Icon(
@@ -140,7 +140,7 @@ class _ChallengeCard extends StatelessWidget {
                     Text(
                       challenge.description,
                       style: TextStyle(
-                        color: Colors.white.withOpacity(0.6),
+                        color: Colors.white.withValues(alpha: 0.6),
                         fontSize: 14,
                       ),
                     ),
@@ -172,7 +172,7 @@ class _ChallengeCard extends StatelessWidget {
             child: LinearProgressIndicator(
               value: challenge.progress,
               minHeight: 10,
-              backgroundColor: Colors.white.withOpacity(0.05),
+              backgroundColor: Colors.white.withValues(alpha: 0.05),
               valueColor: AlwaysStoppedAnimation<Color>(statusColor),
             ),
           ),
@@ -220,7 +220,7 @@ class _ChallengeCard extends StatelessWidget {
                 Text(
                   'IN PROGRESS',
                   style: TextStyle(
-                    color: AppColors.primary.withOpacity(0.5),
+                    color: AppColors.primary.withValues(alpha: 0.5),
                     fontWeight: FontWeight.w900,
                     fontSize: 12,
                     letterSpacing: 1,
