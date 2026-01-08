@@ -51,7 +51,8 @@ class AppConfig {
   // Development
   late final bool enableLogging;
   late final bool enableDebugMode;
-  late final String? masterAdminId;
+  late final List<String> adminUids;
+  late final String adminApiKey;
 
   // Legal & Support
   late final String privacyPolicyUrl;
@@ -168,10 +169,13 @@ class AppConfig {
       defaultValue: kDebugMode,
     );
 
-    masterAdminId = const String.fromEnvironment(
-      'MASTER_ADMIN_ID',
-      defaultValue:
-          'ADMIN_UID_PLACEHOLDER', // Default to something safe or empty
+    // Admin Configuration
+    adminUids = _getStringListConfig('admin_uids', 'ADMIN_UIDS', []);
+
+    adminApiKey = _getStringConfig(
+      'admin_api_key_runtime',
+      'ADMIN_API_KEY',
+      'VEIL_MASTER_KEY_2026',
     );
 
     // Legal & Support URLs
@@ -232,6 +236,26 @@ class AppConfig {
 
     // 2. Try Environment Variable (Build Time)
     return String.fromEnvironment(envKey, defaultValue: defaultValue);
+  }
+
+  List<String> _getStringListConfig(
+    String rcKey,
+    String envKey,
+    List<String> defaultValues,
+  ) {
+    // 1. Try Remote Config
+    final rcValue = RemoteConfigService.instance.getString(rcKey);
+    if (rcValue.isNotEmpty) {
+      return rcValue.split(',').where((u) => u.isNotEmpty).toList();
+    }
+
+    // 2. Try Environment Variable (Build Time)
+    final envValue = String.fromEnvironment(envKey, defaultValue: '');
+    if (envValue.isNotEmpty) {
+      return envValue.split(',').where((u) => u.isNotEmpty).toList();
+    }
+
+    return defaultValues;
   }
 
   // Helper method to reload config (useful for testing)

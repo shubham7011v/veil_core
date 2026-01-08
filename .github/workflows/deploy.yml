@@ -36,4 +36,5 @@ jobs:
                                   --restart unless-stopped \
                                   -v /home/veilapp/data:/root/data \
                                   -e ENABLE_VOICE=false \
+                                  -e ADMIN_API_KEY=${{ secrets.ADMIN_API_KEY }} \
                                   veil-server

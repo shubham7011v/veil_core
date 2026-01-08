@@ -26,6 +26,17 @@ class RemoteConfigService {
         'max_reconnect_attempts': 5,
         'voice_timeout_seconds': 30,
         'max_actions_per_second': 10,
+        // Feature Flags
+        'enable_voice_chat': false,
+        'enable_daily_challenges':
+            true, // Enabling by default since we implemented it
+        'enable_tournaments': false,
+        'enable_admin_dashboard':
+            true, // Enabling by default since we implemented it
+        'enable_private_rooms': true,
+        'enable_friends_match': false, // Not implemented yet
+        'admin_uids': '', // Comma-separated UIDs
+        'admin_api_key_runtime': 'VEIL_MASTER_KEY_2026', // Dynamic Key
       });
 
       await fetchAndActivate();

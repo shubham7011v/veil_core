@@ -14,6 +14,7 @@ import '../../../../core/services/audio/audio_service_interface.dart';
 import '../../../../core/constants/sound_assets.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 import 'dart:async';
+import '../../../../core/config/feature_flags.dart';
 
 class SettingsScreen extends StatefulWidget {
   final VoidCallback? onBack;
@@ -794,22 +795,36 @@ class _SettingsScreenState extends State<SettingsScreen> {
           'Version $_version • Build $_buildNumber',
           style: TextStyle(color: palette.textTertiary, fontSize: 10),
         ),
-        if (AppConfig.instance.isDevelopment) ...[
+        if (FeatureFlags.enableAdminDashboard &&
+            AppConfig.instance.adminUids.contains(
+              FirebaseAuth.instance.currentUser?.uid,
+            )) ...[
           const SizedBox(height: 12),
           TextButton.icon(
             onPressed: () => Navigator.pushNamed(context, '/admin'),
-            icon: const Icon(Icons.admin_panel_settings, size: 16),
-            label: const Text(
-              'Admin Dashboard',
-              style: TextStyle(fontSize: 12),
+            icon: Icon(Icons.security, size: 14, color: palette.textTertiary),
+            label: Text(
+              'ADMIN PANEL',
+              style: TextStyle(
+                color: palette.textTertiary,
+                fontSize: 10,
+                letterSpacing: 1,
+              ),
             ),
           ),
-          TextButton.icon(
-            onPressed: () => Navigator.pushNamed(context, '/sound_test'),
-            icon: const Icon(Icons.music_note, size: 16),
-            label: const Text('Sound Test', style: TextStyle(fontSize: 12)),
-          ),
         ],
+        TextButton.icon(
+          onPressed: () => Navigator.pushNamed(context, '/sound_test'),
+          icon: Icon(Icons.music_note, size: 14, color: palette.textTertiary),
+          label: Text(
+            'SOUND TEST',
+            style: TextStyle(
+              color: palette.textTertiary,
+              fontSize: 10,
+              letterSpacing: 1,
+            ),
+          ),
+        ),
       ],
     );
   }

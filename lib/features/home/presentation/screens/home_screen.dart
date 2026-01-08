@@ -13,6 +13,7 @@ import '../../../collection/collection.dart';
 import '../../../settings/settings.dart';
 import '../widgets/home_top_bar.dart';
 import '../widgets/coming_soon_modal.dart';
+import '../../../../core/config/feature_flags.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -144,38 +145,51 @@ class _HomeScreenState extends State<HomeScreen> {
 
                     const SizedBox(height: 40),
                     _buildPlayOnlineCTA(context, palette),
-                    const SizedBox(height: 24),
-                    _buildPrivateRoomButton(context, palette),
-                    const SizedBox(height: 48),
-                    Row(
-                      children: [
-                        Expanded(
-                          child: _buildMatchCard(
-                            context,
-                            'FRIENDS\nMATCH',
-                            Icons.people_outline,
-                            () {
-                              // TODO: Implement Friends Match (Offline Hotspot Mode) logic
-                              _showComingSoonModal(context, palette);
-                            },
-                            palette,
-                          ),
-                        ),
-                        const SizedBox(width: 16),
-                        Expanded(
-                          child: _buildMatchCard(
-                            context,
-                            'BOT\nMATCH',
-                            Icons.smart_toy_outlined,
-                            () => Navigator.pushNamed(context, '/bot_settings'),
-                            palette,
-                          ),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 32),
-                    _buildDailyChallenge(palette),
-                    // TODO: Implement Daily Challenge feature and its related screens
+                    if (FeatureFlags.enablePrivateRooms) ...[
+                      const SizedBox(height: 24),
+                      _buildPrivateRoomButton(context, palette),
+                    ],
+                    if (FeatureFlags.enableFriendsMatch ||
+                        FeatureFlags.enableBotPlayers) ...[
+                      const SizedBox(height: 48),
+                      Row(
+                        children: [
+                          if (FeatureFlags.enableFriendsMatch)
+                            Expanded(
+                              child: _buildMatchCard(
+                                context,
+                                'FRIENDS\nMATCH',
+                                Icons.people_outline,
+                                () {
+                                  // TODO: Implement Friends Match (Offline Hotspot Mode) logic
+                                  _showComingSoonModal(context, palette);
+                                },
+                                palette,
+                              ),
+                            ),
+                          if (FeatureFlags.enableFriendsMatch &&
+                              FeatureFlags.enableBotPlayers)
+                            const SizedBox(width: 16),
+                          if (FeatureFlags.enableBotPlayers)
+                            Expanded(
+                              child: _buildMatchCard(
+                                context,
+                                'BOT\nMATCH',
+                                Icons.smart_toy_outlined,
+                                () => Navigator.pushNamed(
+                                  context,
+                                  '/bot_settings',
+                                ),
+                                palette,
+                              ),
+                            ),
+                        ],
+                      ),
+                    ],
+                    if (FeatureFlags.enableDailyChallenges) ...[
+                      const SizedBox(height: 32),
+                      _buildDailyChallenge(palette),
+                    ],
                     const SizedBox(height: 32),
                   ],
                 ),

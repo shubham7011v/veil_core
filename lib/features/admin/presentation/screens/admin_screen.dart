@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import '../../../../core/di/service_locator.dart';
+import '../../../../core/config/app_config.dart';
 import '../bloc/admin_bloc.dart';
 
 class AdminScreen extends StatelessWidget {
@@ -24,11 +26,27 @@ class _AdminView extends StatefulWidget {
 }
 
 class _AdminViewState extends State<_AdminView> {
-  final _keyController = TextEditingController();
+  @override
+  void initState() {
+    super.initState();
+    _checkAuthorization();
+  }
+
+  void _checkAuthorization() {
+    final user = FirebaseAuth.instance.currentUser;
+    final config = AppConfig.instance;
+
+    if (user != null && config.adminUids.contains(user.uid)) {
+      // Automatically attempt login with the secret key from GitHub Secrets/Dart Defines
+      context.read<AdminBloc>().add(AdminLogin(config.adminApiKey));
+    } else {
+      // Not an admin in the injected list
+      context.read<AdminBloc>().add(AdminLogout()); // Ensure reset
+    }
+  }
 
   @override
   void dispose() {
-    _keyController.dispose();
     super.dispose();
   }
 
@@ -91,33 +109,35 @@ class _AdminViewState extends State<_AdminView> {
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            const Icon(Icons.security, size: 64, color: Colors.greenAccent),
+            const Icon(Icons.lock_person, size: 64, color: Colors.redAccent),
             const SizedBox(height: 32),
-            TextField(
-              controller: _keyController,
-              decoration: const InputDecoration(
-                labelText: 'MASTER KEY',
-                labelStyle: TextStyle(color: Colors.greenAccent),
-                enabledBorder: OutlineInputBorder(
-                  borderSide: BorderSide(color: Colors.greenAccent),
-                ),
-                focusedBorder: OutlineInputBorder(
-                  borderSide: BorderSide(color: Colors.white),
-                ),
+            const Text(
+              'UNAUTHORIZED ACCESS',
+              style: TextStyle(
+                color: Colors.redAccent,
+                fontWeight: FontWeight.bold,
+                fontSize: 18,
+                letterSpacing: 2,
               ),
-              style: const TextStyle(color: Colors.white),
-              obscureText: true,
             ),
             const SizedBox(height: 16),
-            ElevatedButton(
-              style: ElevatedButton.styleFrom(
-                backgroundColor: Colors.greenAccent,
-                foregroundColor: Colors.black,
+            Text(
+              'User UID: ${FirebaseAuth.instance.currentUser?.uid ?? "Unknown"}',
+              style: const TextStyle(color: Colors.grey, fontSize: 10),
+            ),
+            const SizedBox(height: 32),
+            const Text(
+              'This terminal is restricted to production administrators. Your UID must be registered in the mainframe via GitHub Secrets.',
+              textAlign: TextAlign.center,
+              style: TextStyle(color: Colors.white70),
+            ),
+            const SizedBox(height: 48),
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text(
+                'RETREAT',
+                style: TextStyle(color: Colors.grey),
               ),
-              onPressed: () {
-                context.read<AdminBloc>().add(AdminLogin(_keyController.text));
-              },
-              child: const Text('ACCESS MAINFRAME'),
             ),
           ],
         ),

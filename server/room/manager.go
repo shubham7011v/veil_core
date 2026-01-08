@@ -7,6 +7,7 @@ import (
 	"math/rand"
 	"sync"
 	"time"
+	"veil_server/config"
 	"veil_server/db"
 	"veil_server/protocol"
 )
@@ -228,6 +229,10 @@ func (m *Manager) HandleMessage(c *Client, message []byte) {
 		return
 
 	case protocol.MsgTypeChallengesGet:
+		if !config.GetFeatureFlags().EnableDailyChallenges {
+			m.sendError(c, "FEATURE_DISABLED", "Daily Challenges are currently disabled")
+			return
+		}
 		status, err := db.GetDailyChallengesStatus(c.ID)
 		if err != nil {
 			log.Printf("Challenges error: %v", err)
@@ -239,6 +244,10 @@ func (m *Manager) HandleMessage(c *Client, message []byte) {
 		return
 
 	case protocol.MsgTypeChallengeClaim:
+		if !config.GetFeatureFlags().EnableDailyChallenges {
+			m.sendError(c, "FEATURE_DISABLED", "Daily Challenges are currently disabled")
+			return
+		}
 		var challengeID string
 		json.Unmarshal(baseMsg.Data, &challengeID)
 		reward, err := db.ClaimChallengeReward(c.ID, challengeID)

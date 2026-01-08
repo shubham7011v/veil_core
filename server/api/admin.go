@@ -21,10 +21,10 @@ func NewAdminHandler(m *room.Manager) *AdminHandler {
 // AdminMiddleware ensures the request has the correct X-Admin-Key
 func (h *AdminHandler) AdminMiddleware(next http.HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		// Hardcoded key for now, moving to env var recommended
-		masterKey := os.Getenv("MASTER_ADMIN_KEY")
+		// Key injected from GitHub Secrets / Env Var
+		masterKey := os.Getenv("ADMIN_API_KEY")
 		if masterKey == "" {
-			masterKey = "VEIL_MASTER_KEY_2026" // Default fallback
+			masterKey = "VEIL_MASTER_KEY_2026" // Default fallback for local dev
 		}
 
 		clientKey := r.Header.Get("X-Admin-Key")

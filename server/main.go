@@ -5,7 +5,9 @@ import (
 	"net/http"
 	"os"
 
+	"encoding/json"
 	"veil_server/api"
+	"veil_server/config"
 	"veil_server/db"
 	"veil_server/room"
 )
@@ -38,6 +40,12 @@ func main() {
 	http.HandleFunc("/api/admin/stats", adminHandler.AdminMiddleware(adminHandler.GetStats))
 	http.HandleFunc("/api/admin/rooms", adminHandler.AdminMiddleware(adminHandler.ListRooms))
 	http.HandleFunc("/api/admin/rooms/close", adminHandler.AdminMiddleware(adminHandler.CloseRoom))
+
+	// Public Config
+	http.HandleFunc("/api/config", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(config.GetFeatureFlags())
+	})
 
 	log.Printf("Veil Server listening on :%s", port)
 	// TODO: Implement graceful shutdown handling for better reliability
