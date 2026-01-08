@@ -1,5 +1,5 @@
 # Build stage
-FROM golang:1.22-alpine AS builder
+FROM golang:1.25-alpine AS builder
 
 # Install build dependencies for cgo (required for modernc.org/sqlite or database/sql with sqlite)
 RUN apk add --no-cache git gcc musl-dev
