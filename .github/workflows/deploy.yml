@@ -2,7 +2,7 @@ name: Deploy to Hostinger
 
 on:
     push:
-        branches: ["main"]
+        branches: ["main", "dev"]
         tags: ["go_v*"]
     workflow_dispatch:
 
@@ -17,24 +17,24 @@ jobs:
                   username: root
                   key: ${{ secrets.SSH_KEY }}
                   script: |
-                      # 1. Update Code
+                      # 1. Update Code (Dynamic branch checkout)
                       cd ~/veil_core
                       git fetch --all
-                      git checkout main
-                      git pull origin main
+                      git checkout ${{ github.ref_name }}
+                      git pull origin ${{ github.ref_name }}
 
-                      # 2. Build Image Locally (No Docker Hub needed)
-                      cd server
-                      docker build --network=host -t veil-server .
+                                # 2. Build Image Locally (No Docker Hub needed)
+                                cd server
+                                docker build --network=host -t veil-server .
 
-                      # 3. Restart Container
-                      docker stop veil-game || true
-                      docker rm veil-game || true
+                                # 3. Restart Container
+                                docker stop veil-game || true
+                                docker rm veil-game || true
 
-                      docker run -d \
-                        --name veil-game \
-                        -p 8080:8080 \
-                        --restart unless-stopped \
-                        -v /home/veilapp/data:/root/data \
-                        -e ENABLE_VOICE=false \
-                        veil-server
+                                docker run -d \
+                                  --name veil-game \
+                                  -p 8080:8080 \
+                                  --restart unless-stopped \
+                                  -v /home/veilapp/data:/root/data \
+                                  -e ENABLE_VOICE=false \
+                                  veil-server
