@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:google_fonts/google_fonts.dart';
@@ -7,6 +8,7 @@ import '../../../../core/theme/colors.dart';
 import '../../../../core/navigation/app_router.dart';
 import '../../../auth/presentation/bloc/auth_bloc.dart';
 import '../../../auth/presentation/bloc/auth_state.dart';
+import 'package:permission_handler/permission_handler.dart';
 import '../../offline.dart';
 
 enum _LobbyPhase { modeSelection, hosting, joining }
@@ -35,7 +37,26 @@ class _OfflineLobbyScreenState extends State<OfflineLobbyScreen> {
     _gameStateSub?.cancel();
   }
 
+  Future<bool> _checkPermissions() async {
+    if (Platform.isAndroid) {
+      // Nearby devices permission (Android 13+)
+      if (await Permission.nearbyWifiDevices.request().isGranted) {
+        return true;
+      }
+      // Fallback to Location (Android 12 and below often require this for WiFi scanning)
+      if (await Permission.location.request().isGranted) {
+        return true;
+      }
+      return false;
+    }
+    return true; // iOS handles this differently or via local network popup
+  }
+
   Future<void> _startHosting() async {
+    if (!await _checkPermissions()) {
+      setState(() => _statusMessage = 'Permissions required for local play.');
+      return;
+    }
     setState(() {
       _phase = _LobbyPhase.hosting;
       _statusMessage = 'Initializing local station...';
@@ -77,7 +98,11 @@ class _OfflineLobbyScreenState extends State<OfflineLobbyScreen> {
     }
   }
 
-  void _startJoining() {
+  Future<void> _startJoining() async {
+    if (!await _checkPermissions()) {
+      setState(() => _statusMessage = 'Permissions required for local scan.');
+      return;
+    }
     setState(() {
       _phase = _LobbyPhase.joining;
       _statusMessage = 'Scanning local frequencies...';
@@ -200,7 +225,7 @@ class _OfflineLobbyScreenState extends State<OfflineLobbyScreen> {
           children: [
             _buildSelectionCard(
               title: 'HOST STATION',
-              desc: 'Start a local match and let others join your hotspot.',
+              desc: 'Start a match via WiFi or Hotspot for others to join.',
               icon: Icons.wifi_tethering,
               color: AppColors.primary,
               onTap: _startHosting,
@@ -208,7 +233,7 @@ class _OfflineLobbyScreenState extends State<OfflineLobbyScreen> {
             const SizedBox(height: 24),
             _buildSelectionCard(
               title: 'JOIN MISSION',
-              desc: 'Scan for active hosts in your local network.',
+              desc: 'Scan for active hosts on your Hotspot or WiFi network.',
               icon: Icons.radar,
               color: AppColors.primaryDim,
               onTap: _startJoining,

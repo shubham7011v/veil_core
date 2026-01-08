@@ -17,14 +17,34 @@ class DiscoveryService {
     _socket = await RawDatagramSocket.bind(InternetAddress.anyIPv4, 0);
     _socket!.broadcastEnabled = true;
 
-    _broadcastTimer = Timer.periodic(const Duration(seconds: 2), (timer) {
+    _broadcastTimer = Timer.periodic(const Duration(seconds: 2), (timer) async {
       final payload = json.encode({
         'msg': _broadcastMsg,
         'name': hostName,
-        'port': 8080, // Default game server port
+        'port': 8080,
       });
       final data = utf8.encode(payload);
+
+      // 1. Send to global broadcast address
       _socket!.send(data, InternetAddress('255.255.255.255'), _port);
+
+      // 2. Identify active interfaces and send to their specific subnet broadcast addresses
+      // This is crucial for Android Hotspot reliability (targeting 192.168.43.255)
+      final interfaces = await NetworkInterface.list();
+      for (var interface in interfaces) {
+        for (var addr in interface.addresses) {
+          if (addr.type == InternetAddressType.IPv4 && !addr.isLoopback) {
+            final parts = addr.address.split('.');
+            if (parts.length == 4) {
+              // Calculate directed broadcast (assuming /24 mask which is standard for Hotspot/WiFi)
+              final subnetMsg = '${parts[0]}.${parts[1]}.${parts[2]}.255';
+              try {
+                _socket!.send(data, InternetAddress(subnetMsg), _port);
+              } catch (_) {}
+            }
+          }
+        }
+      }
     });
   }
 

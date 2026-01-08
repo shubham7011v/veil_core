@@ -18,7 +18,7 @@ class LocalGameEngine {
 
   void addPlayer(String id, String name) {
     if (_state.phase != OfflinePhase.lobby) return;
-    if (_state.players.length >= 8) return; // Max players
+    if (_state.players.length >= 10) return; // Max players increased to 10
     if (_state.playerMap.containsKey(id)) return;
 
     final player = OfflinePlayer(id: id, name: name);
@@ -251,15 +251,20 @@ class LocalGameEngine {
 
   List<OfflineCard> _generateDeck() {
     final deck = <OfflineCard>[];
-    for (var suit in OfflineSuit.values) {
-      for (var rank in OfflineRank.values) {
-        deck.add(
-          OfflineCard(
-            id: '${rank.name}_of_${suit.name}',
-            suit: suit,
-            rank: rank,
-          ),
-        );
+    // Use 2 decks if there are more than 6 players
+    final numDecks = _state.players.length > 6 ? 2 : 1;
+
+    for (int d = 0; d < numDecks; d++) {
+      for (var suit in OfflineSuit.values) {
+        for (var rank in OfflineRank.values) {
+          deck.add(
+            OfflineCard(
+              id: '${rank.name}_of_${suit.name}_$d', // Ensure unique IDs with deck index
+              suit: suit,
+              rank: rank,
+            ),
+          );
+        }
       }
     }
     return deck;

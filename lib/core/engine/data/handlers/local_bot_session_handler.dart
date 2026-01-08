@@ -19,15 +19,15 @@ class LocalBotSessionHandler extends BaseAuthoritativeHandler {
     _botPersonalities.clear();
 
     final personalities = [
-      BotPersonality.conservative,
-      BotPersonality.aggressive,
-      BotPersonality.balanced,
-      BotPersonality.ghost,
-      BotPersonality.balanced,
-      BotPersonality.conservative,
-      BotPersonality.aggressive,
-      BotPersonality.balanced,
-      BotPersonality.ghost,
+      BotPersonality.conservative, // p1
+      BotPersonality.aggressive, // p2
+      BotPersonality.balanced, // p3
+      BotPersonality.ghost, // p4
+      BotPersonality.balanced, // p5
+      BotPersonality.conservative, // p6
+      BotPersonality.aggressive, // p7
+      BotPersonality.balanced, // p8
+      BotPersonality.ghost, // p9
     ];
 
     for (int i = 1; i < playerCount; i++) {
@@ -91,6 +91,9 @@ class LocalBotSessionHandler extends BaseAuthoritativeHandler {
       'Karan',
       'Neha',
       'Rohan',
+      'Meera',
+      'Arun',
+      'Tara',
     ];
     return names[(index - 1) % names.length];
   }
