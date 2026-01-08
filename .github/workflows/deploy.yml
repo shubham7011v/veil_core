@@ -2,52 +2,39 @@ name: Deploy to Hostinger
 
 on:
     push:
-        branches: [main]
-        paths:
-            - "server/**"
+        branches: ["main"]
+        tags: ["go_v*"]
+    workflow_dispatch:
 
 jobs:
     deploy:
         runs-on: ubuntu-latest
         steps:
-            - uses: actions/checkout@v4
-
-            - name: Set up Docker Buildx
-              uses: docker/setup-buildx-action@v3
-
-            - name: Login to Docker Hub
-              uses: docker/login-action@v3
-              with:
-                  username: ${{ secrets.DOCKER_USERNAME }}
-                  password: ${{ secrets.DOCKER_PASSWORD }}
-
-            - name: Build & Push to Docker Hub
-              uses: docker/build-push-action@v5
-              with:
-                  context: ./server
-                  push: true
-                  tags: ${{ secrets.DOCKER_USERNAME }}/veil-game:latest
-
-            - name: SSH & Restart Deployment
+            - name: SSH & Deploy (Build on Server)
               uses: appleboy/ssh-action@v1.0.3
               with:
                   host: ${{ secrets.SERVER_IP }}
                   username: root
                   key: ${{ secrets.SSH_KEY }}
                   script: |
-                      # Pull new image from Docker Hub
-                      docker pull ${{ secrets.DOCKER_USERNAME }}/veil-game:latest
+                      # 1. Update Code
+                      cd ~/veil_core
+                      git fetch --all
+                      git checkout main
+                      git pull origin main
 
-                      # Stop and remove existing container if running
+                      # 2. Build Image Locally (No Docker Hub needed)
+                      cd server
+                      docker build --network=host -t veil-server .
+
+                      # 3. Restart Container
                       docker stop veil-game || true
                       docker rm veil-game || true
 
-                      # Run new container with persistence volume
-                      # Note: /home/veilapp/data on host matches /root/data in container
                       docker run -d \
                         --name veil-game \
                         -p 8080:8080 \
                         --restart unless-stopped \
                         -v /home/veilapp/data:/root/data \
                         -e ENABLE_VOICE=false \
-                        ${{ secrets.DOCKER_USERNAME }}/veil-game:latest
+                        veil-server
