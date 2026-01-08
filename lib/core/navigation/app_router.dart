@@ -14,6 +14,7 @@ import '../../features/social/social.dart';
 import '../../features/lobby/presentation/screens/join_room_screen.dart';
 import '../../features/admin/presentation/screens/admin_screen.dart';
 import '../../features/settings/presentation/screens/sound_test_screen.dart';
+import '../../features/challenges/presentation/challenges_screen.dart';
 
 class AppRouter {
   static const String splash = '/splash';
@@ -31,6 +32,7 @@ class AppRouter {
   static const String matchmaking = '/matchmaking';
   static const String admin = '/admin';
   static const String soundTest = '/sound_test';
+  static const String challenges = '/challenges';
 
   static Map<String, WidgetBuilder> get routes => {
     splash: (context) => const SplashScreen(),
@@ -62,6 +64,7 @@ class AppRouter {
     matchmaking: (context) => const MatchmakingScreen(),
     admin: (context) => const AdminScreen(),
     soundTest: (context) => const SoundTestScreen(),
+    challenges: (context) => const ChallengesScreen(),
     '/leaderboard': (context) => const LeaderboardScreen(),
     '/friends': (context) => const FriendsScreen(),
   };

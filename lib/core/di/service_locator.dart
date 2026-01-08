@@ -12,6 +12,7 @@ import '../services/system_status_service.dart';
 import '../notifications/bloc/app_notification_bloc.dart';
 import '../../features/auth/auth.dart';
 import '../../features/profile/profile.dart';
+import '../../features/challenges/data/challenges_repository.dart';
 
 class ServiceLocator {
   static final ServiceLocator _instance = ServiceLocator._internal();
@@ -25,6 +26,7 @@ class ServiceLocator {
   late final OnboardingRepository onboardingRepository;
   late final SessionRepository sessionRepository;
   late final ProfileRepository profileRepository;
+  late final ChallengesRepository challengesRepository;
   late final GameSessionHandler gameSessionHandler;
   late final VoiceSessionHandler? voiceSessionHandler; // Nullable when disabled
   late final GreetingService greetingService;
@@ -62,6 +64,8 @@ class ServiceLocator {
 
     // Initialize ProfileRepository with WebSocket handler
     profileRepository = ProfileRepository(_webSocketHandler);
+
+    challengesRepository = ChallengesRepository(_webSocketHandler);
 
     // Default to local, but the app can switch
     gameSessionHandler = LocalBotSessionHandler();

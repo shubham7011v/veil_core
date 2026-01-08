@@ -350,8 +350,7 @@ class _HomeScreenState extends State<HomeScreen> {
         color: Colors.transparent,
         child: InkWell(
           onTap: () {
-            // TODO: Implement Daily Challenge logic and entry point
-            _showDailyChallengeComingSoon(context, palette);
+            Navigator.pushNamed(context, '/challenges');
           },
           borderRadius: BorderRadius.circular(16),
           child: Padding(
@@ -423,30 +422,6 @@ class _HomeScreenState extends State<HomeScreen> {
           },
           {'icon': Icons.devices_rounded, 'text': 'Local Network Play'},
           {'icon': Icons.group_rounded, 'text': 'Connect with Nearby Friends'},
-        ],
-      ),
-    );
-  }
-
-  void _showDailyChallengeComingSoon(
-    BuildContext context,
-    AppColorPalette palette,
-  ) {
-    showDialog(
-      context: context,
-      builder: (context) => ComingSoonModal(
-        featureName: 'Daily Challenge',
-        description:
-            'Compete in a unique daily puzzle against the whole community! Earn exclusive rewards and climb the daily leaderboard.',
-        icon: Icons.track_changes,
-        palette: palette,
-        featureHighlights: const [
-          {
-            'icon': Icons.calendar_today_rounded,
-            'text': 'New Puzzle Every Day',
-          },
-          {'icon': Icons.leaderboard_rounded, 'text': 'Global Daily Rankings'},
-          {'icon': Icons.emoji_events_rounded, 'text': 'Exclusive Daily Loot'},
         ],
       ),
     );

@@ -12,6 +12,7 @@ import '../../domain/models/game_move.dart';
 import '../../../../features/auth/domain/models/user_stats.dart';
 import '../../../../features/social/domain/models/friend_record.dart';
 import '../../domain/models/room_event.dart';
+import '../../../../features/challenges/domain/models/daily_challenge.dart';
 import '../../../../features/voice/data/voice_audio_manager.dart';
 import '../../../../core/di/service_locator.dart';
 import '../../../../core/constants/sound_assets.dart';
@@ -37,6 +38,10 @@ class WebSocketSessionHandler
   final _roomEventController = StreamController<RoomEvent>.broadcast();
   final _connectionStatusController =
       StreamController<ConnectionStatus>.broadcast();
+  final _challengesController =
+      StreamController<List<DailyChallenge>>.broadcast();
+  final _challengeClaimResultController =
+      StreamController<Map<String, dynamic>>.broadcast();
 
   // Connection state
   ConnectionStatus _connectionStatus = ConnectionStatus.disconnected;
@@ -100,6 +105,12 @@ class WebSocketSessionHandler
   Stream<List<FriendRecord>> get friendsStream => _friendsController.stream;
 
   Stream<RoomEvent> get roomEventStream => _roomEventController.stream;
+
+  Stream<List<DailyChallenge>> get challengesStream =>
+      _challengesController.stream;
+
+  Stream<Map<String, dynamic>> get challengeClaimResultStream =>
+      _challengeClaimResultController.stream;
 
   @override
   String? get activeEventActorId => _activeEventActorId;
@@ -362,6 +373,29 @@ class WebSocketSessionHandler
             _voiceManager!.handleCandidate(msg['data'] as Map<String, dynamic>);
           }
           break;
+
+        case 'CHALLENGES_DATA':
+          try {
+            final data = msg['data'] as List<dynamic>;
+            final challenges = data
+                .map((c) => DailyChallenge.fromJson(c as Map<String, dynamic>))
+                .toList();
+            _challengesController.add(challenges);
+          } catch (e) {
+            debugPrint('Failed to parse challenges: $e');
+          }
+          break;
+
+        case 'CHALLENGE_CLAIM_OK':
+          try {
+            final data = msg['data'] as Map<String, dynamic>;
+            _challengeClaimResultController.add(data);
+            // Play a special reward sound
+            sl.audioService.playSfx(SoundAssets.turnAlert); // Temporary
+          } catch (e) {
+            debugPrint('Failed to parse challenge claim reward: $e');
+          }
+          break;
       }
     } catch (e, stack) {
       debugPrint('Error handling WebSocket message: $e');
@@ -611,6 +645,16 @@ class WebSocketSessionHandler
     _send({'type': 'DELETE_ACCOUNT'});
   }
 
+  // -- Daily Challenges --
+
+  void requestChallenges() {
+    _send({'type': 'CHALLENGES_GET'});
+  }
+
+  void claimChallenge(String challengeId) {
+    _send({'type': 'CHALLENGE_CLAIM', 'data': challengeId});
+  }
+
   @override
   Future<void> dispose() async {
     _reconnectTimer?.cancel();
@@ -622,6 +666,8 @@ class WebSocketSessionHandler
     await _leaderboardController.close();
     await _friendsController.close();
     await _roomEventController.close();
+    await _challengesController.close();
+    await _challengeClaimResultController.close();
     await _voiceManager?.dispose();
   }
 }
