@@ -5,13 +5,13 @@ import "encoding/json"
 // Message Type Constants
 const (
 	// Client -> Server
-	MsgTypeAuth        = "AUTH"
-	MsgTypePlayCards   = "PLAY_CARDS"
-	MsgTypePass        = "PASS"
-	MsgTypeChallenge   = "CHALLENGE"
-	MsgTypeStartGame   = "START_GAME"
-	MsgTypeUpdateName  = "UPDATE_NAME"
-	MsgTypeRefillCoins = "REFILL_COINS"
+	MsgTypeAuth          = "AUTH"
+	MsgTypePlayCards     = "PLAY_CARDS"
+	MsgTypePass          = "PASS"
+	MsgTypeChallenge     = "CHALLENGE"
+	MsgTypeStartGame     = "START_GAME"
+	MsgTypeUpdateName    = "UPDATE_NAME"
+	MsgTypeRefillCoins   = "REFILL_COINS"
 	MsgTypeDeleteAccount = "DELETE_ACCOUNT"
 
 	// Private Room (Client -> Server)
@@ -50,6 +50,12 @@ const (
 	MsgTypeVoiceState     = "VOICE_STATE"
 	MsgTypeVoiceSDP       = "VOICE_SDP"
 	MsgTypeVoiceICE       = "VOICE_ICE"
+
+	// Daily Challenges
+	MsgTypeChallengesGet    = "CHALLENGES_GET"
+	MsgTypeChallengesData   = "CHALLENGES_DATA"
+	MsgTypeChallengeClaim   = "CHALLENGE_CLAIM"
+	MsgTypeChallengeClaimOk = "CHALLENGE_CLAIM_OK"
 )
 
 // BaseMessage structure for all WebSocket messages

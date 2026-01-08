@@ -92,6 +92,23 @@ type UserStats struct {
 	Coins       int    `json:"coins"`
 }
 
+type DailyChallenge struct {
+	ID          string `json:"id"`
+	Title       string `json:"title"`
+	Description string `json:"description"`
+	Goal        int    `json:"goal"`
+	Reward      int    `json:"reward"`
+	Type        string `json:"type"` // e.g., 'wins', 'games_played', 'coins_won'
+}
+
+type UserChallengeProgress struct {
+	ChallengeID string `json:"challengeId"`
+	UserID      string `json:"userId"`
+	Current     int    `json:"current"`
+	IsClaimed   bool   `json:"isClaimed"`
+	Completed   bool   `json:"completed"`
+}
+
 // InitDB initializes the SQLite database and creates tables
 func InitDB(dbPath string) error {
 	// Ensure directory exists
@@ -171,7 +188,54 @@ func createTables() error {
 		return err
 	}
 
+	// Challenges Table
+	queryChallenges := `
+	CREATE TABLE IF NOT EXISTS challenges (
+		id TEXT PRIMARY KEY,
+		title TEXT,
+		description TEXT,
+		goal INTEGER,
+		reward INTEGER,
+		type TEXT
+	);`
+
+	// User Challenges Table (Progress)
+	queryUserChallenges := `
+	CREATE TABLE IF NOT EXISTS user_challenges (
+		user_id TEXT,
+		challenge_id TEXT,
+		current INTEGER DEFAULT 0,
+		is_claimed BOOLEAN DEFAULT 0,
+		updated_at TIMESTAMP,
+		PRIMARY KEY (user_id, challenge_id)
+	);`
+
+	if _, err := DB.Exec(queryChallenges); err != nil {
+		return err
+	}
+	if _, err := DB.Exec(queryUserChallenges); err != nil {
+		return err
+	}
+
+	// Seed some challenges if empty
+	go seedChallenges()
+
 	return nil
+}
+
+func seedChallenges() {
+	challenges := []DailyChallenge{
+		{"win_3", "Victory Streak", "Win 3 matches today", 3, 500, "wins"},
+		{"play_5", "Card Shark", "Play 5 matches today", 5, 200, "games_played"},
+		{"win_1000_coins", "Gold Digger", "Win 1000 coins in matches", 1000, 300, "coins_won"},
+	}
+
+	for _, c := range challenges {
+		DB.Exec(`INSERT INTO challenges (id, title, description, goal, reward, type) 
+				 VALUES (?, ?, ?, ?, ?, ?) ON CONFLICT(id) DO UPDATE SET
+				 goal=excluded.goal, reward=excluded.reward`,
+			c.ID, c.Title, c.Description, c.Goal, c.Reward, c.Type)
+	}
 }
 
 // GetOrCreateUser fetches a user or creates one if not exists
@@ -300,6 +364,13 @@ func RecordGameResult(matchID string, playerIDs []string, winnerID string, durat
 		if err != nil {
 			return err
 		}
+
+		// Update Daily Challenge Progress
+		UpdateChallengeProgress(pid, "games_played", 1)
+		if isWinner {
+			UpdateChallengeProgress(pid, "wins", 1)
+			UpdateChallengeProgress(pid, "coins_won", potAmount)
+		}
 	}
 
 	return tx.Commit()
@@ -412,6 +483,126 @@ func GetFriends(userID string) ([]FriendRecord, error) {
 	}
 
 	return friends, nil
+}
+
+// -- Daily Challenges --
+
+// GetDailyChallengesStatus returns all challenges with user progress
+func GetDailyChallengesStatus(userID string) ([]map[string]interface{}, error) {
+	query := `
+		SELECT c.id, c.title, c.description, c.goal, c.reward, c.type, 
+		       COALESCE(uc.current, 0) as current, 
+		       COALESCE(uc.is_claimed, 0) as is_claimed
+		FROM challenges c
+		LEFT JOIN user_challenges uc ON c.id = uc.challenge_id AND uc.user_id = ?
+	`
+	rows, err := DB.Query(query, userID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var results []map[string]interface{}
+	for rows.Next() {
+		var id, title, desc, cType string
+		var goal, reward, current int
+		var isClaimed bool
+		if err := rows.Scan(&id, &title, &desc, &goal, &reward, &cType, &current, &isClaimed); err != nil {
+			return nil, err
+		}
+
+		results = append(results, map[string]interface{}{
+			"id":          id,
+			"title":       title,
+			"description": desc,
+			"goal":        goal,
+			"reward":      reward,
+			"type":        cType,
+			"current":     current,
+			"completed":   current >= goal,
+			"isClaimed":   isClaimed,
+		})
+	}
+	return results, nil
+}
+
+// UpdateChallengeProgress increments progress for a specific challenge type
+func UpdateChallengeProgress(userID string, challengeType string, delta int) error {
+	// 1. Find challenges of this type
+	rows, err := DB.Query("SELECT id FROM challenges WHERE type = ?", challengeType)
+	if err != nil {
+		return err
+	}
+	defer rows.Close()
+
+	for rows.Next() {
+		var challengeID string
+		rows.Scan(&challengeID)
+
+		// 2. Update or insert progress
+		_, err = DB.Exec(`
+			INSERT INTO user_challenges (user_id, challenge_id, current, updated_at)
+			VALUES (?, ?, ?, ?)
+			ON CONFLICT(user_id, challenge_id) DO UPDATE SET
+				current = current + excluded.current,
+				updated_at = excluded.updated_at
+		`, userID, challengeID, delta, time.Now())
+		if err != nil {
+			log.Printf("Error updating challenge %s for user %s: %v", challengeID, userID, err)
+		}
+	}
+	return nil
+}
+
+// ClaimChallengeReward rewards the user and marks as claimed
+func ClaimChallengeReward(userID string, challengeID string) (int, error) {
+	tx, err := DB.Begin()
+	if err != nil {
+		return 0, err
+	}
+	defer tx.Rollback()
+
+	// 1. Get challenge reward and check completion
+	var reward, goal, current int
+	var isClaimed bool
+	err = tx.QueryRow(`
+		SELECT c.reward, c.goal, COALESCE(uc.current, 0), COALESCE(uc.is_claimed, 0)
+		FROM challenges c
+		LEFT JOIN user_challenges uc ON c.id = uc.challenge_id AND uc.user_id = ?
+		WHERE c.id = ?
+	`, userID, challengeID).Scan(&reward, &goal, &current, &isClaimed)
+
+	if err != nil {
+		return 0, err
+	}
+
+	if current < goal {
+		return 0, fmt.Errorf("challenge not completed")
+	}
+	if isClaimed {
+		return 0, fmt.Errorf("reward already claimed")
+	}
+
+	// 2. Add coins to user (using buffer or direct)
+	// For rewards, direct update is safer for immediate feedback if user is in UI
+	_, err = tx.Exec("UPDATE users SET coins = coins + ? WHERE user_id = ?", reward, userID)
+	if err != nil {
+		return 0, err
+	}
+
+	// 3. Mark as claimed
+	_, err = tx.Exec("UPDATE user_challenges SET is_claimed = 1 WHERE user_id = ? AND challenge_id = ?", userID, challengeID)
+	if err != nil {
+		return 0, err
+	}
+
+	return reward, tx.Commit()
+}
+
+// ResetDailyChallenges clears user progress (Call this via cron or daily trigger)
+func ResetDailyChallenges() error {
+	_, err := DB.Exec("DELETE FROM user_challenges")
+	return err
 }
 
 func CalculateRank(wins int) string {

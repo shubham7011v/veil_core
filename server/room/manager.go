@@ -222,6 +222,41 @@ func (m *Manager) HandleMessage(c *Client, message []byte) {
 		m.addFriendListResponse(c)
 		return
 
+	case protocol.MsgTypeChallengesGet:
+		status, err := db.GetDailyChallengesStatus(c.ID)
+		if err != nil {
+			log.Printf("Challenges error: %v", err)
+			return
+		}
+		msg := protocol.NewMessage(protocol.MsgTypeChallengesData, status)
+		bytes, _ := json.Marshal(msg)
+		c.Send <- bytes
+		return
+
+	case protocol.MsgTypeChallengeClaim:
+		var challengeID string
+		json.Unmarshal(baseMsg.Data, &challengeID)
+		reward, err := db.ClaimChallengeReward(c.ID, challengeID)
+		if err != nil {
+			m.sendError(c, "CLAIM_FAILED", err.Error())
+			return
+		}
+
+		response := map[string]interface{}{
+			"challengeId": challengeID,
+			"reward":      reward,
+		}
+		msg := protocol.NewMessage(protocol.MsgTypeChallengeClaimOk, response)
+		bytes, _ := json.Marshal(msg)
+		c.Send <- bytes
+
+		// Also send AuthOk to refresh player coin balance
+		stats, err := db.GetOrCreateUser(c.ID, "")
+		if err == nil {
+			m.sendAuthOk(c, stats)
+		}
+		return
+
 	case "JOIN_ROOM":
 		// Public Matchmaking
 		if c.CurrentRoom == nil {
