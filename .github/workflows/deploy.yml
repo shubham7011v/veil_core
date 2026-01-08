@@ -2,7 +2,6 @@ name: Deploy to Hostinger
 
 on:
     push:
-        branches: ["main", "dev"]
         tags: ["go_v*"]
     workflow_dispatch:
 
