@@ -75,6 +75,7 @@ jobs:
           echo "keyAlias=${{ secrets.key_alias }}" >> android/key.properties
 
           # Google Services JSON
+          mkdir -p android/app/src/${{ inputs.flavor }}
           echo "${{ secrets.google_services_json_base64 }}" | base64 --decode > android/app/src/${{ inputs.flavor }}/google-services.json
 
       - name: Build App

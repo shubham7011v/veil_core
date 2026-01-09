@@ -36,7 +36,7 @@ jobs:
     secrets:
       google_services_json_base64: ${{ secrets.PROD_GOOGLE_SERVICES_JSON_BASE64 }}
       keystore_base64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
-      keystore_password: ${{ secrets.ANDROID_KEY_PASSWORD }}
+      keystore_password: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
       key_alias: ${{ secrets.ANDROID_KEY_ALIAS }}
       key_password: ${{ secrets.ANDROID_KEY_PASSWORD }}
       server_url: ${{ secrets.PROD_SERVER_URL }}
@@ -59,7 +59,7 @@ jobs:
     secrets:
       google_services_json_base64: ${{ secrets.PROD_GOOGLE_SERVICES_JSON_BASE64 }}
       keystore_base64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
-      keystore_password: ${{ secrets.ANDROID_KEY_PASSWORD }}
+      keystore_password: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
       key_alias: ${{ secrets.ANDROID_KEY_ALIAS }}
       key_password: ${{ secrets.ANDROID_KEY_PASSWORD }}
       server_url: ${{ secrets.PROD_SERVER_URL }}
