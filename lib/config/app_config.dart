@@ -9,9 +9,14 @@ class AppConfig {
   AppConfig({
     required this.environment,
     required this.appName,
-    required this.apiBaseUrl,
+    String? apiBaseUrl,
     this.enableLogs = false,
-  });
+  }) : apiBaseUrl =
+           apiBaseUrl ??
+           const String.fromEnvironment(
+             'API_URL',
+             defaultValue: 'https://api.veil.game',
+           );
 
   bool get isDev => environment == Environment.dev;
   bool get isProd => environment == Environment.prod;

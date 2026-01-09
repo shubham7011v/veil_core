@@ -5,7 +5,6 @@ void main() {
   final devConfig = AppConfig(
     environment: Environment.dev,
     appName: 'Bluffdev',
-    apiBaseUrl: 'https://dev-api.veil.game', // Placeholder
     enableLogs: true,
   );
 

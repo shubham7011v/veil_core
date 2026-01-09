@@ -17,7 +17,7 @@ void main() {
     );
 
     // Build our app and trigger a frame.
-    await tester.pumpWidget(VeilApp(config: testConfig));
+    await tester.pumpWidget(BluffApp(config: testConfig));
 
     // Initially should show splash screen
     expect(find.byType(SplashScreen), findsOneWidget);

@@ -5,8 +5,7 @@ void main() {
   // Default to Dev config if run without target
   final defaultConfig = AppConfig(
     environment: Environment.dev,
-    appName: 'Veil Dev',
-    apiBaseUrl: 'https://dev-api.veil.game',
+    appName: 'Bluff Dev',
     enableLogs: true,
   );
 

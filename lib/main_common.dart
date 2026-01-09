@@ -64,13 +64,13 @@ Future<void> mainCommon(AppConfig config) async {
   // to avoid crashes during initialization
 
   GlobalErrorHandler.run(() {
-    runApp(VeilApp(config: config));
+    runApp(BluffApp(config: config));
   });
 }
 
-class VeilApp extends StatelessWidget {
+class BluffApp extends StatelessWidget {
   final AppConfig config;
-  const VeilApp({super.key, required this.config});
+  const BluffApp({super.key, required this.config});
 
   @override
   Widget build(BuildContext context) {
@@ -101,7 +101,7 @@ class VeilApp extends StatelessWidget {
       child: BlocBuilder<ThemeBloc, ThemeState>(
         builder: (context, themeState) {
           return MaterialApp(
-            title: config.appName,
+            title: 'Bluff',
             debugShowCheckedModeBanner: config.isDev,
             theme: AppTheme.getTheme(themeState.mode),
             initialRoute: AppRouter.splash,
