@@ -18,7 +18,7 @@ class ChatWidget extends StatefulWidget {
 class _ChatWidgetState extends State<ChatWidget> {
   final TextEditingController _controller = TextEditingController();
   final ScrollController _scrollController = ScrollController();
-  bool _isAutoScrolling = true;
+  final bool _isAutoScrolling = true;
 
   @override
   void dispose() {
@@ -62,7 +62,7 @@ class _ChatWidgetState extends State<ChatWidget> {
       decoration: BoxDecoration(
         color: bgColor,
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: AppColors.primaryDim.withOpacity(0.5)),
+        border: Border.all(color: AppColors.primaryDim.withValues(alpha: 0.5)),
         boxShadow: const [
           BoxShadow(
             color: Colors.black45,
@@ -115,7 +115,7 @@ class _ChatWidgetState extends State<ChatWidget> {
                   return Center(
                     child: Text(
                       'No messages yet',
-                      style: TextStyle(color: hintColor.withOpacity(0.5)),
+                      style: TextStyle(color: hintColor.withValues(alpha: 0.5)),
                     ),
                   );
                 }

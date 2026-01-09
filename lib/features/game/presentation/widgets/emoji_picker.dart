@@ -41,7 +41,7 @@ class EmojiPicker extends StatelessWidget {
       decoration: BoxDecoration(
         color: bgColor,
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: AppColors.primaryDim.withOpacity(0.5)),
+        border: Border.all(color: AppColors.primaryDim.withValues(alpha: 0.5)),
         boxShadow: const [
           BoxShadow(
             color: Colors.black45,

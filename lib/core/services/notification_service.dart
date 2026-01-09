@@ -1,7 +1,6 @@
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/foundation.dart';
 import 'package:veil_core/core/di/service_locator.dart';
-import 'package:veil_core/core/notifications/bloc/app_notification_bloc.dart';
 import 'package:veil_core/core/notifications/bloc/app_notification_event.dart';
 
 @pragma('vm:entry-point')
