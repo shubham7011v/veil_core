@@ -52,7 +52,6 @@ class AppConfig {
   late final bool enableLogging;
   late final bool enableDebugMode;
   late final List<String> adminUids;
-  late final String adminApiKey;
 
   // Legal & Support
   late final String privacyPolicyUrl;
@@ -171,12 +170,6 @@ class AppConfig {
 
     // Admin Configuration
     adminUids = _getStringListConfig('admin_uids', 'ADMIN_UIDS', []);
-
-    adminApiKey = _getStringConfig(
-      'admin_api_key_runtime',
-      'ADMIN_API_KEY',
-      '',
-    );
 
     // Legal & Support URLs
     privacyPolicyUrl = _getStringConfig(

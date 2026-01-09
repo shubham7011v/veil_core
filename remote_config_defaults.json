@@ -56,6 +56,27 @@
             "description": "Enable Bot/AI styling settings",
             "valueType": "BOOLEAN"
         },
+        "enable_inner_circle": {
+            "defaultValue": {
+                "value": "false"
+            },
+            "description": "Enable Inner Circle social features",
+            "valueType": "BOOLEAN"
+        },
+        "enable_global_rankings": {
+            "defaultValue": {
+                "value": "false"
+            },
+            "description": "Enable Global Rankings/Leaderboard",
+            "valueType": "BOOLEAN"
+        },
+        "enable_elite_decks": {
+            "defaultValue": {
+                "value": "false"
+            },
+            "description": "Enable Elite Deck Collection screen",
+            "valueType": "BOOLEAN"
+        },
         "default_thinking_time_s": {
             "defaultValue": {
                 "value": "10"
@@ -103,13 +124,6 @@
                 "value": ""
             },
             "description": "Comma-separated UIDs for admin access",
-            "valueType": "STRING"
-        },
-        "admin_api_key_runtime": {
-            "defaultValue": {
-                "value": ""
-            },
-            "description": "Dynamic Admin Key",
             "valueType": "STRING"
         }
     }

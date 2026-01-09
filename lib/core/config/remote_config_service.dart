@@ -36,8 +36,10 @@ class RemoteConfigService {
         'enable_friends_match': false,
         'enable_friends_match_offline': false,
         'enable_bot_players': false,
+        'enable_inner_circle': false,
+        'enable_global_rankings': false,
+        'enable_elite_decks': false,
         'admin_uids': '', // Comma-separated UIDs
-        'admin_api_key_runtime': '', // Set via Console or Build Args
       });
 
       await fetchAndActivate();

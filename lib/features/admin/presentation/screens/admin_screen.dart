@@ -38,7 +38,7 @@ class _AdminViewState extends State<_AdminView> {
 
     if (user != null && config.adminUids.contains(user.uid)) {
       // Automatically attempt login with the secret key from GitHub Secrets/Dart Defines
-      context.read<AdminBloc>().add(AdminLogin(config.adminApiKey));
+      context.read<AdminBloc>().add(AdminLogin());
     } else {
       // Not an admin in the injected list
       context.read<AdminBloc>().add(AdminLogout()); // Ensure reset

@@ -8,10 +8,7 @@ abstract class AdminEvent extends Equatable {
   List<Object?> get props => [];
 }
 
-class AdminLogin extends AdminEvent {
-  final String key;
-  AdminLogin(this.key);
-}
+class AdminLogin extends AdminEvent {}
 
 class LoadAdminData extends AdminEvent {}
 

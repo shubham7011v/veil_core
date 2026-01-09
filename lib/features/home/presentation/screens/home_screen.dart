@@ -449,6 +449,39 @@ class _HomeScreenState extends State<HomeScreen> {
     return BottomNavigationBar(
       currentIndex: _selectedIndex,
       onTap: (index) {
+        if (index == 1 && !FeatureFlags.enableInnerCircle) {
+          _showComingSoonModal(
+            context,
+            palette,
+            featureName: 'Inner Circle',
+            description:
+                'Connect with your close friends and track your group play.',
+            icon: Icons.people_outline,
+          );
+          return;
+        }
+        if (index == 2 && !FeatureFlags.enableGlobalRankings) {
+          _showComingSoonModal(
+            context,
+            palette,
+            featureName: 'Global Rankings',
+            description:
+                'See where you stand against the best players world-wide.',
+            icon: Icons.emoji_events_outlined,
+          );
+          return;
+        }
+        if (index == 3 && !FeatureFlags.enableEliteDecks) {
+          _showComingSoonModal(
+            context,
+            palette,
+            featureName: 'Elite Deck Collection',
+            description: 'Explore and collect unique decks and cards.',
+            icon: Icons.shopping_bag_outlined,
+          );
+          return;
+        }
+
         setState(() {
           _selectedIndex = index;
         });

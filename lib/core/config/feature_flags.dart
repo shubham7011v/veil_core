@@ -29,4 +29,13 @@ class FeatureFlags {
 
   /// Bot Players
   static bool get enableBotPlayers => _rc.getBool('enable_bot_players');
+
+  /// Inner Circle (Social/Friends)
+  static bool get enableInnerCircle => _rc.getBool('enable_inner_circle');
+
+  /// Global Rankings (Leaderboard)
+  static bool get enableGlobalRankings => _rc.getBool('enable_global_rankings');
+
+  /// Elite Deck Collection
+  static bool get enableEliteDecks => _rc.getBool('enable_elite_decks');
 }
