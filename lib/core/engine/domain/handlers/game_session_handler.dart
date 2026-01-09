@@ -23,11 +23,16 @@ abstract class GameSessionHandler {
   Map<String, String> get pNames;
   SessionState get currentState;
 
+  Stream<Map<String, dynamic>> get chatStream;
+
   Future<void> startGame({int playerCount = 5, int thinkingTimeS = 10});
 
   void playCards(List<String> unitIds, UnitRank declaredRank);
   void passTurn();
   void raiseChallenge();
+
+  void sendChatMessage(String message);
+  void sendEmojiMessage(String emojiId);
 
   /// Manual & Auto Sorting
   void sortHand();

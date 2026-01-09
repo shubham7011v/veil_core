@@ -1,3 +1,4 @@
+import 'dart:async';
 import '../../domain/models/session_enums.dart';
 import '../../domain/logic/bot_brain.dart';
 import 'base_authoritative_handler.dart';
@@ -6,12 +7,39 @@ class LocalBotSessionHandler extends BaseAuthoritativeHandler {
   final BotBrain _brain;
   final Map<String, BotPersonality> _botPersonalities = {};
   int _botThinkingTimeS = 2;
+  final _chatController = StreamController<Map<String, dynamic>>.broadcast();
 
   LocalBotSessionHandler({BotBrain? brain})
     : _brain = brain ?? DefaultBotBrain();
 
   @override
   final Map<String, String> pNames = {'me': 'You'};
+
+  @override
+  Stream<Map<String, dynamic>> get chatStream => _chatController.stream;
+
+  @override
+  void sendChatMessage(String message) {
+    // Local chat echo for testing
+    _chatController.add({
+      'senderId': 'me',
+      'senderName': 'You',
+      'message': message,
+      'time': DateTime.now().millisecondsSinceEpoch ~/ 1000,
+      'isMe': true,
+      'type': 'chat',
+    });
+  }
+
+  @override
+  void sendEmojiMessage(String emojiId) {
+    // Local emoji echo
+    _chatController.add({
+      'senderId': 'me',
+      'emojiId': emojiId,
+      'type': 'emoji',
+    });
+  }
 
   @override
   Future<void> startGame({int playerCount = 5, int thinkingTimeS = 10}) async {

@@ -10,6 +10,7 @@ class SessionBloc extends Bloc<SessionEvent, SessionBlocState> {
   GameSessionHandler _handler;
   StreamSubscription? _stateSub;
   StreamSubscription? _eventSub;
+  StreamSubscription? _chatSub;
 
   SessionBloc({GameSessionHandler? handler})
     : _handler = handler ?? di.sl.gameSessionHandler,
@@ -29,6 +30,11 @@ class SessionBloc extends Bloc<SessionEvent, SessionBlocState> {
     on<SessionHandlerSwapped>(_onHandlerSwapped);
     on<SessionErrorOccurred>(_onErrorOccurred);
     on<SessionErrorCleared>(_onErrorCleared);
+
+    // Chat Event Handlers
+    on<ChatStreamUpdated>(_onChatStreamUpdated);
+    on<SendChatMessage>(_onSendChatMessage);
+    on<SendEmojiMessage>(_onSendEmojiMessage);
 
     // Engine update handlers
     on<EngineStateUpdated>((event, emit) {
@@ -110,6 +116,12 @@ class SessionBloc extends Bloc<SessionEvent, SessionBlocState> {
             cardCount: _handler.lastCountClaimed,
           ),
         );
+      }
+    });
+
+    _chatSub = _handler.chatStream.listen((msg) {
+      if (!isClosed) {
+        add(ChatStreamUpdated(msg));
       }
     });
   }
@@ -222,6 +234,7 @@ class SessionBloc extends Bloc<SessionEvent, SessionBlocState> {
     // 1. Clean up old handler
     _stateSub?.cancel();
     _eventSub?.cancel();
+    _chatSub?.cancel();
     _handler.dispose();
 
     // 2. Set new handler
@@ -258,6 +271,7 @@ class SessionBloc extends Bloc<SessionEvent, SessionBlocState> {
   Future<void> close() {
     _stateSub?.cancel();
     _eventSub?.cancel();
+    _chatSub?.cancel();
     _handler.dispose();
     return super.close();
   }
@@ -276,5 +290,40 @@ class SessionBloc extends Bloc<SessionEvent, SessionBlocState> {
     Emitter<SessionBlocState> emit,
   ) {
     emit(state.copyWith(clearFailure: true));
+  }
+
+  // Chat Handlers
+  void _onChatStreamUpdated(
+    ChatStreamUpdated event,
+    Emitter<SessionBlocState> emit,
+  ) {
+    if (event.message['type'] == 'emoji') {
+      // Ideally we can show a transient animation state, but for now we just log or let UI listen
+      // If UI listens to state.chatMessages, they will see emoji messages too.
+    }
+
+    final updatedMessages = List<Map<String, dynamic>>.from(state.chatMessages)
+      ..add(event.message);
+
+    // Limit chat history locally
+    if (updatedMessages.length > 50) {
+      updatedMessages.removeAt(0);
+    }
+
+    emit(state.copyWith(chatMessages: updatedMessages));
+  }
+
+  void _onSendChatMessage(
+    SendChatMessage event,
+    Emitter<SessionBlocState> emit,
+  ) {
+    _handler.sendChatMessage(event.message);
+  }
+
+  void _onSendEmojiMessage(
+    SendEmojiMessage event,
+    Emitter<SessionBlocState> emit,
+  ) {
+    _handler.sendEmojiMessage(event.emojiId);
   }
 }

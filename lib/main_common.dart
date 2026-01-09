@@ -53,6 +53,13 @@ Future<void> mainCommon(AppConfig config) async {
   // Initialize Service Locator
   await di.sl.setup();
 
+  // Initialize Notifications
+  try {
+    await di.sl.notificationService.initialize();
+  } catch (e) {
+    debugPrint("Failed to initialize notifications: $e");
+  }
+
   // Note: BGM will be started after successful authentication in HomeScreen
   // to avoid crashes during initialization
 

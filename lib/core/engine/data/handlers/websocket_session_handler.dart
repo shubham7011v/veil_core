@@ -42,6 +42,7 @@ class WebSocketSessionHandler
       StreamController<List<DailyChallenge>>.broadcast();
   final _challengeClaimResultController =
       StreamController<Map<String, dynamic>>.broadcast();
+  final _chatController = StreamController<Map<String, dynamic>>.broadcast();
 
   // Connection state
   ConnectionStatus _connectionStatus = ConnectionStatus.disconnected;
@@ -111,6 +112,9 @@ class WebSocketSessionHandler
 
   Stream<Map<String, dynamic>> get challengeClaimResultStream =>
       _challengeClaimResultController.stream;
+
+  @override
+  Stream<Map<String, dynamic>> get chatStream => _chatController.stream;
 
   @override
   String? get activeEventActorId => _activeEventActorId;
@@ -396,6 +400,33 @@ class WebSocketSessionHandler
             debugPrint('Failed to parse challenge claim reward: $e');
           }
           break;
+
+        case 'CHAT':
+          try {
+            final data = msg['data'] as Map<String, dynamic>;
+            // Add message type so UI knows it is chat
+            data['type'] = 'chat';
+            _chatController.add(data);
+          } catch (e) {
+            debugPrint('Failed to parse chat message: $e');
+          }
+          break;
+
+        case 'EMOJI':
+          try {
+            final data = msg['data'] as Map<String, dynamic>;
+            // Add message type so UI knows it is emoji
+            data['type'] = 'emoji';
+            _chatController.add(data);
+
+            // Play emoji sound
+            sl.audioService.playSfx(
+              SoundAssets.turnAlert,
+            ); // Reusing alert for now
+          } catch (e) {
+            debugPrint('Failed to parse emoji message: $e');
+          }
+          break;
       }
     } catch (e, stack) {
       debugPrint('Error handling WebSocket message: $e');
@@ -645,6 +676,22 @@ class WebSocketSessionHandler
     _send({'type': 'DELETE_ACCOUNT'});
   }
 
+  @override
+  void sendChatMessage(String message) {
+    _send({
+      'type': 'CHAT',
+      'data': {'message': message},
+    });
+  }
+
+  @override
+  void sendEmojiMessage(String emojiId) {
+    _send({
+      'type': 'EMOJI',
+      'data': {'emojiId': emojiId},
+    });
+  }
+
   // -- Daily Challenges --
 
   void requestChallenges() {
@@ -668,6 +715,7 @@ class WebSocketSessionHandler
     await _roomEventController.close();
     await _challengesController.close();
     await _challengeClaimResultController.close();
+    await _chatController.close();
     await _voiceManager?.dispose();
   }
 }

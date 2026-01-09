@@ -369,6 +369,41 @@ func (r *Room) processAction(action GameAction) {
 		} else {
 			err = r.game.Start()
 		}
+
+	case protocol.MsgTypeChat:
+		var payload protocol.ChatMessage
+		if json.Unmarshal(msg.Data, &payload) == nil {
+			// Broadcast chat to all
+			// We wrap it in a new message with sender info
+			out := map[string]interface{}{
+				"senderId": client.ID,
+				"message":  payload.Message,
+				"time":     time.Now().Unix(),
+			}
+			// Add Sender Name if available
+			if p := r.game.PlayerMap[client.ID]; p != nil {
+				out["senderName"] = p.Name
+			} else {
+				out["senderName"] = "Player " + client.ID
+			}
+
+			response := protocol.NewMessage(protocol.MsgTypeChat, out)
+			bytes, _ := json.Marshal(response)
+			r.broadcast <- bytes
+		}
+
+	case protocol.MsgTypeEmoji:
+		var payload protocol.EmojiMessage
+		if json.Unmarshal(msg.Data, &payload) == nil {
+			// Broadcast emoji to all
+			out := map[string]interface{}{
+				"senderId": client.ID,
+				"emojiId":  payload.EmojiID,
+			}
+			response := protocol.NewMessage(protocol.MsgTypeEmoji, out)
+			bytes, _ := json.Marshal(response)
+			r.broadcast <- bytes
+		}
 	}
 
 	if err != nil {
@@ -427,6 +462,8 @@ func isValidGameMessageType(msgType string) bool {
 		protocol.MsgTypeVoiceICE:         true,
 		protocol.MsgTypeStartGame:        true,
 		protocol.MsgTypeStartPrivateGame: true,
+		protocol.MsgTypeChat:             true,
+		protocol.MsgTypeEmoji:            true,
 	}
 	return validTypes[msgType]
 }

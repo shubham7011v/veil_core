@@ -19,6 +19,8 @@ import 'package:veil_core/features/voice/presentation/widgets/voice_overlay.dart
 import '../../../../core/di/service_locator.dart' as di;
 import '../../../../core/notifications/bloc/app_notification_bloc.dart';
 import '../../../../core/notifications/bloc/app_notification_event.dart';
+import '../../../game/presentation/widgets/chat_widget.dart';
+import '../../../game/presentation/widgets/emoji_picker.dart';
 
 class SessionScreen extends StatefulWidget {
   const SessionScreen({super.key});
@@ -46,6 +48,8 @@ class _SessionScreenState extends State<SessionScreen>
   final GlobalKey _pileKey = GlobalKey();
   final GlobalKey _stagingKey = GlobalKey();
   final List<FlyingCard> _flyingCards = [];
+  bool _showChat = false;
+  bool _showEmoji = false;
 
   @override
   void initState() {
@@ -502,7 +506,67 @@ class _SessionScreenState extends State<SessionScreen>
             ),
           );
 
-          return content;
+          return Stack(
+            children: [
+              content,
+
+              // Chat Overlay
+              if (_showChat)
+                Positioned(
+                  bottom: 100,
+                  left: 16,
+                  child: ChatWidget(
+                    onClose: () => setState(() => _showChat = false),
+                  ),
+                ),
+
+              // Emoji Overlay
+              if (_showEmoji)
+                Positioned(
+                  bottom: 100,
+                  right: 16,
+                  child: EmojiPicker(
+                    onClose: () => setState(() => _showEmoji = false),
+                  ),
+                ),
+
+              // Toggle Buttons
+              if (!showSpectatorView)
+                Positioned(
+                  bottom: 180, // Adjust based on hand view height
+                  left: 16,
+                  child: Column(
+                    children: [
+                      FloatingActionButton.small(
+                        heroTag: 'chat_btn',
+                        backgroundColor: AppColors.surfaceLight,
+                        onPressed: () => setState(() {
+                          _showChat = !_showChat;
+                          if (_showChat) _showEmoji = false;
+                        }),
+                        child: const Icon(
+                          Icons.chat_bubble_outline,
+                          color: Colors.white,
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      FloatingActionButton.small(
+                        heroTag: 'emoji_btn',
+                        backgroundColor: AppColors.surfaceLight,
+                        onPressed: () => setState(() {
+                          _showEmoji = !_showEmoji;
+                          if (_showEmoji) _showChat = false;
+                        }),
+                        child: const Icon(
+                          Icons.emoji_emotions_outlined,
+                          color: Colors.white,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+            ],
+          );
         },
       ),
     );

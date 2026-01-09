@@ -103,3 +103,29 @@ class SessionErrorOccurred extends SessionEvent {
 class SessionErrorCleared extends SessionEvent {
   const SessionErrorCleared();
 }
+
+// -- Chat Events --
+
+class SendChatMessage extends SessionEvent {
+  final String message;
+  const SendChatMessage(this.message);
+
+  @override
+  List<Object?> get props => [message];
+}
+
+class SendEmojiMessage extends SessionEvent {
+  final String emojiId;
+  const SendEmojiMessage(this.emojiId);
+
+  @override
+  List<Object?> get props => [emojiId];
+}
+
+class ChatStreamUpdated extends SessionEvent {
+  final Map<String, dynamic> message;
+  const ChatStreamUpdated(this.message);
+
+  @override
+  List<Object?> get props => [message];
+}

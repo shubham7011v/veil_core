@@ -57,6 +57,9 @@ const (
 	MsgTypeChallengesData   = "CHALLENGES_DATA"
 	MsgTypeChallengeClaim   = "CHALLENGE_CLAIM"
 	MsgTypeChallengeClaimOk = "CHALLENGE_CLAIM_OK"
+	// Social
+	MsgTypeChat  = "CHAT"
+	MsgTypeEmoji = "EMOJI"
 )
 
 // BaseMessage structure for all WebSocket messages
@@ -79,6 +82,14 @@ type UpdateNameMessage struct {
 type PlayCardsMessage struct {
 	CardIDs      []string `json:"cardIds"`
 	DeclaredRank string   `json:"declaredRank"`
+}
+
+type ChatMessage struct {
+	Message string `json:"message"`
+}
+
+type EmojiMessage struct {
+	EmojiID string `json:"emojiId"`
 }
 
 type CreatePrivateRoomMessage struct {
