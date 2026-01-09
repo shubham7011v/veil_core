@@ -63,6 +63,7 @@ class _OfflineLobbyScreenState extends State<OfflineLobbyScreen> {
     });
 
     try {
+      if (!mounted) return;
       final user = (context.read<AuthBloc>().state as Authenticated).user;
 
       // 1. Start Server

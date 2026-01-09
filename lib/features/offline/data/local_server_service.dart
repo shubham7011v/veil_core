@@ -1,3 +1,4 @@
+import 'dart:developer';
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
@@ -20,7 +21,7 @@ class LocalServerService {
 
     try {
       _server = await HttpServer.bind(InternetAddress.anyIPv4, port);
-      print(
+      log(
         'Local Server started on ${_server!.address.address}:${_server!.port}',
       );
 
@@ -37,7 +38,7 @@ class LocalServerService {
       // Listen to engine updates and broadcast
       _engine.stateStream.listen(_broadcastState);
     } catch (e) {
-      print('Failed to start local server: $e');
+      log('Failed to start local server', error: e);
       rethrow;
     }
   }
@@ -114,7 +115,7 @@ class LocalServerService {
               break;
           }
         } catch (e) {
-          print('Error handling local ws message: $e');
+          log('Error handling local ws message', error: e);
         }
       },
       onDone: () {
@@ -124,7 +125,7 @@ class LocalServerService {
         }
       },
       onError: (e) {
-        print('Local WS Error: $e');
+        log('Local WS Error', error: e);
         if (clientId != null) {
           _clients.remove(clientId);
           _engine.removePlayer(clientId!);
@@ -163,7 +164,7 @@ class LocalServerService {
     try {
       ws.add(json.encode({'type': type, 'data': data}));
     } catch (e) {
-      print('Error sending to local client: $e');
+      log('Error sending to local client', error: e);
     }
   }
 }
