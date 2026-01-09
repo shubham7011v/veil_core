@@ -145,63 +145,75 @@ class _HomeScreenState extends State<HomeScreen> {
                     ),
 
                     const SizedBox(height: 40),
+                    const SizedBox(height: 40),
                     _buildPlayOnlineCTA(context, palette),
-                    if (FeatureFlags.enablePrivateRooms) ...[
-                      const SizedBox(height: 24),
-                      _buildPrivateRoomButton(context, palette),
-                    ],
-                    if (FeatureFlags.enableFriendsMatch ||
-                        FeatureFlags.enableBotPlayers) ...[
-                      const SizedBox(height: 48),
-                      Row(
-                        children: [
-                          if (FeatureFlags.enableFriendsMatch ||
-                              FeatureFlags.enableFriendsMatchOffline)
-                            Expanded(
-                              child: _buildMatchCard(
-                                context,
-                                FeatureFlags.enableFriendsMatchOffline
-                                    ? 'FRIENDS\nMATCH (OFFLINE)'
-                                    : 'FRIENDS\nMATCH',
-                                FeatureFlags.enableFriendsMatchOffline
-                                    ? Icons.wifi_tethering
-                                    : Icons.people_outline,
-                                () {
-                                  if (FeatureFlags.enableFriendsMatchOffline) {
-                                    Navigator.pushNamed(
-                                      context,
-                                      AppRouter.offlineLobby,
-                                    );
-                                  } else {
-                                    _showComingSoonModal(context, palette);
-                                  }
-                                },
-                                palette,
-                              ),
-                            ),
-                          if (FeatureFlags.enableFriendsMatch &&
-                              FeatureFlags.enableBotPlayers)
-                            const SizedBox(width: 16),
-                          if (FeatureFlags.enableBotPlayers)
-                            Expanded(
-                              child: _buildMatchCard(
-                                context,
-                                'BOT\nMATCH',
-                                Icons.smart_toy_outlined,
-                                () => Navigator.pushNamed(
+                    const SizedBox(height: 24),
+                    _buildPrivateRoomButton(context, palette),
+                    const SizedBox(height: 48),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: _buildMatchCard(
+                            context,
+                            'FRIENDS\nMATCH',
+                            Icons.people_outline,
+                            () {
+                              if (FeatureFlags.enableFriendsMatchOffline) {
+                                Navigator.pushNamed(
                                   context,
-                                  '/bot_settings',
-                                ),
-                                palette,
-                              ),
-                            ),
-                        ],
-                      ),
-                    ],
-                    if (FeatureFlags.enableDailyChallenges) ...[
-                      const SizedBox(height: 32),
-                      _buildDailyChallenge(palette),
-                    ],
+                                  AppRouter.offlineLobby,
+                                );
+                              } else if (FeatureFlags.enableFriendsMatch) {
+                                // Online friends match flow
+                                _showComingSoonModal(
+                                  context,
+                                  palette,
+                                  featureName: 'Online Friends Match',
+                                  description:
+                                      'Play with your friends online anywhere in the world.',
+                                  icon: Icons.public,
+                                );
+                              } else {
+                                _showComingSoonModal(
+                                  context,
+                                  palette,
+                                  featureName: 'Friends Match',
+                                  description:
+                                      'Play with friends locally or online. Challenge them to a battle of wit!',
+                                  icon: Icons.people_outline,
+                                );
+                              }
+                            },
+                            palette,
+                          ),
+                        ),
+                        const SizedBox(width: 16),
+                        Expanded(
+                          child: _buildMatchCard(
+                            context,
+                            'BOT\nMATCH',
+                            Icons.smart_toy_outlined,
+                            () {
+                              if (FeatureFlags.enableBotPlayers) {
+                                Navigator.pushNamed(context, '/bot_settings');
+                              } else {
+                                _showComingSoonModal(
+                                  context,
+                                  palette,
+                                  featureName: 'Bot Match',
+                                  description:
+                                      'Practice your bluffing skills against intelligent AI opponents.',
+                                  icon: Icons.smart_toy_outlined,
+                                );
+                              }
+                            },
+                            palette,
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 32),
+                    _buildDailyChallenge(palette),
                     const SizedBox(height: 32),
                   ],
                 ),
@@ -305,19 +317,39 @@ class _HomeScreenState extends State<HomeScreen> {
             context,
             'CREATE\nROOM',
             Icons.add_circle_outline,
-            () => Navigator.pushNamed(context, '/create_room'),
+            () {
+              if (FeatureFlags.enablePrivateRooms) {
+                Navigator.pushNamed(context, '/create_room');
+              } else {
+                _showComingSoonModal(
+                  context,
+                  palette,
+                  featureName: 'Private Rooms',
+                  description:
+                      'Create a private room to host exclusive matches with invited players.',
+                  icon: Icons.add_circle_outline,
+                );
+              }
+            },
             palette,
           ),
         ),
         const SizedBox(width: 16),
         Expanded(
-          child: _buildMatchCard(
-            context,
-            'JOIN\nROOM',
-            Icons.login,
-            () => Navigator.pushNamed(context, '/join_room'),
-            palette,
-          ),
+          child: _buildMatchCard(context, 'JOIN\nROOM', Icons.login, () {
+            if (FeatureFlags.enablePrivateRooms) {
+              Navigator.pushNamed(context, '/join_room');
+            } else {
+              _showComingSoonModal(
+                context,
+                palette,
+                featureName: 'Private Rooms',
+                description:
+                    'Join a private room to participate in exclusive matches.',
+                icon: Icons.login,
+              );
+            }
+          }, palette),
         ),
       ],
     );
@@ -376,7 +408,18 @@ class _HomeScreenState extends State<HomeScreen> {
         color: Colors.transparent,
         child: InkWell(
           onTap: () {
-            Navigator.pushNamed(context, '/challenges');
+            if (FeatureFlags.enableDailyChallenges) {
+              Navigator.pushNamed(context, '/challenges');
+            } else {
+              _showComingSoonModal(
+                context,
+                palette,
+                featureName: 'Daily Challenges',
+                description:
+                    'Complete daily challenges to earn rewards and climb the leaderboard!',
+                icon: Icons.track_changes,
+              );
+            }
           },
           borderRadius: BorderRadius.circular(16),
           child: Padding(
@@ -432,23 +475,20 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  void _showComingSoonModal(BuildContext context, AppColorPalette palette) {
+  void _showComingSoonModal(
+    BuildContext context,
+    AppColorPalette palette, {
+    required String featureName,
+    required String description,
+    required IconData icon,
+  }) {
     showDialog(
       context: context,
       builder: (context) => ComingSoonModal(
-        featureName: 'Offline Hotspot Mode',
-        description:
-            'Challenge your friends in person! Create a local hotspot and play together without an internet connection.',
-        icon: Icons.wifi_tethering_rounded,
+        featureName: featureName,
+        description: description,
+        icon: icon,
         palette: palette,
-        featureHighlights: const [
-          {
-            'icon': Icons.wifi_tethering_rounded,
-            'text': 'Offline Hotspot Mode',
-          },
-          {'icon': Icons.devices_rounded, 'text': 'Local Network Play'},
-          {'icon': Icons.group_rounded, 'text': 'Connect with Nearby Friends'},
-        ],
       ),
     );
   }

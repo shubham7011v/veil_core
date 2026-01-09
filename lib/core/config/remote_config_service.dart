@@ -28,16 +28,16 @@ class RemoteConfigService {
         'max_actions_per_second': 10,
         // Feature Flags
         'enable_voice_chat': false,
-        'enable_daily_challenges':
-            true, // Enabling by default since we implemented it
+        'enable_daily_challenges': false,
         'enable_tournaments': false,
         'enable_admin_dashboard':
             true, // Enabling by default since we implemented it
-        'enable_private_rooms': true,
-        'enable_friends_match': false, // Not implemented yet
-        'enable_friends_match_offline': false, // NEW
+        'enable_private_rooms': false,
+        'enable_friends_match': false,
+        'enable_friends_match_offline': false,
+        'enable_bot_players': false,
         'admin_uids': '', // Comma-separated UIDs
-        'admin_api_key_runtime': 'VEIL_MASTER_KEY_2026', // Dynamic Key
+        'admin_api_key_runtime': '', // Set via Console or Build Args
       });
 
       await fetchAndActivate();

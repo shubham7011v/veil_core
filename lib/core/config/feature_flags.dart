@@ -28,5 +28,5 @@ class FeatureFlags {
       _rc.getBool('enable_friends_match_offline');
 
   /// Bot Players
-  static const bool enableBotPlayers = true;
+  static bool get enableBotPlayers => _rc.getBool('enable_bot_players');
 }

@@ -175,7 +175,7 @@ class AppConfig {
     adminApiKey = _getStringConfig(
       'admin_api_key_runtime',
       'ADMIN_API_KEY',
-      'VEIL_MASTER_KEY_2026',
+      '',
     );
 
     // Legal & Support URLs

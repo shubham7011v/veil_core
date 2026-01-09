@@ -1,31 +1,33 @@
 import 'dart:convert';
 import 'package:http/http.dart' as http;
+import 'package:firebase_auth/firebase_auth.dart';
 import '../../../../core/config/app_config.dart';
 
 class AdminRepository {
-  String? _adminKey;
-
-  // For now, we assume standard HTTP since admin won't use WS generally
-  // However, we need the baseURL.
-  // We can grab it from AppConfig or Environment.
-  // Ideally this would be injected, but for speed we'll use a dynamic getter.
-
+  // Base URL from config
   String get _baseUrl {
     return AppConfig.instance.apiBaseUrl;
   }
 
-  void setKey(String key) {
-    _adminKey = key;
+  // Returns headers with Firebase ID Token
+  Future<Map<String, String>> _getAuthHeaders() async {
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null) throw Exception('Not authenticated');
+
+    final token = await user.getIdToken();
+    if (token == null) throw Exception('Failed to get ID token');
+
+    return {
+      'Authorization': 'Bearer $token',
+      'Content-Type': 'application/json',
+    };
   }
 
-  bool get isAuthenticated => _adminKey != null && _adminKey!.isNotEmpty;
-
   Future<Map<String, dynamic>> getStats() async {
-    if (!isAuthenticated) throw Exception('Not Authenticated');
-
+    final headers = await _getAuthHeaders();
     final response = await http.get(
       Uri.parse('$_baseUrl/admin/stats'),
-      headers: {'X-Admin-Key': _adminKey!},
+      headers: headers,
     );
 
     if (response.statusCode == 200) {
@@ -36,11 +38,10 @@ class AdminRepository {
   }
 
   Future<List<dynamic>> getRooms() async {
-    if (!isAuthenticated) throw Exception('Not Authenticated');
-
+    final headers = await _getAuthHeaders();
     final response = await http.get(
       Uri.parse('$_baseUrl/admin/rooms'),
-      headers: {'X-Admin-Key': _adminKey!},
+      headers: headers,
     );
 
     if (response.statusCode == 200) {
@@ -51,11 +52,10 @@ class AdminRepository {
   }
 
   Future<void> closeRoom(String roomId) async {
-    if (!isAuthenticated) throw Exception('Not Authenticated');
-
+    final headers = await _getAuthHeaders();
     final response = await http.post(
       Uri.parse('$_baseUrl/admin/rooms/close'),
-      headers: {'X-Admin-Key': _adminKey!, 'Content-Type': 'application/json'},
+      headers: headers,
       body: json.encode({'roomId': roomId}),
     );
 
@@ -65,11 +65,10 @@ class AdminRepository {
   }
 
   Future<void> broadcastMessage(String message) async {
-    if (!isAuthenticated) throw Exception('Not Authenticated');
-
+    final headers = await _getAuthHeaders();
     final response = await http.post(
       Uri.parse('$_baseUrl/admin/broadcast'),
-      headers: {'X-Admin-Key': _adminKey!, 'Content-Type': 'application/json'},
+      headers: headers,
       body: json.encode({'message': message}),
     );
 
@@ -79,11 +78,10 @@ class AdminRepository {
   }
 
   Future<void> banUser(String userId) async {
-    if (!isAuthenticated) throw Exception('Not Authenticated');
-
+    final headers = await _getAuthHeaders();
     final response = await http.post(
       Uri.parse('$_baseUrl/admin/users/ban'),
-      headers: {'X-Admin-Key': _adminKey!, 'Content-Type': 'application/json'},
+      headers: headers,
       body: json.encode({'userId': userId}),
     );
 

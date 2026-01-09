@@ -1,0 +1,116 @@
+{
+    "parameters": {
+        "enable_daily_challenges": {
+            "defaultValue": {
+                "value": "false"
+            },
+            "description": "Enable Daily Challenges button",
+            "valueType": "BOOLEAN"
+        },
+        "enable_tournaments": {
+            "defaultValue": {
+                "value": "false"
+            },
+            "description": "Enable Tournaments mode",
+            "valueType": "BOOLEAN"
+        },
+        "enable_admin_dashboard": {
+            "defaultValue": {
+                "value": "true"
+            },
+            "description": "Show Admin Dashboard for admins",
+            "valueType": "BOOLEAN"
+        },
+        "enable_private_rooms": {
+            "defaultValue": {
+                "value": "false"
+            },
+            "description": "Enable Create/Join Room buttons",
+            "valueType": "BOOLEAN"
+        },
+        "enable_friends_match": {
+            "defaultValue": {
+                "value": "false"
+            },
+            "description": "Enable Online Friends Match",
+            "valueType": "BOOLEAN"
+        },
+        "enable_friends_match_offline": {
+            "defaultValue": {
+                "value": "false"
+            },
+            "description": "Enable Offline Hotspot Mode",
+            "valueType": "BOOLEAN"
+        },
+        "enable_voice_chat": {
+            "defaultValue": {
+                "value": "false"
+            },
+            "description": "Enable Voice Chat features",
+            "valueType": "BOOLEAN"
+        },
+        "enable_bot_players": {
+            "defaultValue": {
+                "value": "false"
+            },
+            "description": "Enable Bot/AI styling settings",
+            "valueType": "BOOLEAN"
+        },
+        "default_thinking_time_s": {
+            "defaultValue": {
+                "value": "10"
+            },
+            "description": "Seconds allowed for a turn",
+            "valueType": "NUMBER"
+        },
+        "max_players": {
+            "defaultValue": {
+                "value": "8"
+            },
+            "description": "Maximum lobby size",
+            "valueType": "NUMBER"
+        },
+        "reconnect_base_delay_ms": {
+            "defaultValue": {
+                "value": "2000"
+            },
+            "description": "Retry delay for connections",
+            "valueType": "NUMBER"
+        },
+        "max_reconnect_attempts": {
+            "defaultValue": {
+                "value": "5"
+            },
+            "description": "Max connection retry attempts",
+            "valueType": "NUMBER"
+        },
+        "voice_timeout_seconds": {
+            "defaultValue": {
+                "value": "30"
+            },
+            "description": "Voice chat timeout",
+            "valueType": "NUMBER"
+        },
+        "max_actions_per_second": {
+            "defaultValue": {
+                "value": "10"
+            },
+            "description": "Rate limiting for actions",
+            "valueType": "NUMBER"
+        },
+        "admin_uids": {
+            "defaultValue": {
+                "value": ""
+            },
+            "description": "Comma-separated UIDs for admin access",
+            "valueType": "STRING"
+        },
+        "admin_api_key_runtime": {
+            "defaultValue": {
+                "value": ""
+            },
+            "description": "Dynamic Admin Key",
+            "valueType": "STRING"
+        }
+    }
+}

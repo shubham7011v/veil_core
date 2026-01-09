@@ -71,22 +71,24 @@ class AdminBloc extends Bloc<AdminEvent, AdminState> {
     on<BroadcastMessageEvent>(_onBroadcast);
     on<BanUserEvent>(_onBanUser);
     on<AdminLogout>((_, emit) {
-      repository.setKey(''); // Clear key
       emit(AdminInitial());
     });
   }
 
   Future<void> _onLogin(AdminLogin event, Emitter<AdminState> emit) async {
+    // The event.key is no longer needed since we use Firebase token
+    // We can just proceed to try fetching data
     emit(AdminLoading());
-    repository.setKey(event.key);
     try {
-      // Test the key by fetching stats
       final stats = await repository.getStats();
       final rooms = await repository.getRooms();
       emit(AdminAuthenticated(stats: stats, rooms: rooms));
     } catch (e) {
-      emit(AdminError("Invalid Key or Server Error: $e"));
-      repository.setKey(''); // Reset invalid key
+      emit(
+        AdminError(
+          "Authorization Failed: Ensure your UID is an admin. Error: $e",
+        ),
+      );
     }
   }
 

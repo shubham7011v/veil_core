@@ -36,5 +36,6 @@ jobs:
                                   --restart unless-stopped \
                                   -v /home/veilapp/data:/root/data \
                                   -e ENABLE_VOICE=false \
-                                  -e ADMIN_API_KEY=${{ secrets.ADMIN_API_KEY }} \
+                                  -e FIREBASE_CREDENTIALS_JSON='${{ secrets.FIREBASE_SERVICE_ACCOUNT_PROD }}' \
+                                  -e ADMIN_UIDS='${{ secrets.ADMIN_UIDS }}' \
                                   veil-server

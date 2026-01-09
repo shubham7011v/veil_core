@@ -1,40 +1,82 @@
 package api
 
 import (
+	"context"
 	"encoding/json"
 	"log"
 	"net/http"
 	"os"
 	"runtime"
+	"strings"
 	"time"
 	"veil_server/db"
 	"veil_server/room"
+
+	"firebase.google.com/go/v4/auth"
 )
 
 // AdminHandler handles administrative requests
 type AdminHandler struct {
-	Manager *room.Manager
+	Manager    *room.Manager
+	AuthClient *auth.Client
 }
 
-func NewAdminHandler(m *room.Manager) *AdminHandler {
-	return &AdminHandler{Manager: m}
+func NewAdminHandler(m *room.Manager, auth *auth.Client) *AdminHandler {
+	return &AdminHandler{
+		Manager:    m,
+		AuthClient: auth,
+	}
 }
 
-// AdminMiddleware ensures the request has the correct X-Admin-Key
+// AdminMiddleware ensures the request has a valid Firebase ID token and the UID is authorized
 func (h *AdminHandler) AdminMiddleware(next http.HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		// Key injected from GitHub Secrets / Env Var
-		masterKey := os.Getenv("ADMIN_API_KEY")
-		if masterKey == "" {
-			masterKey = "VEIL_MASTER_KEY_2026" // Default fallback for local dev
-		}
-
-		clientKey := r.Header.Get("X-Admin-Key")
-		if clientKey != masterKey {
-			http.Error(w, "Unauthorized", http.StatusUnauthorized)
+		authHeader := r.Header.Get("Authorization")
+		if authHeader == "" {
+			http.Error(w, "Unauthorized: Missing Authorization header", http.StatusUnauthorized)
 			return
 		}
 
+		parts := strings.Split(authHeader, " ")
+		if len(parts) != 2 || parts[0] != "Bearer" {
+			http.Error(w, "Unauthorized: Invalid Authorization header format", http.StatusUnauthorized)
+			return
+		}
+
+		idToken := parts[1]
+
+		// 1. Verify Firebase Token
+		token, err := h.AuthClient.VerifyIDToken(context.Background(), idToken)
+		if err != nil {
+			log.Printf("Token verification failed: %v", err)
+			http.Error(w, "Unauthorized: Invalid token", http.StatusUnauthorized)
+			return
+		}
+
+		// 2. Check if UID is in allowed list
+		adminUIDsEnv := os.Getenv("ADMIN_UIDS")
+		if adminUIDsEnv == "" {
+			log.Println("WARNING: ADMIN_UIDS env var is empty. Admin access denied for everything.")
+			http.Error(w, "Forbidden: Server misconfiguration", http.StatusForbidden)
+			return
+		}
+
+		allowedUIDs := strings.Split(adminUIDsEnv, ",")
+		isAllowed := false
+		for _, uid := range allowedUIDs {
+			if strings.TrimSpace(uid) == token.UID {
+				isAllowed = true
+				break
+			}
+		}
+
+		if !isAllowed {
+			log.Printf("Access denied for UID: %s", token.UID)
+			http.Error(w, "Forbidden: Not an admin", http.StatusForbidden)
+			return
+		}
+
+		// Success! Proceed.
 		next(w, r)
 	}
 }
