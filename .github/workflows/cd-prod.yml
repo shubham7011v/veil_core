@@ -4,12 +4,9 @@ on:
   push:
     tags:
       - "v*"
-      # Note: We filter in the jobs to avoid double-running if it's a dev tag,
-      # but standardizing v* for production-type releases.
 
 jobs:
   vars:
-    if: "!contains(github.ref, '-dev')"
     runs-on: ubuntu-latest
     outputs:
       version_name: ${{ steps.vars.outputs.version_name }}
@@ -43,29 +40,6 @@ jobs:
       api_url: ${{ secrets.PROD_API_URL }}
       master_admin_id: ${{ secrets.MASTER_ADMIN_ID }}
 
-  build_apk:
-    name: Build APK
-    needs: vars
-    uses: ./.github/workflows/_build_flutter.yml
-    with:
-      flavor: prod
-      target: lib/main_prod.dart
-      build_type: apk
-      version_name: ${{ needs.vars.outputs.version_name }}
-      build_number: ${{ github.run_number }}
-      artifact_name: prod-release-apk
-      artifact_path: build/app/outputs/flutter-apk/app-prod-release.apk
-      dart_defines: "--dart-define=ENV=production"
-    secrets:
-      google_services_json_base64: ${{ secrets.PROD_GOOGLE_SERVICES_JSON_BASE64 }}
-      keystore_base64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
-      keystore_password: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
-      key_alias: ${{ secrets.ANDROID_KEY_ALIAS }}
-      key_password: ${{ secrets.ANDROID_KEY_PASSWORD }}
-      server_url: ${{ secrets.PROD_SERVER_URL }}
-      api_url: ${{ secrets.PROD_API_URL }}
-      master_admin_id: ${{ secrets.MASTER_ADMIN_ID }}
-
   deploy_play_store:
     name: Deploy to Play Store
     needs: [vars, build_aab]
@@ -84,13 +58,13 @@ jobs:
           serviceAccountJsonPlainText: ${{ secrets.PLAY_STORE_SERVICE_ACCOUNT_JSON }}
           packageName: com.veil.bluff
           releaseFiles: build/app/outputs/bundle/prodRelease/app-prod-release.aab
-          track: ${{ needs.vars.outputs.track }}
+          track: internal
           status: completed
           whatsNewDirectory: distribution/whatsnew
 
   create_release:
     name: Create GitHub Release
-    needs: [vars, build_aab, build_apk]
+    needs: [vars, build_aab]
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -101,20 +75,12 @@ jobs:
           name: prod-release-bundle
           path: artifacts
 
-      - name: Download APK
-        uses: actions/download-artifact@v4
-        with:
-          name: prod-release-apk
-          path: artifacts
-
       - name: Create Release
         uses: softprops/action-gh-release@v2
         with:
-          files: |
-            artifacts/app-prod-release.aab
-            artifacts/app-prod-release.apk
+          files: artifacts/app-prod-release.aab
           tag_name: ${{ github.ref_name }}
-          name: Production Release ${{ needs.vars.outputs.version_name }}
+          name: Release ${{ needs.vars.outputs.version_name }}
           draft: false
           prerelease: false
           generate_release_notes: true
