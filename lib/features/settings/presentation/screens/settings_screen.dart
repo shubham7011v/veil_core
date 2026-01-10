@@ -186,6 +186,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 _buildAboutSection(palette),
 
                 const SizedBox(height: AppDimens.paddingXL),
+                _buildServerInfo(palette),
+
+                const SizedBox(height: AppDimens.paddingXL),
                 const SizedBox(height: AppDimens.paddingXL),
               ],
             ),
@@ -796,9 +799,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
           style: TextStyle(color: palette.textTertiary, fontSize: 10),
         ),
         if (FeatureFlags.enableAdminDashboard &&
-            AppConfig.instance.adminUids.contains(
-              FirebaseAuth.instance.currentUser?.uid,
-            )) ...[
+            (AppConfig.instance.isAdmin ||
+                AppConfig.instance.adminUids.contains(
+                  FirebaseAuth.instance.currentUser?.uid,
+                ))) ...[
           const SizedBox(height: 12),
           TextButton.icon(
             onPressed: () => Navigator.pushNamed(context, '/admin'),
@@ -881,6 +885,55 @@ class _SettingsScreenState extends State<SettingsScreen> {
       onTap: onTap,
       contentPadding: const EdgeInsets.symmetric(
         horizontal: AppDimens.paddingM,
+      ),
+    );
+  }
+
+  Widget _buildServerInfo(AppColorPalette palette) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(
+        horizontal: AppDimens.paddingM,
+        vertical: 8,
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            'SERVER CONNECTION',
+            style: TextStyle(
+              color: palette.textTertiary,
+              fontSize: 11,
+              fontWeight: FontWeight.w800,
+              letterSpacing: 1.5,
+            ),
+          ),
+          const SizedBox(height: 8),
+          Container(
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: palette.surfaceLight,
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(color: palette.divider.withValues(alpha: 0.1)),
+            ),
+            child: Row(
+              children: [
+                Icon(Icons.dns_rounded, size: 16, color: palette.textSecondary),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    AppConfig.instance.serverUrl,
+                    style: TextStyle(
+                      color: palette.textSecondary,
+                      fontSize: 12,
+                      fontFamily: 'monospace',
+                    ),
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
       ),
     );
   }

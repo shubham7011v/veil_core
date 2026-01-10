@@ -85,6 +85,7 @@ class AppConfig {
   late final bool enableLogging;
   late final bool enableDebugMode;
   late List<String> adminUids;
+  bool isAdmin = false;
 
   // Legal & Support
   late final String privacyPolicyUrl;
@@ -124,6 +125,7 @@ class AppConfig {
 
   /// Manually override admin status for current user (usually from AUTH_OK websocket)
   void setAdminStatus(bool isAdmin, String uid) {
+    this.isAdmin = isAdmin;
     if (isAdmin) {
       if (!adminUids.contains(uid)) {
         adminUids = List<String>.from(adminUids)..add(uid);

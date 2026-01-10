@@ -36,12 +36,14 @@ class _AdminViewState extends State<_AdminView> {
     final user = FirebaseAuth.instance.currentUser;
     final config = AppConfig.instance;
 
-    if (user != null && config.adminUids.contains(user.uid)) {
-      // Automatically attempt login with the secret key from GitHub Secrets/Dart Defines
+    // Trust the dynamic isAdmin flag set from server AUTH_OK or the whitelist
+    if (user != null &&
+        (config.isAdmin || config.adminUids.contains(user.uid))) {
+      // Automatically attempt login
       context.read<AdminBloc>().add(AdminLogin());
     } else {
-      // Not an admin in the injected list
-      context.read<AdminBloc>().add(AdminLogout()); // Ensure reset
+      // Not an admin
+      context.read<AdminBloc>().add(AdminLogout());
     }
   }
 
@@ -81,14 +83,16 @@ class _AdminViewState extends State<_AdminView> {
       body: BlocBuilder<AdminBloc, AdminState>(
         builder: (context, state) {
           if (state is AdminInitial || state is AdminError) {
+            String? errorMessage;
             if (state is AdminError) {
+              errorMessage = state.message;
               WidgetsBinding.instance.addPostFrameCallback((_) {
                 ScaffoldMessenger.of(
                   context,
                 ).showSnackBar(SnackBar(content: Text(state.message)));
               });
             }
-            return _buildLogin(context);
+            return _buildLogin(context, errorMessage);
           }
 
           if (state is AdminLoading) {
@@ -107,7 +111,7 @@ class _AdminViewState extends State<_AdminView> {
     );
   }
 
-  Widget _buildLogin(BuildContext context) {
+  Widget _buildLogin(BuildContext context, [String? errorMessage]) {
     return Center(
       child: Padding(
         padding: const EdgeInsets.all(32.0),
@@ -116,9 +120,9 @@ class _AdminViewState extends State<_AdminView> {
           children: [
             const Icon(Icons.lock_person, size: 64, color: Colors.redAccent),
             const SizedBox(height: 32),
-            const Text(
-              'UNAUTHORIZED ACCESS',
-              style: TextStyle(
+            Text(
+              errorMessage != null ? 'LOGIN FAILED' : 'UNAUTHORIZED ACCESS',
+              style: const TextStyle(
                 color: Colors.redAccent,
                 fontWeight: FontWeight.bold,
                 fontSize: 18,
@@ -126,13 +130,27 @@ class _AdminViewState extends State<_AdminView> {
               ),
             ),
             const SizedBox(height: 16),
+            if (errorMessage != null)
+              Padding(
+                padding: const EdgeInsets.only(bottom: 16),
+                child: Text(
+                  errorMessage,
+                  textAlign: TextAlign.center,
+                  style: const TextStyle(
+                    color: Colors.orangeAccent,
+                    fontSize: 12,
+                  ),
+                ),
+              ),
             Text(
               'User UID: ${FirebaseAuth.instance.currentUser?.uid ?? "Unknown"}',
               style: const TextStyle(color: Colors.grey, fontSize: 10),
             ),
             const SizedBox(height: 32),
             Text(
-              'This terminal is restricted to ${AppConfig.instance.isProduction ? "production" : "development"} administrators. Your UID must be registered in the mainframe via GitHub Secrets.',
+              errorMessage != null
+                  ? 'Server rejected the administrative request.'
+                  : 'This terminal is restricted to ${AppConfig.instance.isProduction ? "production" : "development"} administrators. Your UID must be registered in the mainframe via GitHub Secrets.',
               textAlign: TextAlign.center,
               style: const TextStyle(color: Colors.white70),
             ),

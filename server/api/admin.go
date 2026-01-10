@@ -32,7 +32,17 @@ func NewAdminHandler(m *room.Manager, auth *auth.Client) *AdminHandler {
 // AdminMiddleware ensures the request has a valid Firebase ID token and the UID is authorized
 func (h *AdminHandler) AdminMiddleware(next http.HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		// 0. Check if Admin Dashboard is enabled
+		// 0. Handle CORS Preflight
+		w.Header().Set("Access-Control-Allow-Origin", "*")
+		w.Header().Set("Access-Control-Allow-Methods", "GET, POST, OPTIONS, DELETE")
+		w.Header().Set("Access-Control-Allow-Headers", "Authorization, Content-Type")
+
+		if r.Method == "OPTIONS" {
+			w.WriteHeader(http.StatusOK)
+			return
+		}
+
+		// Check if Admin Dashboard is enabled
 		if !config.GetFeatureFlags().EnableAdminDashboard {
 			http.Error(w, "Forbidden: Admin Dashboard is disabled", http.StatusForbidden)
 			return
@@ -75,7 +85,6 @@ func (h *AdminHandler) AdminMiddleware(next http.HandlerFunc) http.HandlerFunc {
 
 		for _, uid := range allowedUIDs {
 			trimmedAllowedUID := strings.TrimSpace(uid)
-			log.Printf("ADMIN_CHECK: Comparing '%s' (env) with '%s' (token)", trimmedAllowedUID, trimmedTokenUID)
 			if trimmedAllowedUID == trimmedTokenUID {
 				isAllowed = true
 				break
