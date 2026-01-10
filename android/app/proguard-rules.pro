@@ -20,5 +20,24 @@
 -keep class org.webrtc.** { *; }
 -dontwarn org.webrtc.**
 
+# Firebase Messaging (Notifications)
+-keep class com.google.firebase.messaging.** { *; }
+-keep class com.google.firebase.iid.** { *; }
+-dontwarn com.google.firebase.messaging.**
+
+# Audio Players (Native audio playback)
+-keep class xyz.luan.audioplayers.** { *; }
+-dontwarn xyz.luan.audioplayers.**
+
+# Gson (Used by many plugins for JSON serialization)
+-keepattributes Signature
+-keepattributes *Annotation*
+-dontwarn sun.misc.**
+-keep class com.google.gson.** { *; }
+-keep class * implements com.google.gson.TypeAdapter
+-keep class * implements com.google.gson.TypeAdapterFactory
+-keep class * implements com.google.gson.JsonSerializer
+-keep class * implements com.google.gson.JsonDeserializer
+
 # Prevent obfuscation of specialized classes
 -keep class com.veil.bluff.models.** { *; }
