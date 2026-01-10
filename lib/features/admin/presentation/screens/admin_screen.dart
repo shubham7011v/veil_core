@@ -131,10 +131,10 @@ class _AdminViewState extends State<_AdminView> {
               style: const TextStyle(color: Colors.grey, fontSize: 10),
             ),
             const SizedBox(height: 32),
-            const Text(
-              'This terminal is restricted to production administrators. Your UID must be registered in the mainframe via GitHub Secrets.',
+            Text(
+              'This terminal is restricted to ${AppConfig.instance.isProduction ? "production" : "development"} administrators. Your UID must be registered in the mainframe via GitHub Secrets.',
               textAlign: TextAlign.center,
-              style: TextStyle(color: Colors.white70),
+              style: const TextStyle(color: Colors.white70),
             ),
             const SizedBox(height: 48),
             TextButton(
