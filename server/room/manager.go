@@ -504,11 +504,18 @@ func (m *Manager) sendAuthOk(c *Client, stats *db.UserStats) {
 
 // GetActiveRooms returns a snapshot of all rooms
 func (m *Manager) GetActiveRooms() []ActiveRoomInfo {
+	// 1. Copy room pointers briefly under a read lock
 	m.mu.RLock()
-	defer m.mu.RUnlock()
-
-	var list []ActiveRoomInfo
+	roomsCopy := make(map[string]*Room)
 	for id, r := range m.Rooms {
+		roomsCopy[id] = r
+	}
+	m.mu.RUnlock()
+
+	// 2. Iterate outside the manager lock to fetch room-level info
+	// This prevents one slow/locked room from blocking the entire manager
+	var list []ActiveRoomInfo
+	for id, r := range roomsCopy {
 		info := ActiveRoomInfo{
 			ID:          id,
 			PlayerCount: r.GetClientCount(),

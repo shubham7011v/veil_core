@@ -172,49 +172,48 @@ func (r *Room) Run() {
 	for {
 		select {
 		case client := <-r.register:
+			// 1. Perform I/O (Deduct coins) BEFORE locking the room
+			var joinErr error
+			boot := 100 // Default public stake
+			if r.isPrivate {
+				boot = int(r.bootAmount)
+			}
+
+			if !client.IsSpectator && !client.IsBot {
+				joinErr = db.UpdateUserCoins(client.ID, -boot)
+				if joinErr != nil {
+					log.Printf("Cannot join room: Insufficient funds for %s: %v", client.ID, joinErr)
+					r.sendErrorToClient(client, "INSUFFICIENT_FUNDS", "Not enough coins to join")
+					continue // Drop this registration attempt
+				}
+			}
+
+			// 2. Now take the lock for in-memory updates
 			r.mu.Lock()
 			r.clients[client] = true
 			log.Printf("Client joined Room %s (Spectator: %v)", r.ID, client.IsSpectator)
 
 			if !client.IsSpectator {
-				// 1. Check Balance and Deduct Coins
-				// Default boot amount for public matches or private setting
-				boot := 100 // Default public stake
-				if r.isPrivate {
-					boot = int(r.bootAmount)
+				// We already deducted coins above, now just add to game
+				name := client.Name
+				if name == "" {
+					name = "Player " + client.ID
 				}
-
-				// Deduct coins via DB transaction (skipped for bots)
-				var err error
-				if !client.IsBot {
-					err = db.UpdateUserCoins(client.ID, -boot)
-				}
-
-				if err != nil {
-					log.Printf("Cannot join room: Insufficient funds for %s", client.ID)
-					r.sendErrorToClient(client, "INSUFFICIENT_FUNDS", "Not enough coins to join")
+				if err := r.game.AddPlayer(client.ID, name); err != nil {
+					log.Printf("Error adding player %s to game in room %s: %v", client.ID, r.ID, err)
+					// Refund if add fails (Note: This is still I/O inside a lock, but failing here is rare)
+					if !client.IsBot {
+						db.BufferCoinUpdate(client.ID, boot) // Use buffer for asynchronous refund
+					}
 				} else {
-					// Auto-join game logic
-					name := client.Name
-					if name == "" {
-						name = "Player " + client.ID
-					}
-					if err := r.game.AddPlayer(client.ID, name); err != nil {
-						log.Printf("Error adding player %s to game in room %s: %v", client.ID, r.ID, err)
-						// Refund if add fails?
-						if !client.IsBot {
-							db.UpdateUserCoins(client.ID, boot)
-						}
-					} else {
-						log.Printf("Player %s successfully added to game in room %s. Players: %d/%d",
-							client.ID, r.ID, len(r.game.Players), r.maxPlayers)
-					}
+					log.Printf("Player %s successfully added to game in room %s. Players: %d/%d",
+						client.ID, r.ID, len(r.game.Players), r.maxPlayers)
+				}
 
-					// Check auto-start for public rooms
-					if !r.isPrivate && len(r.game.Players) >= r.maxPlayers && r.game.Phase == game.PhaseLobby {
-						log.Printf("Auto-starting public match in room %s (All players joined)", r.ID)
-						r.game.Start()
-					}
+				// Check auto-start for public rooms
+				if !r.isPrivate && len(r.game.Players) >= r.maxPlayers && r.game.Phase == game.PhaseLobby {
+					log.Printf("Auto-starting public match in room %s (All players joined)", r.ID)
+					r.game.Start()
 				}
 			}
 
@@ -451,21 +450,21 @@ func (r *Room) processAction(action GameAction) {
 			}
 			potAmount := boot * len(r.game.Participants)
 
-			// 2. Record in SQLite
+			// 2. Record in SQLite (Moved to goroutine to prevent blocking room lock)
 			var playerIDs []string
 			for _, p := range r.game.Participants {
 				playerIDs = append(playerIDs, p.ID)
 			}
 			matchID := fmt.Sprintf("%s_%d", r.ID, time.Now().Unix())
+			winnerID := r.game.WinnerID
 
-			if err := db.RecordGameResult(matchID, playerIDs, r.game.WinnerID, 120, potAmount); err != nil {
-				log.Printf("Failed to record game result: %v", err)
-			}
+			go func(mid string, pids []string, wid string, pot int) {
+				if err := db.RecordGameResult(mid, pids, wid, 120, pot); err != nil {
+					log.Printf("Background: Failed to record game result: %v", err)
+				}
+			}(matchID, playerIDs, winnerID, potAmount)
 
 			// 3. Broadcast Updated Stats
-			// Note: broadcastStats requires mutex because it iterates clients.
-			// Currently we HOLD mutex here (called from Run).
-			// So internal helper should NOT lock.
 			r.broadcastStats()
 		}
 	}
@@ -500,16 +499,27 @@ func (r *Room) sendErrorToClient(client *Client, code, message string) {
 }
 
 func (r *Room) broadcastStats() {
-	for client := range r.clients {
-		stats, err := db.GetOrCreateUser(client.ID, "") // Name ignored on fetch
-		if err == nil {
-			msg := protocol.NewMessage("STATS_UPDATE", stats)
-			bytes, _ := json.Marshal(msg)
-			select {
-			case client.Send <- bytes:
-			default:
+	// 1. Get client snapshot and release lock quickly
+	r.mu.RLock()
+	var clients []*Client
+	for c := range r.clients {
+		clients = append(clients, c)
+	}
+	r.mu.RUnlock()
+
+	// 2. Perform DB lookups and sends outside the room lock
+	for _, client := range clients {
+		go func(c *Client) {
+			stats, err := db.GetOrCreateUser(c.ID, "") // Name ignored on fetch
+			if err == nil {
+				msg := protocol.NewMessage("STATS_UPDATE", stats)
+				bytes, _ := json.Marshal(msg)
+				select {
+				case c.Send <- bytes:
+				default:
+				}
 			}
-		}
+		}(client)
 	}
 }
 

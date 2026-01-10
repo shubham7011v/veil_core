@@ -113,7 +113,7 @@ class _AdminViewState extends State<_AdminView> {
 
   Widget _buildLogin(BuildContext context, [String? errorMessage]) {
     return Center(
-      child: Padding(
+      child: SingleChildScrollView(
         padding: const EdgeInsets.all(32.0),
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
@@ -160,6 +160,19 @@ class _AdminViewState extends State<_AdminView> {
               style: const TextStyle(color: Colors.white70),
             ),
             const SizedBox(height: 48),
+            if (errorMessage != null)
+              ElevatedButton.icon(
+                onPressed: () {
+                  context.read<AdminBloc>().add(AdminLogin());
+                },
+                icon: const Icon(Icons.refresh),
+                label: const Text('RETRY INITIALIZATION'),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.greenAccent,
+                  foregroundColor: Colors.black,
+                ),
+              ),
+            const SizedBox(height: 24),
             TextButton(
               onPressed: () => Navigator.pop(context),
               child: const Text(

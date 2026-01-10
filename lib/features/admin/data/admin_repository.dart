@@ -53,7 +53,7 @@ class AdminRepository {
     try {
       final response = await http
           .get(Uri.parse(url), headers: headers)
-          .timeout(const Duration(seconds: 10));
+          .timeout(const Duration(seconds: 20));
 
       final duration = DateTime.now().difference(start).inMilliseconds;
       debugPrint(
@@ -80,7 +80,7 @@ class AdminRepository {
     try {
       final response = await http
           .get(Uri.parse(url), headers: headers)
-          .timeout(const Duration(seconds: 10));
+          .timeout(const Duration(seconds: 20));
 
       final duration = DateTime.now().difference(start).inMilliseconds;
       debugPrint(
