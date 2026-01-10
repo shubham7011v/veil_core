@@ -25,10 +25,9 @@ class AdminRepository {
 
   Future<Map<String, dynamic>> getStats() async {
     final headers = await _getAuthHeaders();
-    final response = await http.get(
-      Uri.parse('$_baseUrl/admin/stats'),
-      headers: headers,
-    );
+    final response = await http
+        .get(Uri.parse('$_baseUrl/admin/stats'), headers: headers)
+        .timeout(const Duration(seconds: 10));
 
     if (response.statusCode == 200) {
       return json.decode(response.body) as Map<String, dynamic>;
@@ -39,10 +38,9 @@ class AdminRepository {
 
   Future<List<dynamic>> getRooms() async {
     final headers = await _getAuthHeaders();
-    final response = await http.get(
-      Uri.parse('$_baseUrl/admin/rooms'),
-      headers: headers,
-    );
+    final response = await http
+        .get(Uri.parse('$_baseUrl/admin/rooms'), headers: headers)
+        .timeout(const Duration(seconds: 10));
 
     if (response.statusCode == 200) {
       return json.decode(response.body) as List<dynamic>;
