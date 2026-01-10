@@ -89,10 +89,17 @@ func (m *Manager) Run() {
 			clients, matchType := m.Queue.Tick()
 			if clients != nil {
 				if matchType == "BOT" {
-					// Spawn Bot
-					bot := NewBot(m)
-					clients = append(clients, bot.Client)
-					log.Println("Spawning Bot for timeout match")
+					if config.GetFeatureFlags().EnableBotPlayers {
+						// Spawn Bot
+						bot := NewBot(m)
+						clients = append(clients, bot.Client)
+						log.Println("Spawning Bot for timeout match")
+					} else {
+						// Bots disabled, put player back in queue if we returned them?
+						// Actually Queue.Tick() pops them. We should probably return them to queue.
+						m.Queue.Add(clients[0])
+						continue
+					}
 				}
 				m.createMatchRoom(clients)
 			}

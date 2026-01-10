@@ -29,6 +29,7 @@ type Client struct {
 	CurrentRoom *Room  // Pointer to room they are in, if any
 	IsBot       bool   // True if this is a server-side bot
 	IsSpectator bool   // True if joining as a watcher
+	Name        string // Display name
 
 	// Rate limiting
 	lastActionTime time.Time

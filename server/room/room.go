@@ -184,18 +184,27 @@ func (r *Room) Run() {
 					boot = int(r.bootAmount)
 				}
 
-				// Deduct coins via DB transaction
-				if err := db.UpdateUserCoins(client.ID, -boot); err != nil {
+				// Deduct coins via DB transaction (skipped for bots)
+				var err error
+				if !client.IsBot {
+					err = db.UpdateUserCoins(client.ID, -boot)
+				}
+
+				if err != nil {
 					log.Printf("Cannot join room: Insufficient funds for %s", client.ID)
 					r.sendErrorToClient(client, "INSUFFICIENT_FUNDS", "Not enough coins to join")
-					// Clean up / kick logic would go here ideally
-					// For now, just logging - they might join but be 'broke' effectively
 				} else {
 					// Auto-join game logic
-					if err := r.game.AddPlayer(client.ID, "Player "+client.ID); err != nil {
+					name := client.Name
+					if name == "" {
+						name = "Player " + client.ID
+					}
+					if err := r.game.AddPlayer(client.ID, name); err != nil {
 						log.Printf("Error adding player: %v", err)
 						// Refund if add fails?
-						db.UpdateUserCoins(client.ID, boot)
+						if !client.IsBot {
+							db.UpdateUserCoins(client.ID, boot)
+						}
 					}
 
 					// Check auto-start for public rooms

@@ -25,8 +25,7 @@ type Bot struct {
 func NewBot(manager *Manager) *Bot {
 	// 1. Generate Identity
 	rand.Seed(time.Now().UnixNano())
-	// name := BotNameList[rand.Intn(len(BotNameList))]
-	// TODO: Use name when registering Bot in DB if needed
+	name := BotNameList[rand.Intn(len(BotNameList))]
 	id := "bot_" + generateRandomString(8)
 
 	// 2. Create Client (No Conn, IsBot=true)
@@ -35,6 +34,7 @@ func NewBot(manager *Manager) *Bot {
 		Conn:  nil, // No WebSocket connection
 		Send:  make(chan []byte, 256),
 		ID:    id,
+		Name:  name,
 		IsBot: true,
 	}
 
