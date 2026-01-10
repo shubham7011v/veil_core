@@ -110,23 +110,18 @@ func (m *Manager) Run() {
 func (m *Manager) createMatchRoom(clients []*Client) {
 	roomID := fmt.Sprintf("match_%d", time.Now().UnixNano())
 	room := NewRoom(roomID)
+	room.maxPlayers = len(clients) // Crucial for auto-start with bots/matchmaking
 	m.Rooms[roomID] = room
 	go room.Run()
 
-	log.Printf("Starting Match Room %s with %d players", roomID, len(clients))
+	log.Printf("Starting Match Room %s with %d players (max: %d)", roomID, len(clients), room.maxPlayers)
 
 	for _, c := range clients {
 		c.CurrentRoom = room
 		room.Join(c)
 	}
 
-	// Wait briefly for registers then start
-	go func() {
-		time.Sleep(500 * time.Millisecond)
-		startMsg := protocol.BaseMessage{Type: protocol.MsgTypeStartGame}
-		// Send start triggering via first client
-		room.HandleAction(GameAction{Client: clients[0], Message: startMsg})
-	}()
+	// The room's register loop will auto-start the game when len(r.game.Players) == r.maxPlayers
 }
 
 // HandleMessage routes incoming messages from clients

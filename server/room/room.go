@@ -200,15 +200,19 @@ func (r *Room) Run() {
 						name = "Player " + client.ID
 					}
 					if err := r.game.AddPlayer(client.ID, name); err != nil {
-						log.Printf("Error adding player: %v", err)
+						log.Printf("Error adding player %s to game in room %s: %v", client.ID, r.ID, err)
 						// Refund if add fails?
 						if !client.IsBot {
 							db.UpdateUserCoins(client.ID, boot)
 						}
+					} else {
+						log.Printf("Player %s successfully added to game in room %s. Players: %d/%d",
+							client.ID, r.ID, len(r.game.Players), r.maxPlayers)
 					}
 
 					// Check auto-start for public rooms
-					if !r.isPrivate && len(r.game.Players) == r.maxPlayers && r.game.Phase == game.PhaseLobby {
+					if !r.isPrivate && len(r.game.Players) >= r.maxPlayers && r.game.Phase == game.PhaseLobby {
+						log.Printf("Auto-starting public match in room %s (All players joined)", r.ID)
 						r.game.Start()
 					}
 				}
@@ -372,18 +376,17 @@ func (r *Room) processAction(action GameAction) {
 			}
 		}
 
-	case protocol.MsgTypeStartGame:
-		if r.isPrivate && client.ID != r.hostID {
-			err = fmt.Errorf("only host can start the game")
-		} else {
-			err = r.game.Start()
-		}
-
-	case protocol.MsgTypeStartPrivateGame:
-		if client.ID != r.hostID {
-			err = fmt.Errorf("only host can start the game")
-		} else {
-			err = r.game.Start()
+	case protocol.MsgTypeStartGame, protocol.MsgTypeStartPrivateGame:
+		if r.game.Phase == game.PhaseLobby {
+			// For private rooms, only host can start
+			if r.isPrivate && client.ID != r.hostID {
+				err = fmt.Errorf("only host can start the game")
+			} else {
+				err = r.game.Start()
+				if err == nil {
+					log.Printf("Game started manually in room %s by %s", r.ID, client.ID)
+				}
+			}
 		}
 
 	case protocol.MsgTypeChat:
