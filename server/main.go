@@ -15,6 +15,7 @@ import (
 	"veil_server/config"
 	"veil_server/db"
 	"veil_server/room"
+	"veil_server/version"
 
 	firebase "firebase.google.com/go/v4"
 	"google.golang.org/api/option"
@@ -82,6 +83,12 @@ func main() {
 		json.NewEncoder(w).Encode(config.GetFeatureFlags())
 	})
 
+	// Version endpoint
+	http.HandleFunc("/api/version", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(map[string]string{"version": version.GetVersion()})
+	})
+
 	// Create server
 	srv := &http.Server{
 		Addr: ":" + port,
@@ -92,7 +99,7 @@ func main() {
 	signal.Notify(done, os.Interrupt, syscall.SIGINT, syscall.SIGTERM)
 
 	go func() {
-		log.Printf("Veil Server listening on :%s", port)
+		log.Printf("Veil Server v%s listening on :%s", version.GetVersion(), port)
 		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 			log.Fatalf("listen: %s\n", err)
 		}

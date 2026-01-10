@@ -13,8 +13,11 @@ RUN go mod download
 # Copy source code
 COPY . .
 
-# Build the binary with CGO enabled for SQLite
-RUN CGO_ENABLED=1 GOOS=linux go build -o veil-server .
+# Accept version as build argument
+ARG VERSION=dev
+
+# Build the binary with CGO enabled for SQLite and embed version
+RUN CGO_ENABLED=1 GOOS=linux go build -ldflags "-X veil_server/version.Version=${VERSION}" -o veil-server .
 
 # Runtime stage
 FROM alpine:latest

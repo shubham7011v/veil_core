@@ -27,6 +27,10 @@ jobs:
                   key: ${{ secrets.SSH_KEY }}
                   envs: FIREBASE_CREDS,ADMIN_UIDS,ENABLE_VOICE_CHAT,ENABLE_DAILY_CHALLENGES,ENABLE_TOURNAMENTS,ENABLE_ADMIN_DASHBOARD,MAX_PLAYERS
                   script: |
+                      # Extract version from tag
+                      VERSION="${{ github.ref_name }}"
+                      echo "Deploying version: $VERSION"
+
                       # Update code
                       cd ~/veil_core
                       git fetch --all --tags
@@ -45,14 +49,14 @@ jobs:
                       MAX_PLAYERS=$MAX_PLAYERS
                       EOF
 
-                      # Build image
+                      # Build image with version
                       cd server
-                      docker build --network=host -t veil-server:dev .
+                      docker build --network=host --build-arg VERSION=$VERSION -t veil-server:dev .
 
                       # Ensure docker-compose.yml is up to date
                       cp ~/veil_core/docker-compose-production.yml /root/docker-compose.yml
 
-                      # Restart container using docker-compose
+                      # Restart container using docker compose
                       cd /root
                       docker compose up -d --force-recreate veil-game-dev
 
@@ -64,4 +68,15 @@ jobs:
                         exit 1
                       fi
 
-                      echo "✅ Dev deployment successful!"
+                      # Verify version
+                      echo "Verifying deployed version..."
+                      DEPLOYED_VERSION=$(curl -s http://localhost:8080/api/version | grep -o '"version":"[^"]*"' | cut -d'"' -f4)
+                      echo "Expected: $VERSION"
+                      echo "Deployed: $DEPLOYED_VERSION"
+
+                      if [ "$DEPLOYED_VERSION" != "$VERSION" ]; then
+                        echo "❌ Version mismatch! Expected $VERSION but got $DEPLOYED_VERSION"
+                        exit 1
+                      fi
+
+                      echo "✅ Dev deployment successful! Version $VERSION verified."
