@@ -36,63 +36,89 @@ Future<void> mainCommon({required String env, required String appName}) async {
       FlutterNativeSplash.preserve(widgetsBinding: WidgetsBinding.instance);
 
       // Initialize Core Configuration Singleton
+      debugPrint('🚀 [STARTUP] 1. Initializing AppConfig...');
       await AppConfig.initialize(env: env, appName: appName);
       final config = AppConfig.instance;
+      debugPrint('🚀 [STARTUP] 1. AppConfig initialized');
 
       final options =
           config.environment == 'production' || config.environment == 'prod'
           ? prod.DefaultFirebaseOptions.currentPlatform
           : dev.DefaultFirebaseOptions.currentPlatform;
 
+      debugPrint('🚀 [STARTUP] 2. Initializing Firebase...');
       await Firebase.initializeApp(options: options);
+      debugPrint('🚀 [STARTUP] 2. Firebase initialized');
 
       // Initialize Remote Config Service (Fetch values from Firebase)
-      await RemoteConfigService.instance.initialize();
+      debugPrint('🚀 [STARTUP] 3. Initializing Remote Config...');
+      await RemoteConfigService.instance.initialize().timeout(
+        const Duration(seconds: 10),
+        onTimeout: () =>
+            debugPrint('🚀 [STARTUP] 3. Remote Config Timeout (continuing)'),
+      );
+      debugPrint('🚀 [STARTUP] 3. Remote Config initialized');
 
       // Fully load config (Now it can use fetched Remote Config values)
       config.load();
+      debugPrint('🚀 [STARTUP] 4. Config loaded');
       // Connectivity Doctor & Server Config Sync
-      debugPrint('🚨 [DEBUG] Fetching Server Config...');
+      debugPrint('🚀 [STARTUP] 5. Syncing Server Config...');
       try {
         final client = HttpClient();
         final request = await client
             .getUrl(Uri.parse('${config.apiBaseUrl}/config'))
-            .timeout(const Duration(seconds: 5));
+            .timeout(const Duration(seconds: 4)); // Reduced timeout
         final response = await request.close();
 
         if (response.statusCode == 200) {
           final body = await response.transform(utf8.decoder).join();
           final serverData = json.decode(body) as Map<String, dynamic>;
           config.updateFromServer(serverData);
-          debugPrint('🚨 Server Config Synced: $serverData');
+          debugPrint('🚀 [STARTUP] 5. Server Config Synced: $serverData');
         } else {
           debugPrint(
-            '🚨 Server Config Fetch Failed: Status ${response.statusCode}',
+            '🚀 [STARTUP] 5. Server Config Fetch Failed: Status ${response.statusCode}',
           );
         }
       } catch (e) {
-        debugPrint('🚨 Server Config Sync Failed: $e');
-      }
-      try {
-        await FirebaseAppCheck.instance.activate(
-          providerAndroid: config.isDevelopment
-              ? const AndroidDebugProvider()
-              : const AndroidPlayIntegrityProvider(),
-          providerApple: const AppleDeviceCheckProvider(),
+        debugPrint(
+          '🚀 [STARTUP] 5. Server Config Sync Failed (continuing): $e',
         );
-        debugPrint('Firebase App Check activated');
+      }
+      debugPrint('🚀 [STARTUP] 6. Activating App Check...');
+      try {
+        await FirebaseAppCheck.instance
+            .activate(
+              providerAndroid: config.isDevelopment
+                  ? const AndroidDebugProvider()
+                  : const AndroidPlayIntegrityProvider(),
+              providerApple: const AppleDeviceCheckProvider(),
+            )
+            .timeout(const Duration(seconds: 5));
+        debugPrint('🚀 [STARTUP] 6. App Check activated');
       } catch (e) {
-        debugPrint('Firebase App Check activation failed: $e');
+        debugPrint(
+          '🚀 [STARTUP] 6. App Check activation failed (continuing): $e',
+        );
       }
 
       // Initialize Service Locator
+      debugPrint('🚀 [STARTUP] 7. Setting up Service Locator...');
       await di.sl.setup();
+      debugPrint('🚀 [STARTUP] 7. Service Locator ready');
 
       // Initialize Notifications
+      debugPrint('🚀 [STARTUP] 8. Initializing Notifications...');
       try {
-        await di.sl.notificationService.initialize();
+        await di.sl.notificationService.initialize().timeout(
+          const Duration(seconds: 5),
+        );
+        debugPrint('🚀 [STARTUP] 8. Notifications initialized');
       } catch (e) {
-        debugPrint("Failed to initialize notifications: $e");
+        debugPrint(
+          "🚀 [STARTUP] 8. Notification initialization failed (continuing): $e",
+        );
       }
 
       debugPrint('🚀 [STARTUP] runApp() called');

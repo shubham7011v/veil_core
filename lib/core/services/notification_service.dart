@@ -12,6 +12,7 @@ Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
 
 class NotificationService {
   final FirebaseMessaging _fcm = FirebaseMessaging.instance;
+  static bool _backgroundHandlerRegistered = false;
 
   Future<void> initialize() async {
     // 1. Request Permission (critical for iOS)
@@ -52,7 +53,13 @@ class NotificationService {
     });
 
     // 3. Set Background/Terminated Handler
-    FirebaseMessaging.onBackgroundMessage(_firebaseMessagingBackgroundHandler);
+    if (!_backgroundHandlerRegistered) {
+      FirebaseMessaging.onBackgroundMessage(
+        _firebaseMessagingBackgroundHandler,
+      );
+      _backgroundHandlerRegistered = true;
+      debugPrint('FCM Background Handler registered');
+    }
 
     // 4. Handle notification tap when app is in background but opened
     FirebaseMessaging.onMessageOpenedApp.listen((RemoteMessage message) {
