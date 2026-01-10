@@ -37,38 +37,53 @@ Future<void> mainCommon({required String env, required String appName}) async {
 
       // Initialize Core Configuration Singleton
       debugPrint('🚀 [STARTUP] 1. Initializing AppConfig...');
-      await AppConfig.initialize(env: env, appName: appName);
-      final config = AppConfig.instance;
-      debugPrint('🚀 [STARTUP] 1. AppConfig initialized');
+      try {
+        await AppConfig.initialize(env: env, appName: appName);
+        debugPrint('🚀 [STARTUP] 1. AppConfig initialized');
+      } catch (e) {
+        throw 'AppConfig Initialization Failed: $e';
+      }
 
+      final config = AppConfig.instance;
       final options =
           config.environment == 'production' || config.environment == 'prod'
           ? prod.DefaultFirebaseOptions.currentPlatform
           : dev.DefaultFirebaseOptions.currentPlatform;
 
       debugPrint('🚀 [STARTUP] 2. Initializing Firebase...');
-      await Firebase.initializeApp(options: options);
-      debugPrint('🚀 [STARTUP] 2. Firebase initialized');
+      try {
+        await Firebase.initializeApp(options: options);
+        debugPrint('🚀 [STARTUP] 2. Firebase initialized');
+      } catch (e) {
+        throw 'Firebase Initialization Failed: $e';
+      }
 
       // Initialize Remote Config Service (Fetch values from Firebase)
       debugPrint('🚀 [STARTUP] 3. Initializing Remote Config...');
-      await RemoteConfigService.instance.initialize().timeout(
-        const Duration(seconds: 10),
-        onTimeout: () =>
-            debugPrint('🚀 [STARTUP] 3. Remote Config Timeout (continuing)'),
-      );
-      debugPrint('🚀 [STARTUP] 3. Remote Config initialized');
+      try {
+        await RemoteConfigService.instance.initialize().timeout(
+          const Duration(seconds: 10),
+          onTimeout: () =>
+              debugPrint('🚀 [STARTUP] 3. Remote Config Timeout (continuing)'),
+        );
+        debugPrint('🚀 [STARTUP] 3. Remote Config initialized');
+      } catch (e) {
+        // Non-fatal, continue
+        debugPrint('🚀 [STARTUP] 3. Remote Config Failed (continuing): $e');
+      }
 
-      // Fully load config (Now it can use fetched Remote Config values)
+      // Fully load config
       config.load();
       debugPrint('🚀 [STARTUP] 4. Config loaded');
+
       // Connectivity Doctor & Server Config Sync
       debugPrint('🚀 [STARTUP] 5. Syncing Server Config...');
       try {
         final client = HttpClient();
+        client.connectionTimeout = const Duration(seconds: 5);
         final request = await client
             .getUrl(Uri.parse('${config.apiBaseUrl}/config'))
-            .timeout(const Duration(seconds: 4)); // Reduced timeout
+            .timeout(const Duration(seconds: 5));
         final response = await request.close();
 
         if (response.statusCode == 200) {
@@ -86,21 +101,25 @@ Future<void> mainCommon({required String env, required String appName}) async {
           '🚀 [STARTUP] 5. Server Config Sync Failed (continuing): $e',
         );
       }
+
       debugPrint('🚀 [STARTUP] 6. Activating App Check...');
       try {
-        await FirebaseAppCheck.instance
-            .activate(
-              providerAndroid: config.isDevelopment
-                  ? const AndroidDebugProvider()
-                  : const AndroidPlayIntegrityProvider(),
-              providerApple: const AppleDeviceCheckProvider(),
-            )
-            .timeout(const Duration(seconds: 5));
-        debugPrint('🚀 [STARTUP] 6. App Check activated');
+        // Only run App Check if Firebase is initialized
+        if (Firebase.apps.isNotEmpty) {
+          await FirebaseAppCheck.instance
+              .activate(
+                providerAndroid: config.isDevelopment
+                    ? const AndroidDebugProvider()
+                    : const AndroidPlayIntegrityProvider(),
+                providerApple: const AppleDeviceCheckProvider(),
+              )
+              .timeout(const Duration(seconds: 5));
+          debugPrint('🚀 [STARTUP] 6. App Check activated');
+        }
       } catch (e) {
-        debugPrint(
-          '🚀 [STARTUP] 6. App Check activation failed (continuing): $e',
-        );
+        // App Check failure can be fatal or non-fatal depending on security requirements.
+        // For debugging, let's catch it but log clearly.
+        debugPrint('🚀 [STARTUP] 6. App Check Failed (WARNING): $e');
       }
 
       // Initialize Service Locator
