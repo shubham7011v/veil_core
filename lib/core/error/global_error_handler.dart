@@ -1,7 +1,8 @@
 import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter/widgets.dart';
+import 'package:firebase_core/firebase_core.dart';
+import 'package:firebase_crashlytics/firebase_crashlytics.dart';
 
 /// specialized class to handle all uncaught errors in the application.
 class GlobalErrorHandler {
@@ -14,12 +15,14 @@ class GlobalErrorHandler {
       debugPrint('--------------------------------');
     }
 
-    // Here we can report to Crashlytics or Sentry
-    // FirebaseCrashlytics.instance.recordError(error, stack, fatal: true);
+    // Report to Crashlytics if Firebase is initialized
+    if (Firebase.apps.isNotEmpty) {
+      FirebaseCrashlytics.instance.recordError(error, stack, fatal: true);
+    }
   }
 
   /// Runs the app inside a protected zone.
-  static void run(FutureOr<void> Function() appRunner) {
+  static void run(Future<void> Function() appRunner) {
     runZonedGuarded(
       () async {
         // Ensure bindings are initialized before entering the zone

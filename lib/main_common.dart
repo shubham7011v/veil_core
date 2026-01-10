@@ -22,79 +22,143 @@ import 'shared/components/error_boundary.dart';
 import 'package:flutter_native_splash/flutter_native_splash.dart';
 
 import 'package:firebase_core/firebase_core.dart';
+import 'package:firebase_crashlytics/firebase_crashlytics.dart';
 import 'package:firebase_app_check/firebase_app_check.dart';
 import 'config/firebase_options_dev.dart' as dev;
 import 'config/firebase_options_prod.dart' as prod;
 
 Future<void> mainCommon({required String env, required String appName}) async {
   GlobalErrorHandler.run(() async {
-    debugPrint('🚀 [STARTUP] Initializing $env environment...');
-
-    // Bindings are initialized inside GlobalErrorHandler.run
-    FlutterNativeSplash.preserve(widgetsBinding: WidgetsBinding.instance);
-
-    // Initialize Core Configuration Singleton
-    await AppConfig.initialize(env: env, appName: appName);
-    final config = AppConfig.instance;
-
-    final options =
-        config.environment == 'production' || config.environment == 'prod'
-        ? prod.DefaultFirebaseOptions.currentPlatform
-        : dev.DefaultFirebaseOptions.currentPlatform;
-
-    await Firebase.initializeApp(options: options);
-
-    // Initialize Remote Config Service (Fetch values from Firebase)
-    await RemoteConfigService.instance.initialize();
-
-    // Fully load config (Now it can use fetched Remote Config values)
-    config.load();
-    // Connectivity Doctor & Server Config Sync
-    debugPrint('🚨 [DEBUG] Fetching Server Config...');
     try {
-      final client = HttpClient();
-      final request = await client
-          .getUrl(Uri.parse('${config.apiBaseUrl}/config'))
-          .timeout(const Duration(seconds: 5));
-      final response = await request.close();
+      debugPrint('🚀 [STARTUP] Initializing $env environment...');
 
-      if (response.statusCode == 200) {
-        final body = await response.transform(utf8.decoder).join();
-        final serverData = json.decode(body) as Map<String, dynamic>;
-        config.updateFromServer(serverData);
-        debugPrint('🚨 Server Config Synced: $serverData');
-      } else {
-        debugPrint(
-          '🚨 Server Config Fetch Failed: Status ${response.statusCode}',
-        );
+      // Bindings are initialized inside GlobalErrorHandler.run
+      FlutterNativeSplash.preserve(widgetsBinding: WidgetsBinding.instance);
+
+      // Initialize Core Configuration Singleton
+      await AppConfig.initialize(env: env, appName: appName);
+      final config = AppConfig.instance;
+
+      final options =
+          config.environment == 'production' || config.environment == 'prod'
+          ? prod.DefaultFirebaseOptions.currentPlatform
+          : dev.DefaultFirebaseOptions.currentPlatform;
+
+      await Firebase.initializeApp(options: options);
+
+      // Initialize Remote Config Service (Fetch values from Firebase)
+      await RemoteConfigService.instance.initialize();
+
+      // Fully load config (Now it can use fetched Remote Config values)
+      config.load();
+      // Connectivity Doctor & Server Config Sync
+      debugPrint('🚨 [DEBUG] Fetching Server Config...');
+      try {
+        final client = HttpClient();
+        final request = await client
+            .getUrl(Uri.parse('${config.apiBaseUrl}/config'))
+            .timeout(const Duration(seconds: 5));
+        final response = await request.close();
+
+        if (response.statusCode == 200) {
+          final body = await response.transform(utf8.decoder).join();
+          final serverData = json.decode(body) as Map<String, dynamic>;
+          config.updateFromServer(serverData);
+          debugPrint('🚨 Server Config Synced: $serverData');
+        } else {
+          debugPrint(
+            '🚨 Server Config Fetch Failed: Status ${response.statusCode}',
+          );
+        }
+      } catch (e) {
+        debugPrint('🚨 Server Config Sync Failed: $e');
       }
-    } catch (e) {
-      debugPrint('🚨 Server Config Sync Failed: $e');
-    }
-    try {
-      await FirebaseAppCheck.instance.activate(
-        providerAndroid: config.isDevelopment
-            ? const AndroidDebugProvider()
-            : const AndroidPlayIntegrityProvider(),
-        providerApple: const AppleDeviceCheckProvider(),
+      try {
+        await FirebaseAppCheck.instance.activate(
+          providerAndroid: config.isDevelopment
+              ? const AndroidDebugProvider()
+              : const AndroidPlayIntegrityProvider(),
+          providerApple: const AppleDeviceCheckProvider(),
+        );
+        debugPrint('Firebase App Check activated');
+      } catch (e) {
+        debugPrint('Firebase App Check activation failed: $e');
+      }
+
+      // Initialize Service Locator
+      await di.sl.setup();
+
+      // Initialize Notifications
+      try {
+        await di.sl.notificationService.initialize();
+      } catch (e) {
+        debugPrint("Failed to initialize notifications: $e");
+      }
+
+      debugPrint('🚀 [STARTUP] runApp() called');
+      runApp(const BluffApp());
+    } catch (e, stack) {
+      debugPrint('🔥 CRITICAL STARTUP ERROR: $e');
+      debugPrintStack(stackTrace: stack);
+
+      // Report to Crashlytics if available
+      try {
+        if (Firebase.apps.isNotEmpty) {
+          FirebaseCrashlytics.instance.recordError(e, stack, fatal: true);
+        }
+      } catch (_) {}
+
+      FlutterNativeSplash.remove(); // Force remove splash to show error
+      runApp(
+        MaterialApp(
+          home: Scaffold(
+            backgroundColor: Colors.red.shade900,
+            body: SingleChildScrollView(
+              padding: const EdgeInsets.all(20),
+              child: SafeArea(
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    const Icon(
+                      Icons.error_outline,
+                      size: 64,
+                      color: Colors.white,
+                    ),
+                    const SizedBox(height: 20),
+                    const Text(
+                      'Startup Error',
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontSize: 24,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                    const SizedBox(height: 10),
+                    Text(
+                      e.toString(),
+                      style: const TextStyle(
+                        color: Colors.white70,
+                        fontSize: 16,
+                      ),
+                      textAlign: TextAlign.center,
+                    ),
+                    const SizedBox(height: 20),
+                    Text(
+                      stack.toString(),
+                      style: const TextStyle(
+                        color: Colors.white30,
+                        fontSize: 12,
+                        fontFamily: 'monospace',
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ),
       );
-      debugPrint('Firebase App Check activated');
-    } catch (e) {
-      debugPrint('Firebase App Check activation failed: $e');
     }
-
-    // Initialize Service Locator
-    await di.sl.setup();
-
-    // Initialize Notifications
-    try {
-      await di.sl.notificationService.initialize();
-    } catch (e) {
-      debugPrint("Failed to initialize notifications: $e");
-    }
-
-    debugPrint('🚀 [STARTUP] runApp() called');
-    runApp(const BluffApp());
   });
 }
 

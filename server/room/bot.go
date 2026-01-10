@@ -68,7 +68,7 @@ func (b *Bot) Run() {
 			}
 
 			// Check if it's my turn
-			if phase, ok := state["phase"].(string); ok && phase == "PLAYING" {
+			if phase, ok := state["phase"].(string); ok && phase == string(game.PhaseThinking) {
 				if activeID, ok := state["activePlayerId"].(string); ok && activeID == b.Client.ID {
 					// It's my turn! Think and Act
 					go b.decideMove()
