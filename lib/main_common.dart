@@ -161,7 +161,7 @@ Future<void> mainCommon({required String env, required String appName}) async {
                     ),
                     const SizedBox(height: 10),
                     Text(
-                      e.toString(),
+                      _getErrorMessage(e),
                       style: const TextStyle(
                         color: Colors.white70,
                         fontSize: 16,
@@ -169,11 +169,11 @@ Future<void> mainCommon({required String env, required String appName}) async {
                       textAlign: TextAlign.center,
                     ),
                     const SizedBox(height: 20),
-                    Text(
+                    SelectableText(
                       stack.toString(),
                       style: const TextStyle(
                         color: Colors.white30,
-                        fontSize: 12,
+                        fontSize: 10,
                         fontFamily: 'monospace',
                       ),
                     ),
@@ -242,3 +242,31 @@ class BluffApp extends StatelessWidget {
 }
 
 // Wrapper removed as LobbyScreen now handles its own state connection
+
+/// Extracts a meaningful error message from any error object
+String _getErrorMessage(Object error) {
+  // Try to extract message property if it exists
+  try {
+    final dynamic err = error;
+    if (err is StateError) return err.message;
+    if (err is TypeError) return err.toString();
+    if (err is ArgumentError) return err.message ?? err.toString();
+    if (err is FormatException) return err.message;
+
+    // Try to access message property via reflection
+    if (err.toString().startsWith('Instance of')) {
+      // For custom errors, try common property names
+      try {
+        return (err as dynamic).message?.toString() ??
+            (err as dynamic).description?.toString() ??
+            error.runtimeType.toString();
+      } catch (_) {
+        return error.runtimeType.toString();
+      }
+    }
+
+    return error.toString();
+  } catch (_) {
+    return error.runtimeType.toString();
+  }
+}
