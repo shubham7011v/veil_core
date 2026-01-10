@@ -1,6 +1,7 @@
 import 'dart:io';
 import 'dart:convert';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'core/config/app_config.dart';
 import 'core/theme/app_theme.dart';
@@ -267,25 +268,43 @@ String _getErrorMessage(Object error) {
   // Try to extract message property if it exists
   try {
     final dynamic err = error;
-    if (err is StateError) return err.message;
-    if (err is TypeError) return err.toString();
-    if (err is ArgumentError) return err.message ?? err.toString();
-    if (err is FormatException) return err.message;
 
-    // Try to access message property via reflection
+    // 1. Explicitly Type-checked Errors
+    if (err is PlatformException) {
+      return 'Platform: ${err.code} - ${err.message}';
+    }
+    if (err is FirebaseException) {
+      return 'Firebase: [${err.code}] ${err.message}';
+    }
+    if (err is StateError) return 'StateError: ${err.message}';
+    if (err is TypeError) return 'TypeError: ${err.toString()}';
+    if (err is ArgumentError)
+      return 'ArgError: ${err.message ?? err.toString()}';
+    if (err is FormatException) return 'FormatError: ${err.message}';
+
+    // 2. Handle Obfuscated Classes (runtimeType might be "fta")
+    final String typeName = error.runtimeType.toString();
+
     if (err.toString().startsWith('Instance of')) {
       // For custom errors, try common property names
       try {
-        return (err as dynamic).message?.toString() ??
-            (err as dynamic).description?.toString() ??
-            error.runtimeType.toString();
-      } catch (_) {
-        return error.runtimeType.toString();
-      }
+        final String? msg =
+            (err as dynamic).message?.toString() ??
+            (err as dynamic).description?.toString();
+
+        if (msg != null) {
+          return '[$typeName]: $msg';
+        }
+      } catch (_) {}
     }
 
-    return error.toString();
+    // Default: capture the type and the string representation
+    final String str = error.toString();
+    if (str.length > 500) {
+      return '[$typeName]: ${str.substring(0, 500)}...';
+    }
+    return '[$typeName]: $str';
   } catch (_) {
-    return error.runtimeType.toString();
+    return 'Unknown Error Type: ${error.runtimeType}';
   }
 }

@@ -109,17 +109,17 @@ class AppConfig {
 
   /// Update configuration from server-side /api/config response
   void updateFromServer(Map<String, dynamic> serverConfig) {
-    if (serverConfig.containsKey('enableVoiceChat')) {
-      enableVoiceChat = serverConfig['enableVoiceChat'] as bool;
+    if (serverConfig['enableVoiceChat'] is bool) {
+      enableVoiceChat = serverConfig['enableVoiceChat'];
     }
-    if (serverConfig.containsKey('enableDailyChallenges')) {
-      enableDailyChallenges = serverConfig['enableDailyChallenges'] as bool;
+    if (serverConfig['enableDailyChallenges'] is bool) {
+      enableDailyChallenges = serverConfig['enableDailyChallenges'];
     }
-    if (serverConfig.containsKey('enableTournaments')) {
-      enableTournaments = serverConfig['enableTournaments'] as bool;
+    if (serverConfig['enableTournaments'] is bool) {
+      enableTournaments = serverConfig['enableTournaments'];
     }
-    if (serverConfig.containsKey('enableAdminDashboard')) {
-      enableAdminDashboard = serverConfig['enableAdminDashboard'] as bool;
+    if (serverConfig['enableAdminDashboard'] is bool) {
+      enableAdminDashboard = serverConfig['enableAdminDashboard'];
     }
   }
 

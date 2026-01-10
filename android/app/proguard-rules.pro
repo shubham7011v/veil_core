@@ -41,3 +41,8 @@
 
 # Prevent obfuscation of specialized classes
 -keep class com.veil.bluff.models.** { *; }
+
+# Fix for potential "fta" error (often related to obfuscated core exceptions)
+-keep class java.lang.Exception { *; }
+-keep class java.util.** { *; }
+-keepattributes Signature,SourceFile,LineNumberTable
