@@ -1,0 +1,41 @@
+version: '3.8'
+services:
+  veil-game-dev:
+    image: veil-server:dev
+    container_name: veil-game-dev
+    ports:
+      - "8080:8080"
+    volumes:
+      - /root/veil_data_dev:/app/data
+      - /root/firebase-service-account-dev.json:/app/firebase-service-account.json
+    environment:
+      - GOOGLE_APPLICATION_CREDENTIALS=/app/firebase-service-account.json
+      - PORT=8080
+      - ENABLE_VOICE=false
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost:8080/api/config"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+
+  veil-game-prod:
+    image: veil-server:prod
+    container_name: veil-game-prod
+    ports:
+      - "8081:8080"
+    volumes:
+      - /root/veil_data_prod:/app/data
+      - /root/firebase-service-account-prod.json:/app/firebase-service-account.json
+    environment:
+      - GOOGLE_APPLICATION_CREDENTIALS=/app/firebase-service-account.json
+      - PORT=8080
+      - ENABLE_VOICE=false
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost:8080/api/config"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s

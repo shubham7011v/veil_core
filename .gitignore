@@ -58,6 +58,13 @@ app.*.map.json
 
 # Production Secrets
 android/app/src/prod/google-services.json
+
+# Firebase Service Account Keys (NEVER COMMIT THESE!)
+*firebase*service*account*.json
+veil-dev-shubham-*.json
+veil-prod-*.json
+firebase-service-account-dev.json
+firebase-service-account-prod.json
 android/app/src/dev/google-services.json
 
 # Local Environment
