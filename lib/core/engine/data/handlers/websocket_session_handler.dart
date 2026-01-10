@@ -49,6 +49,7 @@ class WebSocketSessionHandler
 
   // Connection state
   ConnectionStatus _connectionStatus = ConnectionStatus.disconnected;
+  bool _isDisposed = false;
   Timer? _reconnectTimer;
   int _reconnectAttempts = 0;
   static const _maxReconnectAttempts = 5;
@@ -254,13 +255,18 @@ class WebSocketSessionHandler
     } else {
       debugPrint('Max reconnection attempts reached');
       _updateConnectionStatus(ConnectionStatus.failed);
-      _eventController.add(SessionEventType.connectionFailed);
+      if (!_isDisposed && !_eventController.isClosed) {
+        _eventController.add(SessionEventType.connectionFailed);
+      }
     }
   }
 
   void _updateConnectionStatus(ConnectionStatus status) {
+    if (_isDisposed) return;
     _connectionStatus = status;
-    _connectionStatusController.add(status);
+    if (!_connectionStatusController.isClosed) {
+      _connectionStatusController.add(status);
+    }
   }
 
   void _send(Map<String, dynamic> message) {
@@ -294,7 +300,9 @@ class WebSocketSessionHandler
               final stats = UserStats.fromJson(
                 authData['stats'] as Map<String, dynamic>,
               );
-              _statsController.add(stats);
+              if (!_isDisposed && !_statsController.isClosed) {
+                _statsController.add(stats);
+              }
               debugPrint(
                 'User stats loaded: ${stats.wins} wins, ${stats.rank} rank',
               );
@@ -320,7 +328,9 @@ class WebSocketSessionHandler
             final stats = UserStats.fromJson(
               msg['data'] as Map<String, dynamic>,
             );
-            _statsController.add(stats);
+            if (!_isDisposed && !_statsController.isClosed) {
+              _statsController.add(stats);
+            }
             debugPrint('Stats updated: ${stats.wins} wins, ${stats.rank} rank');
           } catch (e) {
             debugPrint('Failed to parse stats update: $e');
@@ -348,7 +358,9 @@ class WebSocketSessionHandler
             final leaderboard = data
                 .map((u) => UserStats.fromJson(u as Map<String, dynamic>))
                 .toList();
-            _leaderboardController.add(leaderboard);
+            if (!_isDisposed && !_leaderboardController.isClosed) {
+              _leaderboardController.add(leaderboard);
+            }
           } catch (e) {
             debugPrint('Failed to parse leaderboard: $e');
           }
@@ -360,7 +372,9 @@ class WebSocketSessionHandler
             final friends = data
                 .map((f) => FriendRecord.fromJson(f as Map<String, dynamic>))
                 .toList();
-            _friendsController.add(friends);
+            if (!_isDisposed && !_friendsController.isClosed) {
+              _friendsController.add(friends);
+            }
           } catch (e) {
             debugPrint('Failed to parse friend list: $e');
           }
@@ -371,7 +385,9 @@ class WebSocketSessionHandler
             final evt = RoomCreated.fromJson(
               msg['data'] as Map<String, dynamic>,
             );
-            _roomEventController.add(evt);
+            if (!_isDisposed && !_roomEventController.isClosed) {
+              _roomEventController.add(evt);
+            }
           } catch (e) {
             debugPrint('Failed to parse ROOM_CREATED: $e');
           }
@@ -382,7 +398,9 @@ class WebSocketSessionHandler
             final evt = RoomJoined.fromJson(
               msg['data'] as Map<String, dynamic>,
             );
-            _roomEventController.add(evt);
+            if (!_isDisposed && !_roomEventController.isClosed) {
+              _roomEventController.add(evt);
+            }
           } catch (e) {
             debugPrint('Failed to parse ROOM_JOINED: $e');
           }
@@ -393,7 +411,9 @@ class WebSocketSessionHandler
             final evt = RoomUpdated.fromJson(
               msg['data'] as Map<String, dynamic>,
             );
-            _roomEventController.add(evt);
+            if (!_isDisposed && !_roomEventController.isClosed) {
+              _roomEventController.add(evt);
+            }
           } catch (e) {
             debugPrint('Failed to parse ROOM_UPDATE: $e');
           }
@@ -417,7 +437,9 @@ class WebSocketSessionHandler
             final challenges = data
                 .map((c) => DailyChallenge.fromJson(c as Map<String, dynamic>))
                 .toList();
-            _challengesController.add(challenges);
+            if (!_isDisposed && !_challengesController.isClosed) {
+              _challengesController.add(challenges);
+            }
           } catch (e) {
             debugPrint('Failed to parse challenges: $e');
           }
@@ -426,7 +448,9 @@ class WebSocketSessionHandler
         case 'CHALLENGE_CLAIM_OK':
           try {
             final data = msg['data'] as Map<String, dynamic>;
-            _challengeClaimResultController.add(data);
+            if (!_isDisposed && !_challengeClaimResultController.isClosed) {
+              _challengeClaimResultController.add(data);
+            }
             // Play a special reward sound
             sl.audioService.playSfx(SoundAssets.turnAlert); // Temporary
           } catch (e) {
@@ -439,7 +463,9 @@ class WebSocketSessionHandler
             final data = msg['data'] as Map<String, dynamic>;
             // Add message type so UI knows it is chat
             data['type'] = 'chat';
-            _chatController.add(data);
+            if (!_isDisposed && !_chatController.isClosed) {
+              _chatController.add(data);
+            }
           } catch (e) {
             debugPrint('Failed to parse chat message: $e');
           }
@@ -450,7 +476,9 @@ class WebSocketSessionHandler
             final data = msg['data'] as Map<String, dynamic>;
             // Add message type so UI knows it is emoji
             data['type'] = 'emoji';
-            _chatController.add(data);
+            if (!_isDisposed && !_chatController.isClosed) {
+              _chatController.add(data);
+            }
 
             // Play emoji sound
             sl.audioService.playSfx(
@@ -545,13 +573,19 @@ class WebSocketSessionHandler
     );
 
     _currentState = newState;
-    _stateController.add(newState);
+    if (!_isDisposed && !_stateController.isClosed) {
+      _stateController.add(newState);
+    }
 
     // Emit events based on phase transitions
     if (phase == SessionPhase.thinking) {
-      _eventController.add(SessionEventType.turnChanged);
+      if (!_isDisposed && !_eventController.isClosed) {
+        _eventController.add(SessionEventType.turnChanged);
+      }
     } else if (phase == SessionPhase.challenging) {
-      _eventController.add(SessionEventType.cardsPlayed);
+      if (!_isDisposed && !_eventController.isClosed) {
+        _eventController.add(SessionEventType.cardsPlayed);
+      }
     }
   }
 
@@ -616,7 +650,9 @@ class WebSocketSessionHandler
 
     final newState = _currentState.copyWith(myHand: sortedHand);
     _currentState = newState;
-    _stateController.add(newState);
+    if (!_isDisposed && !_stateController.isClosed) {
+      _stateController.add(newState);
+    }
   }
 
   @override
@@ -628,7 +664,9 @@ class WebSocketSessionHandler
 
     final newState = _currentState.copyWith(myHand: hand);
     _currentState = newState;
-    _stateController.add(newState);
+    if (!_isDisposed && !_stateController.isClosed) {
+      _stateController.add(newState);
+    }
   }
 
   // -- Social & Competitive Methods --
@@ -737,6 +775,9 @@ class WebSocketSessionHandler
 
   @override
   Future<void> dispose() async {
+    if (_isDisposed) return;
+    _isDisposed = true;
+
     _reconnectTimer?.cancel();
     await _channel?.sink.close();
     await _connectionStatusController.close();

@@ -146,6 +146,11 @@ class _AdminViewState extends State<_AdminView> {
               'User UID: ${FirebaseAuth.instance.currentUser?.uid ?? "Unknown"}',
               style: const TextStyle(color: Colors.grey, fontSize: 10),
             ),
+            const SizedBox(height: 4),
+            Text(
+              'API URL: ${AppConfig.instance.apiBaseUrl}',
+              style: const TextStyle(color: Colors.grey, fontSize: 10),
+            ),
             const SizedBox(height: 32),
             Text(
               errorMessage != null

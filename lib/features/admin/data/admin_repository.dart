@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'package:http/http.dart' as http;
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:flutter/foundation.dart';
 import '../../../../core/config/app_config.dart';
 
 class AdminRepository {
@@ -25,8 +26,10 @@ class AdminRepository {
 
   Future<Map<String, dynamic>> getStats() async {
     final headers = await _getAuthHeaders();
+    final url = '$_baseUrl/admin/stats';
+    debugPrint('🚀 [ADMIN] Fetching Stats from: $url');
     final response = await http
-        .get(Uri.parse('$_baseUrl/admin/stats'), headers: headers)
+        .get(Uri.parse(url), headers: headers)
         .timeout(const Duration(seconds: 10));
 
     if (response.statusCode == 200) {
@@ -38,8 +41,10 @@ class AdminRepository {
 
   Future<List<dynamic>> getRooms() async {
     final headers = await _getAuthHeaders();
+    final url = '$_baseUrl/admin/rooms';
+    debugPrint('🚀 [ADMIN] Fetching Rooms from: $url');
     final response = await http
-        .get(Uri.parse('$_baseUrl/admin/rooms'), headers: headers)
+        .get(Uri.parse(url), headers: headers)
         .timeout(const Duration(seconds: 10));
 
     if (response.statusCode == 200) {
