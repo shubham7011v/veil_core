@@ -61,14 +61,18 @@ func (h *AdminHandler) AdminMiddleware(next http.HandlerFunc) http.HandlerFunc {
 		}
 
 		idToken := parts[1]
+		log.Printf("ADMIN_CHECK: Verifying token for request to %s...", r.URL.Path)
 
 		// 1. Verify Firebase Token
-		token, err := h.AuthClient.VerifyIDToken(context.Background(), idToken)
+		idCtx, cancel := context.WithTimeout(r.Context(), 5*time.Second)
+		defer cancel()
+		token, err := h.AuthClient.VerifyIDToken(idCtx, idToken)
 		if err != nil {
-			log.Printf("Token verification failed: %v", err)
+			log.Printf("ADMIN_CHECK: Token verification failed: %v", err)
 			http.Error(w, "Unauthorized: Invalid token", http.StatusUnauthorized)
 			return
 		}
+		log.Printf("ADMIN_CHECK: Token verified successfully. UID: %s", token.UID)
 
 		// 2. Check if UID is in allowed list
 		adminUIDsEnv := os.Getenv("ADMIN_UIDS")
