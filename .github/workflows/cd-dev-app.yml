@@ -55,6 +55,9 @@ jobs:
           mkdir -p android/app/src/dev
           echo "${{ secrets.GOOGLE_SERVICES_JSON_BASE64 }}" | tr -d '\n ' | base64 --decode > android/app/src/dev/google-services.json
 
+          # satisfy pubspec.yaml requirement for .env file
+          touch .env
+
       - name: Build App
         env:
           SERVER_URL: ${{ secrets.SERVER_URL }}
