@@ -3,6 +3,7 @@ name: Deploy Dev Server
 on:
     push:
         tags:
+            - "server_dev_v*"
             - "go_dev_v*"
 
 jobs:
