@@ -1,5 +1,10 @@
 package game
 
+import (
+	"os"
+	"strconv"
+)
+
 type Phase string
 
 const (
@@ -10,7 +15,15 @@ const (
 )
 
 // Config
-const (
+var (
 	MaxPlayers = 10
 	MinPlayers = 2 // For testing
 )
+
+func init() {
+	if val := os.Getenv("MAX_PLAYERS"); val != "" {
+		if i, err := strconv.Atoi(val); err == nil {
+			MaxPlayers = i
+		}
+	}
+}

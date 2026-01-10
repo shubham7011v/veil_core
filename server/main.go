@@ -7,6 +7,10 @@ import (
 	"net/http"
 	"os"
 
+	"os/signal"
+	"syscall"
+	"time"
+
 	"veil_server/api"
 	"veil_server/config"
 	"veil_server/db"
@@ -78,9 +82,37 @@ func main() {
 		json.NewEncoder(w).Encode(config.GetFeatureFlags())
 	})
 
-	log.Printf("Veil Server listening on :%s", port)
-	// TODO: Implement graceful shutdown handling for better reliability
-	if err := http.ListenAndServe(":"+port, nil); err != nil {
-		log.Fatal("ListenAndServe:", err)
+	// Create server
+	srv := &http.Server{
+		Addr: ":" + port,
 	}
+
+	// Channel to listen for shutdown signals
+	done := make(chan os.Signal, 1)
+	signal.Notify(done, os.Interrupt, syscall.SIGINT, syscall.SIGTERM)
+
+	go func() {
+		log.Printf("Veil Server listening on :%s", port)
+		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+			log.Fatalf("listen: %s\n", err)
+		}
+	}()
+
+	// Wait for shutdown signal
+	<-done
+	log.Println("Server is shutting down...")
+
+	// 1. Notify all connected clients
+	manager.BroadcastSystemMessage("Server is restarting for maintenance. Please wait 10 seconds.")
+	time.Sleep(2 * time.Second) // Give time for message to reach clients
+
+	// 2. Shut down the HTTP server with 5s timeout
+	shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	if err := srv.Shutdown(shutdownCtx); err != nil {
+		log.Fatalf("Server Shutdown Failed:%+v", err)
+	}
+
+	log.Println("Server exited gracefully")
 }

@@ -1,0 +1,113 @@
+name: Veil App CD (Development)
+
+on:
+    push:
+        tags:
+            - "go_dev_v*"
+
+jobs:
+    vars:
+        runs-on: ubuntu-latest
+        outputs:
+            version_name: ${{ steps.vars.outputs.version_name }}
+        steps:
+            - uses: actions/checkout@v4
+            - name: Extract Variables
+              id: vars
+              run: |
+                  TAG_NAME=${{ github.ref_name }}
+                  VERSION_NAME=${TAG_NAME#go_dev_v}
+                  echo "version_name=$VERSION_NAME" >> $GITHUB_OUTPUT
+
+    build:
+        name: Build Dev APK
+        needs: vars
+        runs-on: ubuntu-latest
+        environment: dev
+        steps:
+            - uses: actions/checkout@v4
+
+            - name: Setup environment
+              uses: ./.github/actions/setup-flutter
+
+            - name: Cache Gradle
+              uses: actions/cache@v4
+              with:
+                  path: |
+                      ~/.gradle/caches
+                      ~/.gradle/wrapper
+                  key: ${{ runner.os }}-gradle-${{ hashFiles('**/*.gradle*', '**/gradle-wrapper.properties') }}
+                  restore-keys: |
+                      ${{ runner.os }}-gradle-
+
+            - name: Setup Secrets
+              run: |
+                  # Keystore
+                  echo "${{ secrets.ANDROID_KEYSTORE_BASE64 }}" | tr -d '\n ' | base64 --decode > android/app/upload-keystore.jks
+                  echo "storeFile=upload-keystore.jks" > android/key.properties
+                  echo "storePassword=${{ secrets.ANDROID_KEYSTORE_PASSWORD }}" >> android/key.properties
+                  echo "keyPassword=${{ secrets.ANDROID_KEY_PASSWORD }}" >> android/key.properties
+                  echo "keyAlias=${{ secrets.ANDROID_KEY_ALIAS }}" >> android/key.properties
+
+                  # Google Services JSON
+                  mkdir -p android/app/src/dev
+                  echo "${{ secrets.GOOGLE_SERVICES_JSON_BASE64 }}" | tr -d '\n ' | base64 --decode > android/app/src/dev/google-services.json
+
+            - name: Build App
+              env:
+                  SERVER_URL: ${{ secrets.SERVER_URL }}
+                  API_URL: ${{ secrets.API_URL }}
+                  MASTER_ADMIN_ID: ${{ secrets.ADMIN_UIDS }}
+              run: |
+                  DART_DEFINES="--dart-define=ENV=dev"
+                  if [ ! -z "$SERVER_URL" ]; then
+                    DART_DEFINES="$DART_DEFINES --dart-define=SERVER_URL=$SERVER_URL"
+                  fi
+                  if [ ! -z "$API_URL" ]; then
+                    DART_DEFINES="$DART_DEFINES --dart-define=API_URL=$API_URL"
+                  fi
+                  if [ ! -z "$MASTER_ADMIN_ID" ]; then
+                    DART_DEFINES="$DART_DEFINES --dart-define=MASTER_ADMIN_ID=$MASTER_ADMIN_ID"
+                  fi
+
+                  mkdir -p build/app/outputs/symbols
+                  flutter build apk \
+                    --flavor dev \
+                    -t lib/main_dev.dart \
+                    --build-name=${{ needs.vars.outputs.version_name }} \
+                    --build-number=${{ github.run_number }} \
+                    --obfuscate \
+                    --split-debug-info=build/app/outputs/symbols \
+                    --tree-shake-icons \
+                    $DART_DEFINES \
+                    --release
+
+            - name: Upload Artifact
+              uses: actions/upload-artifact@v4
+              with:
+                  name: dev-debug-apk
+                  path: build/app/outputs/flutter-apk/app-dev-release.apk
+
+    create_release:
+        name: Create GitHub Release (Dev)
+        needs: [vars, build]
+        runs-on: ubuntu-latest
+        permissions:
+            contents: write
+        steps:
+            - name: Download APK
+              uses: actions/download-artifact@v4
+              with:
+                  name: dev-debug-apk
+                  path: artifacts
+
+            - name: Create Release
+              uses: softprops/action-gh-release@v2
+              with:
+                  files: |
+                      artifacts/app-dev-release.apk
+                  tag_name: ${{ github.ref_name }}
+                  name: Dev Release ${{ needs.vars.outputs.version_name }}
+                  draft: false
+                  prerelease: true
+                  generate_release_notes: true

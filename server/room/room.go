@@ -7,6 +7,7 @@ import (
 	"sync"
 	"time"
 
+	"veil_server/config"
 	"veil_server/db"
 	"veil_server/game"
 	"veil_server/protocol"
@@ -317,42 +318,48 @@ func (r *Room) processAction(action GameAction) {
 		// Logic mostly handled in Manager.
 		// If we did need it here, we'd process it.
 
-	case protocol.MsgTypeVoiceHandRaise:
-		isQueued := false
-		for _, id := range r.voice.Queue {
-			if id == client.ID {
-				isQueued = true
-				break
+	case protocol.MsgTypeVoiceHandRaise, protocol.MsgTypeVoiceSDP, protocol.MsgTypeVoiceICE:
+		if !config.GetFeatureFlags().EnableVoiceChat {
+			log.Printf("Voice chat is disabled on this server, ignoring message from %s", client.ID)
+			return
+		}
+
+		switch msg.Type {
+		case protocol.MsgTypeVoiceHandRaise:
+			isQueued := false
+			for _, id := range r.voice.Queue {
+				if id == client.ID {
+					isQueued = true
+					break
+				}
 			}
-		}
 
-		if r.voice.CurrentSpeakerID == client.ID || isQueued {
-			r.voice.ReleaseMic(client.ID)
-		} else {
-			r.voice.RequestMic(client.ID)
-		}
-
-		r.broadcastVoiceState()
-
-	case protocol.MsgTypeVoiceSDP:
-		var offer webrtc.SessionDescription
-		if json.Unmarshal(msg.Data, &offer) == nil {
-			answer, err := r.webRTC.HandleOffer(client.ID, offer)
-			if err == nil && answer != nil {
-				// Reply with Answer
-				resp := protocol.NewMessage(protocol.MsgTypeVoiceSDP, answer)
-				bytes, _ := json.Marshal(resp)
-				client.Send <- bytes
+			if r.voice.CurrentSpeakerID == client.ID || isQueued {
+				r.voice.ReleaseMic(client.ID)
 			} else {
-				log.Printf("WebRTC Offer Error for %s: %v", client.ID, err)
+				r.voice.RequestMic(client.ID)
 			}
-		}
+			r.broadcastVoiceState()
 
-	case protocol.MsgTypeVoiceICE:
-		var candidate webrtc.ICECandidateInit
-		if json.Unmarshal(msg.Data, &candidate) == nil {
-			if err := r.webRTC.HandleICE(client.ID, candidate); err != nil {
-				log.Printf("WebRTC ICE Error for %s: %v", client.ID, err)
+		case protocol.MsgTypeVoiceSDP:
+			var offer webrtc.SessionDescription
+			if json.Unmarshal(msg.Data, &offer) == nil {
+				answer, err := r.webRTC.HandleOffer(client.ID, offer)
+				if err == nil && answer != nil {
+					resp := protocol.NewMessage(protocol.MsgTypeVoiceSDP, answer)
+					bytes, _ := json.Marshal(resp)
+					client.Send <- bytes
+				} else {
+					log.Printf("WebRTC Offer Error for %s: %v", client.ID, err)
+				}
+			}
+
+		case protocol.MsgTypeVoiceICE:
+			var candidate webrtc.ICECandidateInit
+			if json.Unmarshal(msg.Data, &candidate) == nil {
+				if err := r.webRTC.HandleICE(client.ID, candidate); err != nil {
+					log.Printf("WebRTC ICE Error for %s: %v", client.ID, err)
+				}
 			}
 		}
 

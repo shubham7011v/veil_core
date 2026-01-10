@@ -1,22 +1,48 @@
 #!/bin/bash
-BACKUP_DIR="/home/veilapp/backups"
-DB_PATH="/home/veilapp/data/veil.db"
+
+# Configuration
+BACKUP_ROOT="/root/backups"
+DEV_DB="/root/veil_data_dev/veil.db"
+PROD_DB="/root/veil_data_prod/veil.db"
 TIMESTAMP=$(date +%Y%m%d_%H%M%S)
-BACKUP_FILE="$BACKUP_DIR/veil_$TIMESTAMP.db"
 
-mkdir -p "$BACKUP_DIR"
+# Create backup directories
+mkdir -p "$BACKUP_ROOT/dev"
+mkdir -p "$BACKUP_ROOT/prod"
 
-# 1. Hot backup
-sqlite3 "$DB_PATH" ".backup $BACKUP_FILE"
+# --- Backup Function ---
+backup_db() {
+    local source_path=$1
+    local target_dir=$2
+    local label=$3
+    local backup_file="$target_dir/${label}_$TIMESTAMP.db"
 
-# 2. Compress
-gzip "$BACKUP_FILE"
-GZ_FILE="$BACKUP_FILE.gz"
+    if [ -f "$source_path" ]; then
+        echo "Starting backup for $label..."
+        # Use sqlite3 for hot backup (safe while server is running)
+        sqlite3 "$source_path" ".backup $backup_file"
+        
+        # Compress
+        gzip "$backup_file"
+        local gz_file="$backup_file.gz"
+        
+        echo "Backup created: $gz_file"
+        
+        # Optional: Upload to S3/R2 if rclone is configured
+        if command -v rclone &> /dev/null; then
+             echo "Uploading $label to R2..."
+             rclone copy "$gz_file" r2:veil-backups/$label --s3-no-check-bucket
+        fi
 
-# 3. Upload to R2 (Requires R2 bucket named "veil-backups")
-rclone copy "$GZ_FILE" r2:veil-backups --s3-no-check-bucket
+        # Cleanup local files older than 7 days
+        find "$target_dir" -type f -name "*.gz" -mtime +7 -delete
+    else
+        echo "Error: Source DB not found at $source_path"
+    fi
+}
 
-# 4. Cleanup old files (local only)
-find "$BACKUP_DIR" -type f -name "*.gz" -mtime +7 -delete
+# --- Execute Backups ---
+backup_db "$DEV_DB" "$BACKUP_ROOT/dev" "dev"
+backup_db "$PROD_DB" "$BACKUP_ROOT/prod" "prod"
 
-echo "Backup success: $GZ_FILE uploaded to R2."
+echo "All backups processed at $(date)"

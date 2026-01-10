@@ -9,6 +9,7 @@ import (
 	"runtime"
 	"strings"
 	"time"
+	"veil_server/config"
 	"veil_server/db"
 	"veil_server/room"
 
@@ -31,6 +32,12 @@ func NewAdminHandler(m *room.Manager, auth *auth.Client) *AdminHandler {
 // AdminMiddleware ensures the request has a valid Firebase ID token and the UID is authorized
 func (h *AdminHandler) AdminMiddleware(next http.HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
+		// 0. Check if Admin Dashboard is enabled
+		if !config.GetFeatureFlags().EnableAdminDashboard {
+			http.Error(w, "Forbidden: Admin Dashboard is disabled", http.StatusForbidden)
+			return
+		}
+
 		authHeader := r.Header.Get("Authorization")
 		if authHeader == "" {
 			http.Error(w, "Unauthorized: Missing Authorization header", http.StatusUnauthorized)

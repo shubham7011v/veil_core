@@ -45,6 +45,27 @@ func StartCoinFlusher() {
 	}()
 }
 
+// StartDailyResetWorker triggers a database cleanup every day at midnight UTC
+func StartDailyResetWorker() {
+	go func() {
+		for {
+			now := time.Now().UTC()
+			next := now.Add(time.Hour * 24)
+			next = time.Date(next.Year(), next.Month(), next.Day(), 0, 0, 0, 0, time.UTC)
+			t := time.NewTimer(next.Sub(now))
+
+			log.Printf("Daily Challenge Reset scheduled for %v", next)
+			<-t.C
+
+			if err := ResetDailyChallenges(); err != nil {
+				log.Printf("CRITICAL: Failed to reset daily challenges: %v", err)
+			} else {
+				log.Println("SUCCESS: Daily challenges have been reset for all users.")
+			}
+		}
+	}()
+}
+
 // FlushCoins writes all buffered coin updates to the DB in a single transaction
 func FlushCoins() error {
 	coinBuffer.mu.Lock()
@@ -138,8 +159,9 @@ func InitDB(dbPath string) error {
 		return fmt.Errorf("failed to set busy timeout: %v", err)
 	}
 
-	// Start background coin flusher
+	// Start internal background workers
 	StartCoinFlusher()
+	StartDailyResetWorker()
 
 	return createTables()
 }

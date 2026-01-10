@@ -1,0 +1,26 @@
+name: Nightly Database Backup
+
+on:
+    schedule:
+        - cron: "0 3 * * *" # Run at 03:00 UTC every day
+    workflow_dispatch: # Allow manual trigger
+
+jobs:
+    backup:
+        runs-on: ubuntu-latest
+        steps:
+            - name: Trigger Backup on VPS
+              uses: appleboy/ssh-action@v1.0.3
+              with:
+                  host: ${{ secrets.SERVER_IP }}
+                  username: root
+                  key: ${{ secrets.SSH_KEY }}
+                  script: |
+                      # Ensure script exists and is executable
+                      if [ -f ~/veil_core/backup_db.sh ]; then
+                        chmod +x ~/veil_core/backup_db.sh
+                        ~/veil_core/backup_db.sh
+                      else
+                        echo "Error: backup_db.sh not found in ~/veil_core"
+                        exit 1
+                      fi

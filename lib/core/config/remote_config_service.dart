@@ -21,7 +21,7 @@ class RemoteConfigService {
       // Set defaults for game balancing
       await _remoteConfig.setDefaults({
         'default_thinking_time_s': 10,
-        'max_players': 8,
+        'max_players': 10,
         'reconnect_base_delay_ms': 2000,
         'max_reconnect_attempts': 5,
         'voice_timeout_seconds': 30,

@@ -53,11 +53,8 @@ app.*.map.json
  *_base64.txt
  service-account.json
  
-# Firebase (optional but recommended to keep projects isolated)
-# google-services.json
-
-# Production Secrets
-android/app/src/prod/google-services.json
+# Firebase Configuration (Flavor-specific)
+**/google-services.json
 
 # Firebase Service Account Keys (NEVER COMMIT THESE!)
 *firebase*service*account*.json
@@ -65,7 +62,30 @@ veil-dev-shubham-*.json
 veil-prod-*.json
 firebase-service-account-dev.json
 firebase-service-account-prod.json
-android/app/src/dev/google-services.json
 
 # Local Environment
 .env
+.env.local
+docker-compose.override.yml
+
+# Database & Backups
+*.db
+*.db-journal
+*.db-wal
+/backups/
+/veil_data_dev/
+/veil_data_prod/
+
+# Temporary / Debug / Backup files
+*.txt
+*.pem
+*.bak
+nginx_fixed*.conf
+websocket*.conf
+fix_key.py
+previous_*.dart
+test_*.txt
+
+# OS-specific
+.DS_Store
+Thumbs.db

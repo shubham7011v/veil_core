@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'core/config/app_config.dart';
@@ -43,30 +44,33 @@ Future<void> mainCommon({required String env, required String appName}) async {
 
     await Firebase.initializeApp(options: options);
 
-    // Fully load config (now safe to access Remote Config)
-    config.load();
-    debugPrint('🚨 [DEBUG] STARTUP CONFIG CHECK 🚨');
-    debugPrint('🚨 Server URL: ${config.serverUrl}');
-    debugPrint('🚨 API URL: ${config.apiBaseUrl}');
-    debugPrint('🚨 Environment: ${config.environment}');
+    // Initialize Remote Config Service (Fetch values from Firebase)
+    await RemoteConfigService.instance.initialize();
 
-    // Connectivity Doctor
-    debugPrint('🚨 [DEBUG] Running Connectivity Check...');
+    // Fully load config (Now it can use fetched Remote Config values)
+    config.load();
+    // Connectivity Doctor & Server Config Sync
+    debugPrint('🚨 [DEBUG] Fetching Server Config...');
     try {
-      final request = await HttpClient()
+      final client = HttpClient();
+      final request = await client
           .getUrl(Uri.parse('${config.apiBaseUrl}/config'))
           .timeout(const Duration(seconds: 5));
       final response = await request.close();
-      debugPrint('🚨 HTTP CONNECTIVITY CHECK: Status ${response.statusCode}');
-      await response.drain();
+
+      if (response.statusCode == 200) {
+        final body = await response.transform(utf8.decoder).join();
+        final serverData = json.decode(body) as Map<String, dynamic>;
+        config.updateFromServer(serverData);
+        debugPrint('🚨 Server Config Synced: $serverData');
+      } else {
+        debugPrint(
+          '🚨 Server Config Fetch Failed: Status ${response.statusCode}',
+        );
+      }
     } catch (e) {
-      debugPrint('🚨 HTTP CONNECTIVITY CHECK FAILED: $e');
+      debugPrint('🚨 Server Config Sync Failed: $e');
     }
-
-    // Initialize Remote Config Service
-    await RemoteConfigService.instance.initialize();
-
-    // Activate App Check
     try {
       await FirebaseAppCheck.instance.activate(
         providerAndroid: config.isDevelopment

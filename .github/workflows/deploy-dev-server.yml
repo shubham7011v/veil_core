@@ -1,0 +1,56 @@
+name: Deploy Dev Server
+
+on:
+    push:
+        tags:
+            - "go_dev_v*"
+
+jobs:
+    deploy:
+        runs-on: ubuntu-latest
+        environment: dev
+        steps:
+            - name: Deploy to Server via SSH
+              uses: appleboy/ssh-action@v1.0.3
+              env:
+                  FIREBASE_CREDS: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
+                  ADMIN_UIDS: ${{ secrets.ADMIN_UIDS }}
+                  ENABLE_VOICE_CHAT: ${{ vars.ENABLE_VOICE_CHAT }}
+                  ENABLE_DAILY_CHALLENGES: ${{ vars.ENABLE_DAILY_CHALLENGES }}
+                  ENABLE_TOURNAMENTS: ${{ vars.ENABLE_TOURNAMENTS }}
+                  ENABLE_ADMIN_DASHBOARD: ${{ vars.ENABLE_ADMIN_DASHBOARD }}
+                  MAX_PLAYERS: ${{ vars.MAX_PLAYERS }}
+              with:
+                  host: ${{ secrets.SERVER_IP }}
+                  username: root
+                  key: ${{ secrets.SSH_KEY }}
+                  envs: FIREBASE_CREDS,ADMIN_UIDS,ENABLE_VOICE_CHAT,ENABLE_DAILY_CHALLENGES,ENABLE_TOURNAMENTS,ENABLE_ADMIN_DASHBOARD,MAX_PLAYERS
+                  script: |
+                      # Update code
+                      cd ~/veil_core
+                      git fetch --all --tags
+                      git checkout ${{ github.ref_name }}
+
+                      # Write credentials
+                      echo "$FIREBASE_CREDS" > /root/firebase-service-account-dev.json
+
+                      # Build image
+                      cd server
+                      docker build --network=host -t veil-server:dev .
+
+                      # Ensure docker-compose.yml is up to date
+                      cp ~/veil_core/docker-compose-production.yml /root/docker-compose.yml
+
+                      # Restart container using docker-compose
+                      cd /root
+                      docker-compose up -d --force-recreate veil-game-dev
+
+                      # Health check
+                      sleep 5
+                      if [ "$(docker inspect -f '{{.State.Running}}' veil-game-dev)" != "true" ]; then
+                        echo "Error: Container failed to start!"
+                        docker logs veil-game-dev
+                        exit 1
+                      fi
+
+                      echo "✅ Dev deployment successful!"

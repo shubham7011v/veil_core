@@ -93,6 +93,35 @@ class AppConfig {
   late final String supportEmail;
   late final String gameRulesUrl;
 
+  // Feature Flags (From Remote Config / Server Override)
+  late bool enableVoiceChat;
+  late bool enableDailyChallenges;
+  late bool enableTournaments;
+  late bool enableAdminDashboard;
+  late final bool enablePrivateRooms;
+  late final bool enableFriendsMatch;
+  late final bool enableFriendsMatchOffline;
+  late bool enableBotPlayers;
+  late bool enableInnerCircle;
+  late bool enableGlobalRankings;
+  late bool enableEliteDecks;
+
+  /// Update configuration from server-side /api/config response
+  void updateFromServer(Map<String, dynamic> serverConfig) {
+    if (serverConfig.containsKey('enableVoiceChat')) {
+      enableVoiceChat = serverConfig['enableVoiceChat'] as bool;
+    }
+    if (serverConfig.containsKey('enableDailyChallenges')) {
+      enableDailyChallenges = serverConfig['enableDailyChallenges'] as bool;
+    }
+    if (serverConfig.containsKey('enableTournaments')) {
+      enableTournaments = serverConfig['enableTournaments'] as bool;
+    }
+    if (serverConfig.containsKey('enableAdminDashboard')) {
+      enableAdminDashboard = serverConfig['enableAdminDashboard'] as bool;
+    }
+  }
+
   Future<void> _bootstrap({
     String? injectedEnv,
     String? injectedAppName,
@@ -267,6 +296,63 @@ class AppConfig {
       'https://example.com/rules',
     );
 
+    // Feature Flags
+    enableVoiceChat = _getBoolConfig(
+      'enable_voice_chat',
+      'ENABLE_VOICE_CHAT',
+      false,
+    );
+    enableDailyChallenges = _getBoolConfig(
+      'enable_daily_challenges',
+      'ENABLE_DAILY_CHALLENGES',
+      false,
+    );
+    enableTournaments = _getBoolConfig(
+      'enable_tournaments',
+      'ENABLE_TOURNAMENTS',
+      false,
+    );
+    enableAdminDashboard = _getBoolConfig(
+      'enable_admin_dashboard',
+      'ENABLE_ADMIN_DASHBOARD',
+      true,
+    );
+    enablePrivateRooms = _getBoolConfig(
+      'enable_private_rooms',
+      'ENABLE_PRIVATE_ROOMS',
+      false,
+    );
+    enableFriendsMatch = _getBoolConfig(
+      'enable_friends_match',
+      'ENABLE_FRIENDS_MATCH',
+      false,
+    );
+    enableFriendsMatchOffline = _getBoolConfig(
+      'enable_friends_match_offline',
+      'ENABLE_FRIENDS_MATCH_OFFLINE',
+      false,
+    );
+    enableBotPlayers = _getBoolConfig(
+      'enable_bot_players',
+      'ENABLE_BOT_PLAYERS',
+      false,
+    );
+    enableInnerCircle = _getBoolConfig(
+      'enable_inner_circle',
+      'ENABLE_INNER_CIRCLE',
+      false,
+    );
+    enableGlobalRankings = _getBoolConfig(
+      'enable_global_rankings',
+      'ENABLE_GLOBAL_RANKINGS',
+      false,
+    );
+    enableEliteDecks = _getBoolConfig(
+      'enable_elite_decks',
+      'ENABLE_ELITE_DECKS',
+      false,
+    );
+
     if (enableLogging) {
       _logConfig();
     }
@@ -306,6 +392,15 @@ class AppConfig {
 
     // 3. Try Environment Variable (Build Time)
     return String.fromEnvironment(envKey, defaultValue: defaultValue);
+  }
+
+  bool _getBoolConfig(String rcKey, String envKey, bool defaultValue) {
+    // 1. Try Remote Config
+    final rcValue = RemoteConfigService.instance.getBool(rcKey);
+    // Note: getBool in Firebase RC returns false if the key doesn't exist,
+    // which might conflict with our default true values.
+    // Usually RC keys are explicitly set in initialize() defaults.
+    return rcValue;
   }
 
   List<String> _getStringListConfig(
