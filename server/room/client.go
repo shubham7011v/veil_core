@@ -132,7 +132,15 @@ func ServeWs(manager *Manager, w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	client := &Client{Hub: manager, Conn: conn, Send: make(chan []byte, 256)}
-	client.Hub.Register <- client
+	// Use strict timeout for registration to prevent hanging if Manager blocks
+	select {
+	case client.Hub.Register <- client:
+		// Success
+	case <-time.After(5 * time.Second):
+		log.Printf("ERROR: Manager.Register timed out for connection from %s", r.RemoteAddr)
+		conn.Close()
+		return
+	}
 
 	// Allow collection of memory referenced by the caller by doing all work in
 	// new goroutines.

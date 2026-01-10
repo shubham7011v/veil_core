@@ -38,8 +38,8 @@ type Manager struct {
 func NewManager() *Manager {
 	m := &Manager{
 		Clients:    make(map[*Client]bool),
-		Register:   make(chan *Client),
-		Unregister: make(chan *Client),
+		Register:   make(chan *Client, 256), // Buffered to prevent blocking
+		Unregister: make(chan *Client, 256),
 		Rooms:      make(map[string]*Room),
 	}
 	m.Queue = NewMatchmakingQueue()
@@ -47,6 +47,13 @@ func NewManager() *Manager {
 }
 
 func (m *Manager) Run() {
+	defer func() {
+		if r := recover(); r != nil {
+			log.Printf("Manager Recovered from panic: %v", r)
+			go m.Run() // Restart
+		}
+	}()
+
 	ticker := time.NewTicker(1 * time.Second)
 	defer ticker.Stop()
 

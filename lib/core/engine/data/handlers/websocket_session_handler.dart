@@ -1,7 +1,9 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:web_socket_channel/web_socket_channel.dart';
+
 import '../../domain/handlers/game_session_handler.dart';
 import '../../domain/handlers/voice_session_handler.dart';
 import '../../domain/models/session_state.dart';
@@ -172,12 +174,12 @@ class WebSocketSessionHandler
       // Close existing connection if any to prevent leaks
       await _channel?.sink.close();
 
+      debugPrint('Connecting to WebSocket: $_lastUrl');
       _channel = WebSocketChannel.connect(Uri.parse(_lastUrl!));
       _setupMessageListener(firebaseToken, displayName: displayName);
       _reconnectAttempts = 0; // Reset on success
     } catch (e) {
-      // TODO: Implement exponential backoff for reconnection attempts in _handleConnectionFailure
-      debugPrint('Connection attempt failed: $e');
+      debugPrint('Connection attempt failed to $_lastUrl: $e');
       _handleConnectionFailure(firebaseToken, displayName: displayName);
     }
   }
@@ -186,19 +188,30 @@ class WebSocketSessionHandler
     // Send auth message
     _send({
       'type': 'AUTH',
-      'data': {'token': firebaseToken, 'name': displayName},
+      'data': {
+        'token': firebaseToken,
+        'name': displayName ?? 'Player',
+        'platform': Platform.isAndroid ? 'android' : 'ios',
+        'version': '1.0.0',
+      },
     });
 
     // Listen for messages
     _channel!.stream.listen(
       _handleMessage,
       onError: (error) {
-        debugPrint('WebSocket Error: $error');
+        debugPrint('🚨 WebSocket Error: $error');
         _handleConnectionFailure(firebaseToken, displayName: displayName);
       },
       onDone: () {
-        debugPrint('WebSocket connection closed');
-        if (_connectionStatus == ConnectionStatus.connected) {
+        debugPrint('🚨 WebSocket connection closed.');
+        if (_channel?.closeCode != null) {
+          debugPrint('🚨 Close Code: ${_channel?.closeCode}');
+          debugPrint('🚨 Close Reason: ${_channel?.closeReason}');
+        }
+
+        if (_connectionStatus == ConnectionStatus.connected ||
+            _connectionStatus == ConnectionStatus.connecting) {
           // Unexpected disconnect - try to reconnect
           _handleConnectionFailure(firebaseToken, displayName: displayName);
         }

@@ -1,6 +1,7 @@
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
-import 'config/app_config.dart';
+import 'core/config/app_config.dart';
 import 'core/theme/app_theme.dart';
 import 'core/theme/bloc/theme_bloc.dart';
 import 'core/theme/bloc/theme_state.dart';
@@ -24,15 +25,40 @@ import 'package:firebase_app_check/firebase_app_check.dart';
 import 'config/firebase_options_dev.dart' as dev;
 import 'config/firebase_options_prod.dart' as prod;
 
-Future<void> mainCommon(AppConfig config) async {
+Future<void> mainCommon({required String env, required String appName}) async {
   WidgetsBinding widgetsBinding = WidgetsFlutterBinding.ensureInitialized();
   FlutterNativeSplash.preserve(widgetsBinding: widgetsBinding);
 
-  final options = config.environment == Environment.prod
+  // Initialize Core Configuration Singleton
+  await AppConfig.initialize(env: env, appName: appName);
+  final config = AppConfig.instance;
+
+  final options =
+      config.environment == 'production' || config.environment == 'prod'
       ? prod.DefaultFirebaseOptions.currentPlatform
       : dev.DefaultFirebaseOptions.currentPlatform;
 
   await Firebase.initializeApp(options: options);
+
+  // Fully load config (now safe to access Remote Config)
+  config.load();
+  debugPrint('🚨 [DEBUG] STARTUP CONFIG CHECK 🚨');
+  debugPrint('🚨 Server URL: ${config.serverUrl}');
+  debugPrint('🚨 API URL: ${config.apiBaseUrl}');
+  debugPrint('🚨 Environment: ${config.environment}');
+
+  // Connectivity Doctor
+  try {
+    debugPrint('🚨 [DEBUG] Running Connectivity Check...');
+    final request = await HttpClient()
+        .getUrl(Uri.parse('${config.apiBaseUrl}/config'))
+        .timeout(const Duration(seconds: 5));
+    final response = await request.close();
+    debugPrint('🚨 HTTP CONNECTIVITY CHECK: Status ${response.statusCode}');
+    await response.drain(); // Ensure we read the body to close properly
+  } catch (e) {
+    debugPrint('🚨 HTTP CONNECTIVITY CHECK FAILED: $e');
+  }
 
   // Initialize Remote Config Service
   await RemoteConfigService.instance.initialize();
@@ -40,7 +66,7 @@ Future<void> mainCommon(AppConfig config) async {
   // Activate App Check
   try {
     await FirebaseAppCheck.instance.activate(
-      providerAndroid: config.environment == Environment.dev
+      providerAndroid: config.isDevelopment
           ? const AndroidDebugProvider()
           : const AndroidPlayIntegrityProvider(),
       providerApple: const AppleDeviceCheckProvider(),
@@ -64,13 +90,12 @@ Future<void> mainCommon(AppConfig config) async {
   // to avoid crashes during initialization
 
   GlobalErrorHandler.run(() {
-    runApp(BluffApp(config: config));
+    runApp(const BluffApp());
   });
 }
 
 class BluffApp extends StatelessWidget {
-  final AppConfig config;
-  const BluffApp({super.key, required this.config});
+  const BluffApp({super.key});
 
   @override
   Widget build(BuildContext context) {
@@ -102,7 +127,7 @@ class BluffApp extends StatelessWidget {
         builder: (context, themeState) {
           return MaterialApp(
             title: 'Bluff',
-            debugShowCheckedModeBanner: config.isDev,
+            debugShowCheckedModeBanner: AppConfig.instance.isDevelopment,
             theme: AppTheme.getTheme(themeState.mode),
             initialRoute: AppRouter.splash,
             builder: (context, child) {

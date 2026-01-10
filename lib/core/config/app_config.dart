@@ -1,5 +1,6 @@
 import 'package:flutter/foundation.dart';
 import 'dart:io' show Platform;
+import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'remote_config_service.dart';
 
 /// Environment-based configuration management
@@ -10,17 +11,49 @@ import 'remote_config_service.dart';
 ///
 /// 2. Or use .env files with flutter_dotenv package
 ///
-/// 3. Access config: AppConfig.instance.serverUrl
 class AppConfig {
   static AppConfig? _instance;
-  static AppConfig get instance => _instance ??= AppConfig._();
 
-  AppConfig._() {
-    _loadConfig();
+  /// Access global config instance.
+  /// Ensure [initialize] is called and awaited before access.
+  static AppConfig get instance {
+    if (_instance == null) {
+      throw StateError(
+        'AppConfig must be initialized before use. Call await AppConfig.initialize()',
+      );
+    }
+    return _instance!;
+  }
+
+  AppConfig._();
+
+  static Future<void> initialize({
+    String? env,
+    String? appName,
+    String? customServerUrl,
+    String? customApiUrl,
+  }) async {
+    final config = AppConfig._();
+    await config._bootstrap(
+      injectedEnv: env,
+      injectedAppName: appName,
+      customServerUrl: customServerUrl,
+      customApiUrl: customApiUrl,
+    );
+    _instance = config;
+  }
+
+  // Custom Overrides
+  String? _customServerUrl;
+  String? _customApiUrl;
+
+  void load() {
+    _load();
   }
 
   // Environment
   late final String environment;
+  late final String appName;
   late final bool isProduction;
   late final bool isDevelopment;
 
@@ -60,34 +93,70 @@ class AppConfig {
   late final String supportEmail;
   late final String gameRulesUrl;
 
-  void _loadConfig() {
-    // Load environment
-    environment = const String.fromEnvironment(
-      'ENV',
-      defaultValue: 'development',
-    );
-    isProduction = environment == 'production';
-    isDevelopment = environment == 'development';
+  Future<void> _bootstrap({
+    String? injectedEnv,
+    String? injectedAppName,
+    String? customServerUrl,
+    String? customApiUrl,
+  }) async {
+    // 1. Try to load .env file
+    try {
+      await dotenv.load(fileName: ".env");
+      debugPrint('.env file loaded successfully');
+    } catch (e) {
+      debugPrint('No .env file found or failed to load: $e');
+    }
 
+    // 2. Set environment & app name (priority: injected > .env > String.fromEnvironment)
+    environment =
+        injectedEnv ??
+        dotenv.maybeGet('ENV') ??
+        const String.fromEnvironment('ENV', defaultValue: 'development');
+
+    appName =
+        injectedAppName ??
+        dotenv.maybeGet('APP_NAME') ??
+        const String.fromEnvironment('APP_NAME', defaultValue: 'Bluff');
+
+    isProduction = environment == 'production' || environment == 'prod';
+    isDevelopment = !isProduction;
+
+    _customServerUrl = customServerUrl;
+    _customApiUrl = customApiUrl;
+  }
+
+  void _load() {
     // Server Configuration
     if (isProduction) {
-      serverUrl = const String.fromEnvironment(
-        'SERVER_URL',
-        defaultValue: 'wss://your-production-server.com/ws',
-      );
-      apiBaseUrl = const String.fromEnvironment(
-        'API_URL',
-        defaultValue: 'https://your-production-server.com/api',
-      );
+      serverUrl =
+          _customServerUrl ??
+          dotenv.maybeGet('SERVER_URL') ??
+          const String.fromEnvironment(
+            'SERVER_URL',
+            defaultValue: 'wss://bluffzone.duckdns.org/ws',
+          );
+      apiBaseUrl =
+          _customApiUrl ??
+          dotenv.maybeGet('API_URL') ??
+          const String.fromEnvironment(
+            'API_URL',
+            defaultValue: 'https://bluffzone.duckdns.org/api',
+          );
     } else {
-      var defaultServerUrl = const String.fromEnvironment(
-        'SERVER_URL',
-        defaultValue: 'ws://localhost:8080/ws',
-      );
-      var defaultApiUrl = const String.fromEnvironment(
-        'API_URL',
-        defaultValue: 'http://localhost:8080/api',
-      );
+      var defaultServerUrl =
+          _customServerUrl ??
+          dotenv.maybeGet('SERVER_URL') ??
+          const String.fromEnvironment(
+            'SERVER_URL',
+            defaultValue: 'ws://72.62.197.76:8080/ws',
+          );
+      var defaultApiUrl =
+          _customApiUrl ??
+          dotenv.maybeGet('API_URL') ??
+          const String.fromEnvironment(
+            'API_URL',
+            defaultValue: 'http://72.62.197.76:8080/api',
+          );
 
       // Handle Android Emulator localhost (10.0.2.2)
       if (!kIsWeb && Platform.isAndroid) {
@@ -218,7 +287,11 @@ class AppConfig {
     final rcValue = RemoteConfigService.instance.getInt(rcKey);
     if (rcValue != 0) return rcValue;
 
-    // 2. Try Environment Variable (Build Time)
+    // 2. Try .env
+    final envFileValue = dotenv.maybeGet(envKey);
+    if (envFileValue != null) return int.tryParse(envFileValue) ?? defaultValue;
+
+    // 3. Try Environment Variable (Build Time)
     return int.fromEnvironment(envKey, defaultValue: defaultValue);
   }
 
@@ -227,7 +300,11 @@ class AppConfig {
     final rcValue = RemoteConfigService.instance.getString(rcKey);
     if (rcValue.isNotEmpty) return rcValue;
 
-    // 2. Try Environment Variable (Build Time)
+    // 2. Try .env
+    final envFileValue = dotenv.maybeGet(envKey);
+    if (envFileValue != null) return envFileValue;
+
+    // 3. Try Environment Variable (Build Time)
     return String.fromEnvironment(envKey, defaultValue: defaultValue);
   }
 
@@ -252,8 +329,8 @@ class AppConfig {
   }
 
   // Helper method to reload config (useful for testing)
-  static void reload() {
+  static Future<void> reload() async {
     _instance = null;
-    _instance = AppConfig._();
+    await AppConfig.initialize();
   }
 }

@@ -9,6 +9,7 @@ import '../../../auth/auth.dart';
 import '../../../../core/engine/engine.dart';
 import '../../../../core/di/service_locator.dart' as di;
 import '../../../../core/engine/data/handlers/websocket_session_handler.dart';
+import '../../../../core/config/app_config.dart';
 
 class MatchmakingScreen extends StatefulWidget {
   const MatchmakingScreen({super.key});
@@ -27,11 +28,6 @@ class _MatchmakingScreenState extends State<MatchmakingScreen>
   StreamSubscription? _statsSubscription;
   StreamSubscription? _sessionStateSubscription;
 
-  final TextEditingController _urlController = TextEditingController(
-    text: 'wss://rebelliously-unforgone-mandie.ngrok-free.dev/ws',
-  );
-  bool _showDebugInput = false;
-
   @override
   void initState() {
     super.initState();
@@ -40,7 +36,7 @@ class _MatchmakingScreenState extends State<MatchmakingScreen>
       vsync: this,
     )..repeat();
 
-    // Delay slightly to allow UI to render before starting (or wait for user input)
+    // Delay slightly to allow UI to render before starting
     Future.delayed(Duration.zero, () {
       if (mounted) _startOnlineMatchmaking();
     });
@@ -64,9 +60,9 @@ class _MatchmakingScreenState extends State<MatchmakingScreen>
       final handler =
           di.sl.createSessionHandler(online: true) as WebSocketSessionHandler;
 
-      // Use controller text and pass user's current display name
+      // Use URL from AppConfig and pass user's current display name
       await handler.connect(
-        _urlController.text,
+        AppConfig.instance.serverUrl,
         token,
         displayName: user?.displayName,
       );
@@ -107,15 +103,14 @@ class _MatchmakingScreenState extends State<MatchmakingScreen>
       }
     } catch (e) {
       if (mounted) {
-        // Show error but stay on screen to allow retry/URL change
+        // Show error but stay on screen to allow retry
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Error: $e'),
+            content: Text('Connection Error: $e'),
             backgroundColor: Colors.red,
             duration: const Duration(seconds: 5),
           ),
         );
-        setState(() => _showDebugInput = true); // Auto-show input on error
       }
       if (mounted) setState(() => _isConnecting = false);
     }
@@ -132,7 +127,6 @@ class _MatchmakingScreenState extends State<MatchmakingScreen>
   @override
   void dispose() {
     _controller.dispose();
-    _urlController.dispose();
     _statsSubscription?.cancel();
     _sessionStateSubscription?.cancel();
     super.dispose();
@@ -188,17 +182,13 @@ class _MatchmakingScreenState extends State<MatchmakingScreen>
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              GestureDetector(
-                onLongPress: () =>
-                    setState(() => _showDebugInput = !_showDebugInput),
-                child: Text(
-                  'Finding a Match',
-                  style: GoogleFonts.cinzel(
-                    color: Colors.white70,
-                    fontSize: 20,
-                    fontWeight: FontWeight.bold,
-                    letterSpacing: 1.2,
-                  ),
+              Text(
+                'Finding a Match',
+                style: GoogleFonts.cinzel(
+                  color: Colors.white70,
+                  fontSize: 20,
+                  fontWeight: FontWeight.bold,
+                  letterSpacing: 1.2,
                 ),
               ),
               IconButton(
@@ -207,35 +197,6 @@ class _MatchmakingScreenState extends State<MatchmakingScreen>
               ),
             ],
           ),
-          if (_showDebugInput)
-            Padding(
-              padding: const EdgeInsets.only(top: 16),
-              child: Row(
-                children: [
-                  Expanded(
-                    child: TextField(
-                      controller: _urlController,
-                      style: const TextStyle(color: Colors.white),
-                      decoration: const InputDecoration(
-                        labelText: 'Server URL',
-                        labelStyle: TextStyle(color: Colors.white54),
-                        enabledBorder: OutlineInputBorder(
-                          borderSide: BorderSide(color: Colors.white24),
-                        ),
-                        focusedBorder: OutlineInputBorder(
-                          borderSide: BorderSide(color: Color(0xFFE5A043)),
-                        ),
-                      ),
-                    ),
-                  ),
-                  const SizedBox(width: 8),
-                  IconButton(
-                    icon: const Icon(Icons.refresh, color: Color(0xFFE5A043)),
-                    onPressed: _startOnlineMatchmaking,
-                  ),
-                ],
-              ),
-            ),
         ],
       ),
     );
