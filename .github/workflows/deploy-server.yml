@@ -1,71 +1,71 @@
 name: Deploy Server
 
 on:
-    push:
-        branches:
-            - develop # Auto-deploy Dev
-        tags:
-            - "go_v*" # Auto-deploy Prod
+  push:
+    branches:
+      - dev # Auto-deploy Dev
+    tags:
+      - "go_v*" # Auto-deploy Prod
 
 jobs:
-    deploy:
-        runs-on: ubuntu-latest
-        steps:
-            - name: Determine Environment
-              id: env
-              run: |
-                  if [[ "${{ github.ref }}" == refs/heads/develop ]]; then
-                    echo "environment=dev" >> $GITHUB_OUTPUT
-                    echo "container=veil-game-dev" >> $GITHUB_OUTPUT
-                    echo "image_tag=veil-server:dev" >> $GITHUB_OUTPUT
-                    echo "credentials_secret=FIREBASE_SERVICE_ACCOUNT_DEV" >> $GITHUB_OUTPUT
-                    echo "credentials_file=firebase-service-account-dev.json" >> $GITHUB_OUTPUT
-                  else
-                    echo "environment=prod" >> $GITHUB_OUTPUT
-                    echo "container=veil-game-prod" >> $GITHUB_OUTPUT
-                    echo "image_tag=veil-server:prod" >> $GITHUB_OUTPUT
-                    echo "credentials_secret=FIREBASE_SERVICE_ACCOUNT_PROD" >> $GITHUB_OUTPUT
-                    echo "credentials_file=firebase-service-account-prod.json" >> $GITHUB_OUTPUT
-                  fi
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Determine Environment
+        id: env
+        run: |
+          if [[ "${{ github.ref }}" == refs/heads/dev ]]; then
+            echo "environment=dev" >> $GITHUB_OUTPUT
+            echo "container=veil-game-dev" >> $GITHUB_OUTPUT
+            echo "image_tag=veil-server:dev" >> $GITHUB_OUTPUT
+            echo "credentials_secret=FIREBASE_SERVICE_ACCOUNT_DEV" >> $GITHUB_OUTPUT
+            echo "credentials_file=firebase-service-account-dev.json" >> $GITHUB_OUTPUT
+          else
+            echo "environment=prod" >> $GITHUB_OUTPUT
+            echo "container=veil-game-prod" >> $GITHUB_OUTPUT
+            echo "image_tag=veil-server:prod" >> $GITHUB_OUTPUT
+            echo "credentials_secret=FIREBASE_SERVICE_ACCOUNT_PROD" >> $GITHUB_OUTPUT
+            echo "credentials_file=firebase-service-account-prod.json" >> $GITHUB_OUTPUT
+          fi
 
-            - name: Deploy to Server
-              uses: appleboy/ssh-action@v1.0.3
-              with:
-                  host: ${{ secrets.SERVER_IP }}
-                  username: root
-                  key: ${{ secrets.SSH_KEY }}
-                  envs: FIREBASE_CREDS
-              env:
-                  FIREBASE_CREDS: ${{ secrets[steps.env.outputs.credentials_secret] }}
-                  script: |
-                      # Update code
-                      cd ~/veil_core
-                      git fetch --all
-                      git checkout ${{ github.ref_name }}
-                      git pull origin ${{ github.ref_name }}
+      - name: Deploy to Server
+        uses: appleboy/ssh-action@v1.0.3
+        env:
+          FIREBASE_CREDS: ${{ secrets[steps.env.outputs.credentials_secret] }}
+        with:
+          host: ${{ secrets.SERVER_IP }}
+          username: root
+          key: ${{ secrets.SSH_KEY }}
+          envs: FIREBASE_CREDS
+          script: |
+            # Update code
+            cd ~/veil_core
+            git fetch --all
+            git checkout ${{ github.ref_name }}
+            git pull origin ${{ github.ref_name }}
 
-                      # Write credentials
-                      echo "$FIREBASE_CREDS" > /root/${{ steps.env.outputs.credentials_file }}
+            # Write credentials
+            echo "$FIREBASE_CREDS" > /root/${{ steps.env.outputs.credentials_file }}
 
-                      # Build image
-                      cd server
-                      docker build --network=host -t ${{ steps.env.outputs.image_tag }} .
+            # Build image
+            cd server
+            docker build --network=host -t ${{ steps.env.outputs.image_tag }} .
 
-                      # Ensure docker-compose.yml exists
-                      if [ ! -f /root/docker-compose.yml ]; then
-                        cp ~/veil_core/docker-compose-production.yml /root/docker-compose.yml
-                      fi
+            # Ensure docker-compose.yml exists
+            if [ ! -f /root/docker-compose.yml ]; then
+              cp ~/veil_core/docker-compose-production.yml /root/docker-compose.yml
+            fi
 
-                      # Restart container using docker-compose
-                      cd /root
-                      docker-compose up -d --force-recreate ${{ steps.env.outputs.container }}
+            # Restart container using docker-compose
+            cd /root
+            docker-compose up -d --force-recreate ${{ steps.env.outputs.container }}
 
-                      # Health check
-                      sleep 5
-                      if [ "$(docker inspect -f '{{.State.Running}}' ${{ steps.env.outputs.container }})" != "true" ]; then
-                        echo "Error: Container failed to start!"
-                        docker logs ${{ steps.env.outputs.container }}
-                        exit 1
-                      fi
+            # Health check
+            sleep 5
+            if [ "$(docker inspect -f '{{.State.Running}}' ${{ steps.env.outputs.container }})" != "true" ]; then
+              echo "Error: Container failed to start!"
+              docker logs ${{ steps.env.outputs.container }}
+              exit 1
+            fi
 
-                      echo "✅ ${{ steps.env.outputs.environment }} deployment successful!"
+            echo "✅ ${{ steps.env.outputs.environment }} deployment successful!"
