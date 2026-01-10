@@ -147,7 +147,7 @@ jobs:
           packageName: com.veil.bluff
           releaseFiles: build/app/outputs/bundle/prodRelease/app-prod-release.aab
           track: internal
-          status: completed
+          status: draft
           whatsNewDirectory: distribution/whatsnew
 
   create_release:
