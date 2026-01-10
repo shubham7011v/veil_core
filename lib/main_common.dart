@@ -61,6 +61,15 @@ Future<void> mainCommon({required String env, required String appName}) async {
         } else {
           debugPrint('🚀 [STARTUP] 2. Firebase already initialized, skipping');
         }
+      } on FirebaseException catch (e) {
+        // Handle duplicate app error gracefully
+        if (e.code == 'duplicate-app') {
+          debugPrint(
+            '🚀 [STARTUP] 2. Firebase app already exists, using existing instance',
+          );
+        } else {
+          throw 'Firebase Initialization Failed: $e';
+        }
       } catch (e) {
         throw 'Firebase Initialization Failed: $e';
       }
