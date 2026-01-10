@@ -20,11 +20,11 @@ class GlobalErrorHandler {
 
   /// Runs the app inside a protected zone.
   static void run(FutureOr<void> Function() appRunner) {
-    // Ensure bindings are initialized before entering the zone
-    WidgetsFlutterBinding.ensureInitialized();
-
     runZonedGuarded(
       () async {
+        // Ensure bindings are initialized before entering the zone
+        WidgetsFlutterBinding.ensureInitialized();
+
         FlutterError.onError = (FlutterErrorDetails details) {
           if (kDebugMode) {
             FlutterError.dumpErrorToConsole(details);
