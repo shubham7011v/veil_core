@@ -176,6 +176,17 @@ class WebSocketSessionHandler
 
       debugPrint('Connecting to WebSocket: $_lastUrl');
       _channel = WebSocketChannel.connect(Uri.parse(_lastUrl!));
+
+      // Monitor if the connection actually connects at the socket level
+      _channel!.ready
+          .then((_) {
+            debugPrint('✅ WebSocket Handshake Ready for $_lastUrl');
+          })
+          .catchError((e) {
+            debugPrint('🚨 WebSocket Handshake Failed for $_lastUrl: $e');
+            // Do not call _handleConnectionFailure here, let onDone/onError in _setupMessageListener handle it
+          });
+
       _setupMessageListener(firebaseToken, displayName: displayName);
       _reconnectAttempts = 0; // Reset on success
     } catch (e) {

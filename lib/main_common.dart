@@ -26,70 +26,70 @@ import 'config/firebase_options_dev.dart' as dev;
 import 'config/firebase_options_prod.dart' as prod;
 
 Future<void> mainCommon({required String env, required String appName}) async {
-  WidgetsBinding widgetsBinding = WidgetsFlutterBinding.ensureInitialized();
-  FlutterNativeSplash.preserve(widgetsBinding: widgetsBinding);
+  GlobalErrorHandler.run(() async {
+    debugPrint('🚀 [STARTUP] Initializing $env environment...');
 
-  // Initialize Core Configuration Singleton
-  await AppConfig.initialize(env: env, appName: appName);
-  final config = AppConfig.instance;
+    // Bindings are initialized inside GlobalErrorHandler.run
+    FlutterNativeSplash.preserve(widgetsBinding: WidgetsBinding.instance);
 
-  final options =
-      config.environment == 'production' || config.environment == 'prod'
-      ? prod.DefaultFirebaseOptions.currentPlatform
-      : dev.DefaultFirebaseOptions.currentPlatform;
+    // Initialize Core Configuration Singleton
+    await AppConfig.initialize(env: env, appName: appName);
+    final config = AppConfig.instance;
 
-  await Firebase.initializeApp(options: options);
+    final options =
+        config.environment == 'production' || config.environment == 'prod'
+        ? prod.DefaultFirebaseOptions.currentPlatform
+        : dev.DefaultFirebaseOptions.currentPlatform;
 
-  // Fully load config (now safe to access Remote Config)
-  config.load();
-  debugPrint('🚨 [DEBUG] STARTUP CONFIG CHECK 🚨');
-  debugPrint('🚨 Server URL: ${config.serverUrl}');
-  debugPrint('🚨 API URL: ${config.apiBaseUrl}');
-  debugPrint('🚨 Environment: ${config.environment}');
+    await Firebase.initializeApp(options: options);
 
-  // Connectivity Doctor
-  try {
+    // Fully load config (now safe to access Remote Config)
+    config.load();
+    debugPrint('🚨 [DEBUG] STARTUP CONFIG CHECK 🚨');
+    debugPrint('🚨 Server URL: ${config.serverUrl}');
+    debugPrint('🚨 API URL: ${config.apiBaseUrl}');
+    debugPrint('🚨 Environment: ${config.environment}');
+
+    // Connectivity Doctor
     debugPrint('🚨 [DEBUG] Running Connectivity Check...');
-    final request = await HttpClient()
-        .getUrl(Uri.parse('${config.apiBaseUrl}/config'))
-        .timeout(const Duration(seconds: 5));
-    final response = await request.close();
-    debugPrint('🚨 HTTP CONNECTIVITY CHECK: Status ${response.statusCode}');
-    await response.drain(); // Ensure we read the body to close properly
-  } catch (e) {
-    debugPrint('🚨 HTTP CONNECTIVITY CHECK FAILED: $e');
-  }
+    try {
+      final request = await HttpClient()
+          .getUrl(Uri.parse('${config.apiBaseUrl}/config'))
+          .timeout(const Duration(seconds: 5));
+      final response = await request.close();
+      debugPrint('🚨 HTTP CONNECTIVITY CHECK: Status ${response.statusCode}');
+      await response.drain();
+    } catch (e) {
+      debugPrint('🚨 HTTP CONNECTIVITY CHECK FAILED: $e');
+    }
 
-  // Initialize Remote Config Service
-  await RemoteConfigService.instance.initialize();
+    // Initialize Remote Config Service
+    await RemoteConfigService.instance.initialize();
 
-  // Activate App Check
-  try {
-    await FirebaseAppCheck.instance.activate(
-      providerAndroid: config.isDevelopment
-          ? const AndroidDebugProvider()
-          : const AndroidPlayIntegrityProvider(),
-      providerApple: const AppleDeviceCheckProvider(),
-    );
-    debugPrint('Firebase App Check activated');
-  } catch (e) {
-    debugPrint('Firebase App Check activation failed: $e');
-  }
+    // Activate App Check
+    try {
+      await FirebaseAppCheck.instance.activate(
+        providerAndroid: config.isDevelopment
+            ? const AndroidDebugProvider()
+            : const AndroidPlayIntegrityProvider(),
+        providerApple: const AppleDeviceCheckProvider(),
+      );
+      debugPrint('Firebase App Check activated');
+    } catch (e) {
+      debugPrint('Firebase App Check activation failed: $e');
+    }
 
-  // Initialize Service Locator
-  await di.sl.setup();
+    // Initialize Service Locator
+    await di.sl.setup();
 
-  // Initialize Notifications
-  try {
-    await di.sl.notificationService.initialize();
-  } catch (e) {
-    debugPrint("Failed to initialize notifications: $e");
-  }
+    // Initialize Notifications
+    try {
+      await di.sl.notificationService.initialize();
+    } catch (e) {
+      debugPrint("Failed to initialize notifications: $e");
+    }
 
-  // Note: BGM will be started after successful authentication in HomeScreen
-  // to avoid crashes during initialization
-
-  GlobalErrorHandler.run(() {
+    debugPrint('🚀 [STARTUP] runApp() called');
     runApp(const BluffApp());
   });
 }

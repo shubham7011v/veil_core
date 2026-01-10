@@ -1,5 +1,7 @@
 import 'dart:async';
 import 'package:flutter/foundation.dart';
+import 'package:flutter/material.dart';
+import 'package:flutter/widgets.dart';
 
 /// specialized class to handle all uncaught errors in the application.
 class GlobalErrorHandler {
@@ -17,7 +19,10 @@ class GlobalErrorHandler {
   }
 
   /// Runs the app inside a protected zone.
-  static void run(void Function() appRunner) {
+  static void run(FutureOr<void> Function() appRunner) {
+    // Ensure bindings are initialized before entering the zone
+    WidgetsFlutterBinding.ensureInitialized();
+
     runZonedGuarded(
       () async {
         FlutterError.onError = (FlutterErrorDetails details) {
@@ -29,7 +34,7 @@ class GlobalErrorHandler {
           }
         };
 
-        appRunner();
+        await appRunner();
       },
       (error, stack) {
         handle(error, stack);

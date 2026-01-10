@@ -115,8 +115,8 @@ class SystemStatusService {
 
     // Manage Syncing Timeout
     if (status.type == SystemStatusType.syncing) {
-      _syncTimeout ??= Timer(const Duration(seconds: 10), () {
-        // If we are still syncing after 10 seconds, force an update to show real bottleneck
+      _syncTimeout ??= Timer(const Duration(seconds: 20), () {
+        // If we are still syncing after 20 seconds, force an update to show real bottleneck
         _syncTimeout = null;
         _handleSyncTimeout();
       });
