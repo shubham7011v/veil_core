@@ -324,7 +324,7 @@ class WebSocketSessionHandler
 
         case 'LEADERBOARD_DATA':
           try {
-            final data = msg['data'] as List<dynamic>;
+            final data = (msg['data'] as List<dynamic>?) ?? [];
             final leaderboard = data
                 .map((u) => UserStats.fromJson(u as Map<String, dynamic>))
                 .toList();
@@ -336,7 +336,7 @@ class WebSocketSessionHandler
 
         case 'FRIEND_LIST':
           try {
-            final data = msg['data'] as List<dynamic>;
+            final data = (msg['data'] as List<dynamic>?) ?? [];
             final friends = data
                 .map((f) => FriendRecord.fromJson(f as Map<String, dynamic>))
                 .toList();
@@ -393,7 +393,7 @@ class WebSocketSessionHandler
 
         case 'CHALLENGES_DATA':
           try {
-            final data = msg['data'] as List<dynamic>;
+            final data = (msg['data'] as List<dynamic>?) ?? [];
             final challenges = data
                 .map((c) => DailyChallenge.fromJson(c as Map<String, dynamic>))
                 .toList();
