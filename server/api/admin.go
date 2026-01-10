@@ -62,6 +62,7 @@ func (h *AdminHandler) AdminMiddleware(next http.HandlerFunc) http.HandlerFunc {
 
 		// 2. Check if UID is in allowed list
 		adminUIDsEnv := os.Getenv("ADMIN_UIDS")
+		log.Printf("ADMIN_CHECK: Env var ADMIN_UIDS length: %d", len(adminUIDsEnv))
 		if adminUIDsEnv == "" {
 			log.Println("WARNING: ADMIN_UIDS env var is empty. Admin access denied for everything.")
 			http.Error(w, "Forbidden: Server misconfiguration", http.StatusForbidden)
@@ -70,15 +71,19 @@ func (h *AdminHandler) AdminMiddleware(next http.HandlerFunc) http.HandlerFunc {
 
 		allowedUIDs := strings.Split(adminUIDsEnv, ",")
 		isAllowed := false
+		trimmedTokenUID := strings.TrimSpace(token.UID)
+
 		for _, uid := range allowedUIDs {
-			if strings.TrimSpace(uid) == token.UID {
+			trimmedAllowedUID := strings.TrimSpace(uid)
+			log.Printf("ADMIN_CHECK: Comparing '%s' (env) with '%s' (token)", trimmedAllowedUID, trimmedTokenUID)
+			if trimmedAllowedUID == trimmedTokenUID {
 				isAllowed = true
 				break
 			}
 		}
 
 		if !isAllowed {
-			log.Printf("Access denied for UID: %s", token.UID)
+			log.Printf("Access denied for UID: %s (not in list: %s)", token.UID, adminUIDsEnv)
 			http.Error(w, "Forbidden: Not an admin", http.StatusForbidden)
 			return
 		}

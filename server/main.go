@@ -60,7 +60,7 @@ func main() {
 	}
 
 	// Initialize the Room Manager
-	manager := room.NewManager()
+	manager := room.NewManager(authClient)
 	go manager.Run()
 
 	// Handle WebSocket connections

@@ -1,6 +1,7 @@
 package room
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"log"
@@ -12,6 +13,8 @@ import (
 	"veil_server/config"
 	"veil_server/db"
 	"veil_server/protocol"
+
+	"firebase.google.com/go/v4/auth"
 )
 
 const (
@@ -35,14 +38,17 @@ type Manager struct {
 
 	Rooms map[string]*Room
 	Queue *MatchmakingQueue
+
+	AuthClient *auth.Client
 }
 
-func NewManager() *Manager {
+func NewManager(authClient *auth.Client) *Manager {
 	m := &Manager{
 		Clients:    make(map[*Client]bool),
 		Register:   make(chan *Client, 256), // Buffered to prevent blocking
 		Unregister: make(chan *Client, 256),
 		Rooms:      make(map[string]*Room),
+		AuthClient: authClient,
 	}
 	m.Queue = NewMatchmakingQueue()
 	return m
@@ -139,14 +145,23 @@ func (m *Manager) HandleMessage(c *Client, message []byte) {
 			return
 		}
 
-		userID := authData.Token
+		tokenString := authData.Token
 		userName := authData.Name
+
+		// Verify Token if possible
+		userID := tokenString
+		if m.AuthClient != nil && !strings.HasPrefix(tokenString, "mock_") {
+			token, err := m.AuthClient.VerifyIDToken(context.Background(), tokenString)
+			if err == nil {
+				userID = token.UID
+				log.Printf("Verified user: %s", userID)
+			} else {
+				log.Printf("Token verification failed (falling back to raw string): %v", err)
+			}
+		}
+
 		if userName == "" {
 			userName = "Player " + userID[:4]
-		}
-		// Simplified mock detection
-		if len(userID) > 20 && userID[:5] == "mock_" {
-			userID = fmt.Sprintf("%s_%d", userID, time.Now().UnixNano()%10000)
 		}
 
 		c.ID = userID
@@ -159,7 +174,6 @@ func (m *Manager) HandleMessage(c *Client, message []byte) {
 		}
 
 		m.sendAuthOk(c, stats)
-
 		return // Handled
 
 	case protocol.MsgTypeUpdateName:
@@ -459,11 +473,16 @@ func (m *Manager) sendAuthOk(c *Client, stats *db.UserStats) {
 	// Check if this user is a server admin
 	isAdmin := false
 	adminUIDsEnv := os.Getenv("ADMIN_UIDS")
+
 	if adminUIDsEnv != "" {
 		allowedUIDs := strings.Split(adminUIDsEnv, ",")
+		trimmedClientUID := strings.TrimSpace(c.ID)
+
 		for _, uid := range allowedUIDs {
-			if strings.TrimSpace(uid) == c.ID {
+			trimmedEnvUID := strings.TrimSpace(uid)
+			if trimmedEnvUID == trimmedClientUID {
 				isAdmin = true
+				log.Printf("ADMIN_FOUND: Matched admin UID: %s", c.ID)
 				break
 			}
 		}
