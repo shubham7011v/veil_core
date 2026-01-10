@@ -748,6 +748,11 @@ class WebSocketSessionHandler
     _send({'type': 'DELETE_ACCOUNT'});
   }
 
+  /// Join the matchmaking queue for public matches
+  void joinMatchmaking() {
+    _send({'type': 'JOIN_ROOM'});
+  }
+
   @override
   void sendChatMessage(String message) {
     _send({

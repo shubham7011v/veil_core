@@ -47,33 +47,42 @@ class _MatchmakingScreenState extends State<MatchmakingScreen>
     setState(() => _isConnecting = true);
 
     try {
-      // 1. Get fresh Firebase token
-      final user = FirebaseAuth.instance.currentUser;
-      // If bypassed login, use a mock token
-      final token = user != null
-          ? await user.getIdToken()
-          : 'mock_token_${DateTime.now().millisecondsSinceEpoch}';
+      // Always use the singleton WebSocket handler
+      final handler = di.sl.webSocketSessionHandler;
 
-      if (token == null) throw Exception('Failed to get token');
+      debugPrint('Singleton handler status: ${handler.connectionStatus}');
 
-      // 2. Connect
-      final handler =
-          di.sl.createSessionHandler(online: true) as WebSocketSessionHandler;
+      // Only connect if not already connected
+      if (handler.connectionStatus != ConnectionStatus.connected) {
+        debugPrint('Not connected, initiating connection...');
+        final user = FirebaseAuth.instance.currentUser;
+        final token = user != null
+            ? await user.getIdToken()
+            : 'mock_token_${DateTime.now().millisecondsSinceEpoch}';
 
-      // Use URL from AppConfig and pass user's current display name
-      await handler.connect(
-        AppConfig.instance.serverUrl,
-        token,
-        displayName: user?.displayName,
-      );
+        if (token == null) throw Exception('Failed to get token');
 
-      _handler = handler; // Store handler for manual start
+        await handler.connect(
+          AppConfig.instance.serverUrl,
+          token,
+          displayName: user?.displayName,
+        );
 
-      // 3. Update SessionBloc
+        // Wait for connection to stabilize
+        await Future.delayed(const Duration(milliseconds: 500));
+      } else {
+        debugPrint('Already connected, reusing connection');
+      }
+
+      // Update SessionBloc with the handler
       if (mounted) {
         context.read<SessionBloc>().add(SessionHandlerSwapped(handler));
+      }
 
-        // Listen for stats updates - store subscription
+      _handler = handler;
+
+      // Set up listeners (only if not already listening)
+      if (mounted) {
         _statsSubscription = handler.statsStream.listen((stats) {
           if (mounted) {
             final authState = context.read<AuthBloc>().state;
@@ -83,7 +92,6 @@ class _MatchmakingScreenState extends State<MatchmakingScreen>
           }
         });
 
-        // Listen for session state - store subscription
         _sessionStateSubscription = handler.sessionStateStream.listen((state) {
           if (mounted) {
             setState(() {
@@ -100,10 +108,20 @@ class _MatchmakingScreenState extends State<MatchmakingScreen>
             }
           }
         });
+
+        // Wait for connection to be fully established before joining matchmaking
+        await Future.delayed(const Duration(milliseconds: 500));
+
+        // NOW send JOIN_ROOM to enter matchmaking queue
+        if (mounted && handler.connectionStatus == ConnectionStatus.connected) {
+          handler.joinMatchmaking();
+          debugPrint('Joined matchmaking queue');
+        } else {
+          debugPrint('Connection not ready, waiting for reconnection...');
+        }
       }
     } catch (e) {
       if (mounted) {
-        // Show error but stay on screen to allow retry
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text('Connection Error: $e'),
