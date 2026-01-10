@@ -289,13 +289,12 @@ func (r *Room) processAction(action GameAction) {
 	msg := action.Message
 
 	// 1. Validate client is in room
-	r.mu.RLock()
+	// 1. Validate client is in room
+	// r.mu.Lock() is already held by Run()
 	if !r.clients[client] {
-		r.mu.RUnlock()
 		log.Printf("Rejected action from non-member client %s in room %s", client.ID, r.ID)
 		return
 	}
-	r.mu.RUnlock()
 
 	// 2. Validate message type
 	if !isValidGameMessageType(msg.Type) {
