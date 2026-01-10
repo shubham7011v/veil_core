@@ -77,8 +77,12 @@ class AdminBloc extends Bloc<AdminEvent, AdminState> {
     // We can just proceed to try fetching data
     emit(AdminLoading());
     try {
-      final stats = await repository.getStats();
-      final rooms = await repository.getRooms();
+      final results = await Future.wait([
+        repository.getStats(),
+        repository.getRooms(),
+      ]);
+      final stats = results[0] as Map<String, dynamic>;
+      final rooms = results[1] as List<dynamic>;
       emit(AdminAuthenticated(stats: stats, rooms: rooms));
     } catch (e) {
       emit(
@@ -95,8 +99,12 @@ class AdminBloc extends Bloc<AdminEvent, AdminState> {
   ) async {
     if (state is! AdminAuthenticated) return;
     try {
-      final stats = await repository.getStats();
-      final rooms = await repository.getRooms();
+      final results = await Future.wait([
+        repository.getStats(),
+        repository.getRooms(),
+      ]);
+      final stats = results[0] as Map<String, dynamic>;
+      final rooms = results[1] as List<dynamic>;
       emit(AdminAuthenticated(stats: stats, rooms: rooms));
     } catch (e) {
       emit(AdminError("Failed to refresh data: $e"));

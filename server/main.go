@@ -71,6 +71,7 @@ func main() {
 
 	// Admin API
 	adminHandler := api.NewAdminHandler(manager, authClient)
+	http.HandleFunc("/api/admin/ping", adminHandler.Ping)
 	http.HandleFunc("/api/admin/stats", adminHandler.AdminMiddleware(adminHandler.GetStats))
 	http.HandleFunc("/api/admin/rooms", adminHandler.AdminMiddleware(adminHandler.ListRooms))
 	http.HandleFunc("/api/admin/rooms/close", adminHandler.AdminMiddleware(adminHandler.CloseRoom))

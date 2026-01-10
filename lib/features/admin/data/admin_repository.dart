@@ -24,33 +24,78 @@ class AdminRepository {
     };
   }
 
+  Future<void> ping() async {
+    final url = '$_baseUrl/admin/ping';
+    debugPrint('🚀 [ADMIN] Pinging: $url');
+    final start = DateTime.now();
+    try {
+      final response = await http
+          .get(Uri.parse(url))
+          .timeout(const Duration(seconds: 5));
+      final duration = DateTime.now().difference(start).inMilliseconds;
+      debugPrint(
+        '🚀 [ADMIN] Ping Response (${duration}ms): ${response.statusCode}',
+      );
+      if (response.statusCode != 200) {
+        throw Exception('Ping failed: ${response.statusCode}');
+      }
+    } catch (e) {
+      debugPrint('🚀 [ADMIN] Ping Error: $e');
+      rethrow;
+    }
+  }
+
   Future<Map<String, dynamic>> getStats() async {
     final headers = await _getAuthHeaders();
     final url = '$_baseUrl/admin/stats';
-    debugPrint('🚀 [ADMIN] Fetching Stats from: $url');
-    final response = await http
-        .get(Uri.parse(url), headers: headers)
-        .timeout(const Duration(seconds: 10));
+    debugPrint('🚀 [ADMIN] Fetching Stats... ($url)');
+    final start = DateTime.now();
+    try {
+      final response = await http
+          .get(Uri.parse(url), headers: headers)
+          .timeout(const Duration(seconds: 10));
 
-    if (response.statusCode == 200) {
-      return json.decode(response.body) as Map<String, dynamic>;
-    } else {
-      throw Exception('Failed to load stats: ${response.statusCode}');
+      final duration = DateTime.now().difference(start).inMilliseconds;
+      debugPrint(
+        '🚀 [ADMIN] Stats Response (${duration}ms): ${response.statusCode}',
+      );
+
+      if (response.statusCode == 200) {
+        return json.decode(response.body) as Map<String, dynamic>;
+      } else {
+        debugPrint('🚀 [ADMIN] Stats Error Body: ${response.body}');
+        throw Exception('Failed to load stats: ${response.statusCode}');
+      }
+    } catch (e) {
+      debugPrint('🚀 [ADMIN] Stats Exception: $e');
+      rethrow;
     }
   }
 
   Future<List<dynamic>> getRooms() async {
     final headers = await _getAuthHeaders();
     final url = '$_baseUrl/admin/rooms';
-    debugPrint('🚀 [ADMIN] Fetching Rooms from: $url');
-    final response = await http
-        .get(Uri.parse(url), headers: headers)
-        .timeout(const Duration(seconds: 10));
+    debugPrint('🚀 [ADMIN] Fetching Rooms... ($url)');
+    final start = DateTime.now();
+    try {
+      final response = await http
+          .get(Uri.parse(url), headers: headers)
+          .timeout(const Duration(seconds: 10));
 
-    if (response.statusCode == 200) {
-      return json.decode(response.body) as List<dynamic>;
-    } else {
-      throw Exception('Failed to load rooms: ${response.statusCode}');
+      final duration = DateTime.now().difference(start).inMilliseconds;
+      debugPrint(
+        '🚀 [ADMIN] Rooms Response (${duration}ms): ${response.statusCode}',
+      );
+
+      if (response.statusCode == 200) {
+        return json.decode(response.body) as List<dynamic>;
+      } else {
+        debugPrint('🚀 [ADMIN] Rooms Error Body: ${response.body}');
+        throw Exception('Failed to load rooms: ${response.statusCode}');
+      }
+    } catch (e) {
+      debugPrint('🚀 [ADMIN] Rooms Exception: $e');
+      rethrow;
     }
   }
 

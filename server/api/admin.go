@@ -96,14 +96,22 @@ func (h *AdminHandler) AdminMiddleware(next http.HandlerFunc) http.HandlerFunc {
 		}
 
 		if !isAllowed {
-			log.Printf("Access denied for UID: %s (not in list: %s)", token.UID, adminUIDsEnv)
+			log.Printf("ADMIN_CHECK: DENIED - UID %s not in whitelist", token.UID)
 			http.Error(w, "Forbidden: Not an admin", http.StatusForbidden)
 			return
 		}
 
+		log.Printf("ADMIN_CHECK: GRANTED - UID %s proceeding to %s", token.UID, r.URL.Path)
 		// Success! Proceed.
 		next(w, r)
 	}
+}
+
+// Ping checks server health without auth
+func (h *AdminHandler) Ping(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Access-Control-Allow-Origin", "*")
+	w.Header().Set("Content-Type", "application/json")
+	w.Write([]byte(`{"status":"pong", "time":"` + time.Now().Format(time.RFC3339) + `"}`))
 }
 
 // ServerStats struct
