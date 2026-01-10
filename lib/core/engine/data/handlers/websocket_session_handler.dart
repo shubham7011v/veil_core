@@ -11,6 +11,7 @@ import '../../domain/models/session_enums.dart';
 import '../../domain/models/unit.dart';
 import '../../domain/models/participant.dart';
 import '../../domain/models/game_move.dart';
+import '../../../config/app_config.dart';
 import '../../../../features/auth/domain/models/user_stats.dart';
 import '../../../../features/social/domain/models/friend_record.dart';
 import '../../domain/models/room_event.dart';
@@ -280,6 +281,14 @@ class WebSocketSessionHandler
 
           // Parse stats from AUTH_OK response
           final authData = msg['data'] as Map<String, dynamic>;
+
+          // Handle Admin Status from Server
+          final isAdmin = authData['isAdmin'] as bool? ?? false;
+          final playerId = authData['playerId'] as String?;
+          if (playerId != null) {
+            AppConfig.instance.setAdminStatus(isAdmin, playerId);
+          }
+
           if (authData.containsKey('stats')) {
             try {
               final stats = UserStats.fromJson(

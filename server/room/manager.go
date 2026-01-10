@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"log"
 	"math/rand"
+	"os"
+	"strings"
 	"sync"
 	"time"
 	"veil_server/config"
@@ -454,10 +456,24 @@ func (m *Manager) sendError(c *Client, code, message string) {
 }
 
 func (m *Manager) sendAuthOk(c *Client, stats *db.UserStats) {
+	// Check if this user is a server admin
+	isAdmin := false
+	adminUIDsEnv := os.Getenv("ADMIN_UIDS")
+	if adminUIDsEnv != "" {
+		allowedUIDs := strings.Split(adminUIDsEnv, ",")
+		for _, uid := range allowedUIDs {
+			if strings.TrimSpace(uid) == c.ID {
+				isAdmin = true
+				break
+			}
+		}
+	}
+
 	responseMap := map[string]interface{}{
 		"playerId":   c.ID,
 		"stats":      stats,
 		"serverTime": time.Now(),
+		"isAdmin":    isAdmin,
 	}
 
 	msg := protocol.NewMessage(protocol.MsgTypeAuthOk, responseMap)

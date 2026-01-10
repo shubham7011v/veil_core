@@ -84,7 +84,7 @@ class AppConfig {
   // Development
   late final bool enableLogging;
   late final bool enableDebugMode;
-  late final List<String> adminUids;
+  late List<String> adminUids;
 
   // Legal & Support
   late final String privacyPolicyUrl;
@@ -119,6 +119,16 @@ class AppConfig {
     }
     if (serverConfig.containsKey('enableAdminDashboard')) {
       enableAdminDashboard = serverConfig['enableAdminDashboard'] as bool;
+    }
+  }
+
+  /// Manually override admin status for current user (usually from AUTH_OK websocket)
+  void setAdminStatus(bool isAdmin, String uid) {
+    if (isAdmin) {
+      if (!adminUids.contains(uid)) {
+        adminUids = List<String>.from(adminUids)..add(uid);
+      }
+      enableAdminDashboard = true;
     }
   }
 
@@ -396,11 +406,17 @@ class AppConfig {
 
   bool _getBoolConfig(String rcKey, String envKey, bool defaultValue) {
     // 1. Try Remote Config
+    // Firebase RC getBool returns false if the key doesn't exist, but we checked defaults in service.
+    // However, for local overrides, we want .env to win if RC isn't returning a 'live' value.
     final rcValue = RemoteConfigService.instance.getBool(rcKey);
-    // Note: getBool in Firebase RC returns false if the key doesn't exist,
-    // which might conflict with our default true values.
-    // Usually RC keys are explicitly set in initialize() defaults.
-    return rcValue;
+    if (rcValue != false) return rcValue; // If true in RC, return true.
+
+    // 2. Try .env
+    final envFileValue = dotenv.maybeGet(envKey);
+    if (envFileValue != null) return envFileValue.toLowerCase() == 'true';
+
+    // 3. Try Environment Variable (Build Time)
+    return bool.fromEnvironment(envKey, defaultValue: defaultValue);
   }
 
   List<String> _getStringListConfig(
@@ -411,13 +427,31 @@ class AppConfig {
     // 1. Try Remote Config
     final rcValue = RemoteConfigService.instance.getString(rcKey);
     if (rcValue.isNotEmpty) {
-      return rcValue.split(',').where((u) => u.isNotEmpty).toList();
+      return rcValue
+          .split(',')
+          .map((s) => s.trim())
+          .where((u) => u.isNotEmpty)
+          .toList();
     }
 
-    // 2. Try Environment Variable (Build Time)
+    // 2. Try .env
+    final envFileValue = dotenv.maybeGet(envKey);
+    if (envFileValue != null) {
+      return envFileValue
+          .split(',')
+          .map((s) => s.trim())
+          .where((u) => u.isNotEmpty)
+          .toList();
+    }
+
+    // 3. Try Environment Variable (Build Time)
     final envValue = String.fromEnvironment(envKey, defaultValue: '');
     if (envValue.isNotEmpty) {
-      return envValue.split(',').where((u) => u.isNotEmpty).toList();
+      return envValue
+          .split(',')
+          .map((s) => s.trim())
+          .where((u) => u.isNotEmpty)
+          .toList();
     }
 
     return defaultValues;
