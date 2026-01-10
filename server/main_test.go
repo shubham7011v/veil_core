@@ -8,14 +8,15 @@ import (
 	"testing"
 	"time"
 
-	"github.com/gorilla/websocket"
-	"veil_server/room"
 	"veil_server/protocol"
+	"veil_server/room"
+
+	"github.com/gorilla/websocket"
 )
 
 func TestGameFlow(t *testing.T) {
 	// 1. Setup Server
-	manager := room.NewManager()
+	manager := room.NewManager(nil)
 	go manager.Run()
 	s := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		room.ServeWs(manager, w, r)
@@ -26,11 +27,15 @@ func TestGameFlow(t *testing.T) {
 
 	// 2. Connect Clients
 	connA, _, err := websocket.DefaultDialer.Dial(wsURL, nil)
-	if err != nil { t.Fatalf("A connect failed: %v", err) }
+	if err != nil {
+		t.Fatalf("A connect failed: %v", err)
+	}
 	defer connA.Close()
 
 	connB, _, err := websocket.DefaultDialer.Dial(wsURL, nil)
-	if err != nil { t.Fatalf("B connect failed: %v", err) }
+	if err != nil {
+		t.Fatalf("B connect failed: %v", err)
+	}
 	defer connB.Close()
 
 	// 3. Auth & Join
@@ -58,7 +63,7 @@ func TestGameFlow(t *testing.T) {
 
 	var activeConn, passiveConn *websocket.Conn
 	var activeHand []interface{}
-	
+
 	if stateA["activePlayerId"] == "user_A" {
 		activeConn = connA
 		passiveConn = connB
@@ -86,9 +91,9 @@ func TestGameFlow(t *testing.T) {
 	// 6. Verify Update (Pile count should allow challenge)
 	// Passive player waits for state update showing pileCount > 0
 	// Updated: Phase should be 'challenging'
-	
+
 	newState := waitForGameState(t, passiveConn, "challenging")
-	pileCount := newState["pileCount"].(float64) 
+	pileCount := newState["pileCount"].(float64)
 	if pileCount != 1 {
 		t.Fatalf("Expected 1 card in pile, got %v", pileCount)
 	}
@@ -106,10 +111,10 @@ func TestGameFlow(t *testing.T) {
 func waitForGameState(t *testing.T, conn *websocket.Conn, expectedPhase string) map[string]interface{} {
 	// Set deadline so ReadMessage doesn't block forever
 	conn.SetReadDeadline(time.Now().Add(5 * time.Second))
-	
+
 	for {
 		_, message, err := conn.ReadMessage()
-		if err != nil { 
+		if err != nil {
 			t.Fatalf("Read error (or timeout) waiting for %s: %v", expectedPhase, err)
 		}
 
@@ -117,7 +122,7 @@ func waitForGameState(t *testing.T, conn *websocket.Conn, expectedPhase string) 
 		if err := json.Unmarshal(message, &baseMsg); err != nil {
 			continue // Ignore non-JSON
 		}
-		
+
 		if baseMsg.Type == protocol.MsgTypeError {
 			t.Fatalf("Server Error: %s", string(baseMsg.Data))
 		}
@@ -125,11 +130,11 @@ func waitForGameState(t *testing.T, conn *websocket.Conn, expectedPhase string) 
 		if baseMsg.Type == protocol.MsgTypeGameState {
 			var stateMap map[string]interface{}
 			json.Unmarshal(baseMsg.Data, &stateMap)
-			
+
 			phase := stateMap["phase"].(string)
 			// participants := stateMap["participants"].([]interface{})
-			
-			// We only care if phase matches target. 
+
+			// We only care if phase matches target.
 			// Initial join might be "lobby", then "thinking".
 			if phase == expectedPhase {
 				return stateMap
@@ -144,7 +149,7 @@ func sendMsg(t *testing.T, conn *websocket.Conn, msgType string, data interface{
 		bytes, _ := json.Marshal(data)
 		dataBytes = bytes
 	}
-	
+
 	msg := protocol.BaseMessage{
 		Type: msgType,
 		Data: dataBytes,
@@ -153,4 +158,3 @@ func sendMsg(t *testing.T, conn *websocket.Conn, msgType string, data interface{
 		t.Fatalf("Failed to write: %v", err)
 	}
 }
-
