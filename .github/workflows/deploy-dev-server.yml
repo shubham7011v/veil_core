@@ -35,6 +35,16 @@ jobs:
                       # Write credentials
                       echo "$FIREBASE_CREDS" > /root/firebase-service-account-dev.json
 
+                      # Create .env file for docker-compose
+                      cat <<EOF > /root/.env
+                      ADMIN_UIDS=$ADMIN_UIDS
+                      ENABLE_VOICE_CHAT=$ENABLE_VOICE_CHAT
+                      ENABLE_DAILY_CHALLENGES=$ENABLE_DAILY_CHALLENGES
+                      ENABLE_TOURNAMENTS=$ENABLE_TOURNAMENTS
+                      ENABLE_ADMIN_DASHBOARD=$ENABLE_ADMIN_DASHBOARD
+                      MAX_PLAYERS=$MAX_PLAYERS
+                      EOF
+
                       # Build image
                       cd server
                       docker build --network=host -t veil-server:dev .
