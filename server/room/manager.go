@@ -86,8 +86,13 @@ func (m *Manager) Run() {
 
 		case <-ticker.C:
 			// Process Matchmaking Queue safely in this thread
-			clients, matchType := m.Queue.Tick()
-			if clients != nil {
+			// Use a loop to clear the entire queue in one go if multiple people are waiting
+			for {
+				clients, matchType := m.Queue.Tick()
+				if clients == nil {
+					break
+				}
+
 				if matchType == "BOT" {
 					if config.GetFeatureFlags().EnableBotPlayers {
 						// Spawn Bot
@@ -95,10 +100,9 @@ func (m *Manager) Run() {
 						clients = append(clients, bot.Client)
 						log.Println("Spawning Bot for timeout match")
 					} else {
-						// Bots disabled, put player back in queue if we returned them?
-						// Actually Queue.Tick() pops them. We should probably return them to queue.
+						// Bots disabled, put player back in queue
 						m.Queue.Add(clients[0])
-						continue
+						break // Stop processing this tick if bots are disabled and we can't match
 					}
 				}
 				m.createMatchRoom(clients)
@@ -158,7 +162,12 @@ func (m *Manager) HandleMessage(c *Client, message []byte) {
 				userID = token.UID
 				log.Printf("Verified user: %s", userID)
 			} else {
-				log.Printf("Token verification failed (falling back to raw string): %v", err)
+				// Use a truncated version for logging if it's a huge token
+				displayID := tokenString
+				if len(displayID) > 20 {
+					displayID = displayID[:20] + "..."
+				}
+				log.Printf("Token verification failed (falling back to %s): %v", displayID, err)
 			}
 		}
 

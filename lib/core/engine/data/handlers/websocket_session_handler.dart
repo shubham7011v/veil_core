@@ -311,8 +311,9 @@ class WebSocketSessionHandler
             }
           }
 
-          // Send JOIN_ROOM after auth
-          _send({'type': 'JOIN_ROOM'});
+          // NOTE: Removed automatic JOIN_ROOM here.
+          // Users must explicitly click "Find Match" to join the matchmaking queue.
+          // This prevents unwanted queue joins on every app open/reconnect.
 
           // Start Lobby Music
           try {
