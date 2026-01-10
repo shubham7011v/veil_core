@@ -54,8 +54,13 @@ Future<void> mainCommon({required String env, required String appName}) async {
 
       debugPrint('🚀 [STARTUP] 2. Initializing Firebase...');
       try {
-        await Firebase.initializeApp(options: options);
-        debugPrint('🚀 [STARTUP] 2. Firebase initialized');
+        // Check if Firebase is already initialized to prevent duplicate-app error
+        if (Firebase.apps.isEmpty) {
+          await Firebase.initializeApp(options: options);
+          debugPrint('🚀 [STARTUP] 2. Firebase initialized');
+        } else {
+          debugPrint('🚀 [STARTUP] 2. Firebase already initialized, skipping');
+        }
       } catch (e) {
         throw 'Firebase Initialization Failed: $e';
       }
