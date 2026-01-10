@@ -9,6 +9,9 @@ abstract class Failure extends Equatable {
 
   @override
   List<Object?> get props => [message, originalError];
+
+  @override
+  String toString() => message;
 }
 
 /// General server failure (e.g. 500 errors, invalid JSON).

@@ -17,6 +17,7 @@ import 'core/di/service_locator.dart' as di;
 import 'core/navigation/app_router.dart';
 import 'core/config/remote_config_service.dart';
 import 'core/error/global_error_handler.dart';
+import 'core/error/failure.dart';
 import 'core/notifications/widgets/app_notification_listener.dart';
 import 'shared/components/error_boundary.dart';
 
@@ -269,7 +270,12 @@ String _getErrorMessage(Object error) {
   try {
     final dynamic err = error;
 
-    // 1. Explicitly Type-checked Errors
+    // 1. Handle Failure objects (important to check BEFORE obfuscation checks)
+    if (err is Failure) {
+      return err.message;
+    }
+
+    // 2. Explicitly Type-checked Errors
     if (err is PlatformException) {
       return 'Platform: ${err.code} - ${err.message}';
     }
@@ -282,7 +288,7 @@ String _getErrorMessage(Object error) {
       return 'ArgError: ${err.message ?? err.toString()}';
     if (err is FormatException) return 'FormatError: ${err.message}';
 
-    // 2. Handle Obfuscated Classes (runtimeType might be "fta")
+    // 3. Handle Obfuscated Classes (runtimeType might be "fta")
     final String typeName = error.runtimeType.toString();
 
     if (err.toString().startsWith('Instance of')) {
