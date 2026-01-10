@@ -54,7 +54,7 @@ jobs:
 
                       # Restart container using docker-compose
                       cd /root
-                      docker-compose up -d --force-recreate veil-game-dev
+                      docker compose up -d --force-recreate veil-game-dev
 
                       # Health check
                       sleep 5
