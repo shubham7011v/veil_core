@@ -34,7 +34,14 @@ type Game struct {
 	TurnTimerS    int `json:"turnTimerS"`
 	ThinkingTimeS int `json:"-"` // Configuration
 
-	WinnerID string `json:"winnerId,omitempty"`
+	// Event Context for UI Animations
+	LastEvent          string `json:"lastEvent,omitempty"`
+	LastEventActorID   string `json:"lastEventActorId,omitempty"`
+	LastEventCardCount int    `json:"lastEventCardCount,omitempty"`
+	IsBluffSuccessful  bool   `json:"isBluffSuccessful,omitempty"`
+
+	WinnerID string   `json:"winnerId,omitempty"`
+	GameLog  []string `json:"gameLog"`
 }
 
 type PublicParticipant struct {
@@ -126,6 +133,7 @@ func (g *Game) Start() error {
 
 	g.Phase = PhaseThinking
 	g.TurnTimerS = g.ThinkingTimeS
+	g.LastEvent = "shuffling"
 	g.SyncParticipants()
 
 	return nil
@@ -158,4 +166,11 @@ func (g *Game) ActivePlayerID() string {
 		return ""
 	}
 	return g.TurnOrder[g.ActiveIdx]
+}
+
+func (g *Game) AddToLog(msg string) {
+	g.GameLog = append([]string{msg}, g.GameLog...)
+	if len(g.GameLog) > 15 {
+		g.GameLog = g.GameLog[:15]
+	}
 }

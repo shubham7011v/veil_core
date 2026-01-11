@@ -2,6 +2,7 @@ package game
 
 import (
 	"errors"
+	"fmt"
 	"time"
 )
 
@@ -51,6 +52,14 @@ func (g *Game) PlayCards(playerID string, cardIDs []string, declaredRank Rank) e
 	g.ResetPassFlags() // New move breaks pass cycle
 	g.AdvanceTurn()
 	g.Phase = PhaseChallenging // Now others can challenge
+
+	// UI Context
+	g.LastEvent = "cardsPlayed"
+	g.LastEventActorID = playerID
+	g.LastEventCardCount = len(cardIDs)
+
+	g.AddToLog(fmt.Sprintf("%s claimed %d %s(s)", g.PlayerMap[playerID].Name, len(cardIDs), declaredRank))
+
 	g.SyncParticipants()
 
 	// Check for immediate win (0 cards) - NO, must survive challenge first?
@@ -61,21 +70,17 @@ func (g *Game) PlayCards(playerID string, cardIDs []string, declaredRank Rank) e
 	return nil
 }
 
-func (g *Game) Challenge(challengerID string) (string, error) {
-	// Returns (Message, Error)
+func (g *Game) Challenge(challengerID string) (bool, error) {
 	if g.Phase != PhaseChallenging {
-		// Actually, standard rule is next player challenges.
-		// If strict turn-based: Challenger must be ActivePlayerID
-		return "", errors.New("cannot challenge now")
+		return false, errors.New("cannot challenge now")
 	}
 	if g.ActivePlayerID() != challengerID {
-		return "", errors.New("not your turn to challenge")
+		return false, errors.New("not your turn to challenge")
 	}
 	if g.LastMove == nil {
-		return "", errors.New("nothing to challenge")
+		return false, errors.New("nothing to challenge")
 	}
 
-	blufferID := g.LastMove.PlayerID
 	declared := g.LastMove.DeclaredRank
 	actual := g.LastMove.ActualCards
 
@@ -87,28 +92,51 @@ func (g *Game) Challenge(challengerID string) (string, error) {
 		}
 	}
 
+	// Prepare for Reveal Phase
+	g.Phase = PhaseRevealing
+	g.LastEvent = "bluffCalled"
+	g.LastEventActorID = challengerID
+	g.IsBluffSuccessful = isBluff
+	// Note: We don't resolve yet. ResolveChallenge() must be called later.
+
+	return isBluff, nil
+}
+
+// ResolveChallenge finalizes the result after the reveal animation delay
+func (g *Game) ResolveChallenge(challengerID string) string {
+	if g.Phase != PhaseRevealing || g.LastMove == nil {
+		return ""
+	}
+
+	blufferID := g.LastMove.PlayerID
 	loserID := ""
 	winnerID := ""
 
-	if isBluff {
-		// Challenger wins, Bluffer eats pile
+	if g.IsBluffSuccessful {
+		// Bluffer eats pile
 		loserID = blufferID
 		winnerID = challengerID
 	} else {
-		// Challenger loses, Challenger eats pile
+		// Challenger eats pile
 		loserID = challengerID
 		winnerID = blufferID
 	}
 
+	pileCount := g.PileCount
 	g.GivePileTo(loserID)
 	g.ResetRound()
 	g.SyncParticipants()
 
-	// Set turn to Winner (who was right/innocent)
 	g.SetTurnMessages(winnerID)
-	g.TurnTimerS = g.ThinkingTimeS // Reset timer for winner's turn
+	g.TurnTimerS = g.ThinkingTimeS
 
-	return loserID + " lost the challenge!", nil
+	result := "BLUFF CAUGHT!"
+	if !g.IsBluffSuccessful {
+		result = "FALSE ALARM!"
+	}
+	g.AddToLog(fmt.Sprintf("%s on %s by %s. %s picks up %d cards.", result, g.PlayerMap[blufferID].Name, g.PlayerMap[challengerID].Name, g.PlayerMap[loserID].Name, pileCount))
+
+	return loserID + " lost the challenge!"
 }
 
 func (g *Game) Pass(playerID string) error {
@@ -125,15 +153,23 @@ func (g *Game) Pass(playerID string) error {
 	if g.CheckAllPassed() {
 		// Round ends, cards discarded
 		g.ResetRound()
-		// Turn remains with the current active player (who was last to make move usually?)
-		// Actually if A played, B passed, C passed... A starts new round.
-		// logic: The player BEFORE the first passer (the one who played).
-		// Since we advanced turn, identifying "Original Mover" requires state tracking.
-		// Simplified: If all pass, the player who LAST PLAYED (g.LastMove.PlayerID) starts.
+
+		// UI Context
+		g.LastEvent = "pileDiscarded"
+		g.LastEventActorID = "" // Neutral
+
+		g.AddToLog("Everyone passed. Pile discarded.")
+
 		if g.LastMove != nil {
 			g.SetTurnMessages(g.LastMove.PlayerID)
 		}
 	} else {
+		// UI Context
+		g.LastEvent = "passed"
+		g.LastEventActorID = playerID
+
+		g.AddToLog(fmt.Sprintf("%s passed", g.PlayerMap[playerID].Name))
+
 		g.AdvanceTurn()
 	}
 

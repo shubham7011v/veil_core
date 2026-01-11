@@ -98,13 +98,13 @@ class WebSocketSessionHandler
   // Cache for interface properties
   String? _activeEventActorId;
   UnitRank? _lastRankClaimed;
-  final int _lastCountClaimed = 0;
+  int _lastCountClaimed = 0;
   final List<String> _gameLog = [];
   String? _lastBluffWinnerId;
   String? _lastBluffLoserId;
   bool? _isBluffSuccessful;
   GameMove? _lastMove;
-  final bool _isRevealingBluff = false;
+  bool _isRevealingBluff = false;
   final Map<String, String> _pNames = {};
 
   // Cached Data
@@ -615,6 +615,24 @@ class WebSocketSessionHandler
 
     final activeId = stateData['activePlayerId'] as String?;
 
+    // Parse rich event data
+    final lastEvent = stateData['lastEvent'] as String?;
+    final actorId = stateData['lastEventActorId'] as String?;
+    final cardCount = stateData['lastEventCardCount'] as int? ?? 0;
+    _isBluffSuccessful = stateData['isBluffSuccessful'] as bool?;
+
+    // Parse gameLog
+    final logData = stateData['gameLog'] as List<dynamic>?;
+    if (logData != null) {
+      _gameLog.clear();
+      _gameLog.addAll(logData.map((e) => e.toString()));
+    }
+
+    // Map actor IDs to 'me'
+    _activeEventActorId = actorId == myId ? 'me' : actorId;
+    _lastCountClaimed = cardCount;
+    _isRevealingBluff = phase == SessionPhase.revealing;
+
     // Parse lastMove if present
     final lastMoveData = stateData['lastMove'] as Map<String, dynamic>?;
     if (lastMoveData != null) {
@@ -629,8 +647,10 @@ class WebSocketSessionHandler
         ),
         actualUnits: [], // Server doesn't send actual cards for security
       );
+      _lastRankClaimed = _lastMove?.declaredRank;
     } else {
       _lastMove = null;
+      _lastRankClaimed = null;
     }
 
     final newState = SessionState(
@@ -649,14 +669,36 @@ class WebSocketSessionHandler
       _stateController.add(newState);
     }
 
-    // Emit events based on phase transitions
-    if (phase == SessionPhase.thinking) {
-      if (!_isDisposed && !_eventController.isClosed) {
-        _eventController.add(SessionEventType.turnChanged);
+    // Emit events based on lastEvent from server
+    if (lastEvent != null && !_isDisposed && !_eventController.isClosed) {
+      switch (lastEvent) {
+        case 'cardsPlayed':
+          _eventController.add(SessionEventType.cardsPlayed);
+          break;
+        case 'passed':
+          _eventController.add(SessionEventType.passed);
+          break;
+        case 'bluffCalled':
+          _eventController.add(SessionEventType.bluffCalled);
+          break;
+        case 'pileDiscarded':
+          _eventController.add(SessionEventType.pileDiscarded);
+          break;
+        case 'cardsPickedUp':
+          _eventController.add(SessionEventType.cardsPickedUp);
+          break;
+        case 'shuffling':
+          _eventController.add(SessionEventType.shuffling);
+          break;
       }
-    } else if (phase == SessionPhase.challenging) {
-      if (!_isDisposed && !_eventController.isClosed) {
-        _eventController.add(SessionEventType.cardsPlayed);
+    }
+
+    // fallback for phase changes if lastEvent is missing
+    if (lastEvent == null) {
+      if (phase == SessionPhase.thinking) {
+        if (!_isDisposed && !_eventController.isClosed) {
+          _eventController.add(SessionEventType.turnChanged);
+        }
       }
     }
   }

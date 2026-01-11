@@ -330,6 +330,24 @@ func (r *Room) processAction(action GameAction) {
 
 	case protocol.MsgTypeChallenge:
 		_, err = r.game.Challenge(client.ID)
+		if err == nil {
+			// Broadcast the "Revealing" state immediately
+			r.broadcastState()
+
+			// Schedule resolution after 2 seconds (animation time)
+			time.AfterFunc(2*time.Second, func() {
+				r.mu.Lock()
+				defer r.mu.Unlock()
+
+				// Finalize the result
+				msg := r.game.ResolveChallenge(client.ID)
+				log.Printf("Challenge Resolved in Room %s: %s", r.ID, msg)
+
+				// Broadcast the final result state
+				r.broadcastState()
+			})
+			return // skip r.broadcastState() below to avoid double call
+		}
 
 	case protocol.MsgTypeJoinPrivateRoom:
 		// Logic mostly handled in Manager.
@@ -552,14 +570,19 @@ func (r *Room) broadcastState() {
 		if client.IsSpectator {
 			// Spectator View
 			view := map[string]interface{}{
-				"phase":          r.game.Phase,
-				"myHand":         []interface{}{},
-				"participants":   r.game.Participants,
-				"pileCount":      r.game.PileCount,
-				"activePlayerId": r.game.ActivePlayerID(),
-				"declaredRank":   r.game.DeclaredRank,
-				"turnTimerS":     r.game.TurnTimerS,
-				"isSpectator":    true,
+				"phase":              r.game.Phase,
+				"myHand":             []interface{}{},
+				"participants":       r.game.Participants,
+				"pileCount":          r.game.PileCount,
+				"activePlayerId":     r.game.ActivePlayerID(),
+				"declaredRank":       r.game.DeclaredRank,
+				"turnTimerS":         r.game.TurnTimerS,
+				"isSpectator":        true,
+				"lastEvent":          r.game.LastEvent,
+				"lastEventActorId":   r.game.LastEventActorID,
+				"lastEventCardCount": r.game.LastEventCardCount,
+				"isBluffSuccessful":  r.game.IsBluffSuccessful,
+				"gameLog":            r.game.GameLog,
 			}
 			// Add lastMove if exists
 			if r.game.LastMove != nil {
@@ -583,13 +606,18 @@ func (r *Room) broadcastState() {
 		}
 
 		view := map[string]interface{}{
-			"phase":          r.game.Phase,
-			"myHand":         p.Hand,
-			"participants":   r.game.Participants,
-			"pileCount":      r.game.PileCount,
-			"activePlayerId": r.game.ActivePlayerID(),
-			"declaredRank":   r.game.DeclaredRank,
-			"turnTimerS":     r.game.TurnTimerS,
+			"phase":              r.game.Phase,
+			"myHand":             p.Hand,
+			"participants":       r.game.Participants,
+			"pileCount":          r.game.PileCount,
+			"activePlayerId":     r.game.ActivePlayerID(),
+			"declaredRank":       r.game.DeclaredRank,
+			"turnTimerS":         r.game.TurnTimerS,
+			"lastEvent":          r.game.LastEvent,
+			"lastEventActorId":   r.game.LastEventActorID,
+			"lastEventCardCount": r.game.LastEventCardCount,
+			"isBluffSuccessful":  r.game.IsBluffSuccessful,
+			"gameLog":            r.game.GameLog,
 		}
 		// Add lastMove if exists
 		if r.game.LastMove != nil {

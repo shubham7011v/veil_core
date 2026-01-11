@@ -7,6 +7,7 @@ enum SessionPhase {
   lobby,
   thinking, // Waiting for someone to play
   challenging, // Time to challenge
+  revealing, // Waiting for bluff reveal animation
   finished,
 }
 

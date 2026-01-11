@@ -11,6 +11,7 @@ const (
 	PhaseLobby       Phase = "lobby"
 	PhaseThinking    Phase = "thinking"    // Active player is choosing cards
 	PhaseChallenging Phase = "challenging" // Cards played, others deciding to challenge/pass
+	PhaseRevealing   Phase = "revealing"   // Waiting for bluff reveal animation
 	PhaseFinished    Phase = "finished"
 )
 
