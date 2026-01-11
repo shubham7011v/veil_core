@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:math';
 import '../../../../core/error/failure.dart';
 import '../../domain/models/session_enums.dart';
 import '../../domain/logic/bot_brain.dart';
@@ -114,19 +115,29 @@ class LocalBotSessionHandler extends BaseAuthoritativeHandler {
 
   String _getBotName(int index) {
     const names = [
-      'Rahul',
-      'Priya',
-      'Amit',
-      'Soniya',
-      'Vikram',
-      'Anjali',
-      'Karan',
-      'Neha',
-      'Rohan',
-      'Meera',
-      'Arun',
-      'Tara',
+      'Shubham',
+      'Julie',
+      'Shivam',
+      'Sandhya',
+      'Sabhya',
+      'Sanchit',
+      'Satyam',
+      'Sarvottam',
+      'Dipesh',
+      'Divyam',
+      'Rashmi',
+      'Gaurav',
+      'Saurav',
+      'Nitish',
+      'Nishu',
+      'Aarush',
+      'Arman',
+      'Riya',
+      'Angel',
+      'Mushkan',
     ];
-    return names[(index - 1) % names.length];
+    // Use a fixed seed based on index + timestamp or just Random() for variety
+    final random = Random();
+    return names[random.nextInt(names.length)];
   }
 }

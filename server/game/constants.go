@@ -15,6 +15,15 @@ const (
 	PhaseFinished    Phase = "finished"
 )
 
+type Personality string
+
+const (
+	PersonalityConservative Personality = "conservative"
+	PersonalityAggressive   Personality = "aggressive"
+	PersonalityBalanced     Personality = "balanced"
+	PersonalityGhost        Personality = "ghost"
+)
+
 // Config
 var (
 	MaxPlayers = 10

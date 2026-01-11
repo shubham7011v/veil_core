@@ -11,14 +11,16 @@ import (
 
 // BotNameList is a pool of realistic names for bots
 var BotNameList = []string{
-	"ShadowHunter", "CardMaster99", "BluffKing", "SilentAce", "Viper",
-	"Mystic", "Neo", "Trinity", "Cipher", "GhostProtocol",
-	"Velvet", "Rogue", "Gambit", "Spectre", "Oracle",
+	"Shubham", "Julie", "Shivam", "Sandhya", "Sabhya",
+	"Sanchit", "Satyam", "Sarvottam", "Dipesh", "Divyam",
+	"Rashmi", "Gaurav", "Saurav", "Nitish", "Nishu",
+	"Aarush", "Arman", "Riya", "Angel", "Mushkan",
 }
 
 // Bot wraps a Client to act as an AI player
 type Bot struct {
-	Client *Client
+	Client      *Client
+	Personality game.Personality
 }
 
 // NewBot creates a fake Client and a Bot controller
@@ -28,7 +30,16 @@ func NewBot(manager *Manager) *Bot {
 	name := BotNameList[rand.Intn(len(BotNameList))]
 	id := "bot_" + generateRandomString(8)
 
-	// 2. Create Client (No Conn, IsBot=true)
+	// 2. Assign Personality
+	personalities := []game.Personality{
+		game.PersonalityConservative,
+		game.PersonalityAggressive,
+		game.PersonalityBalanced,
+		game.PersonalityGhost,
+	}
+	personality := personalities[rand.Intn(len(personalities))]
+
+	// 3. Create Client (No Conn, IsBot=true)
 	client := &Client{
 		Hub:   manager,
 		Conn:  nil, // No WebSocket connection
@@ -38,9 +49,14 @@ func NewBot(manager *Manager) *Bot {
 		IsBot: true,
 	}
 
-	bot := &Bot{Client: client}
+	bot := &Bot{
+		Client:      client,
+		Personality: personality,
+	}
 
-	// 3. Start the Bot Loop
+	log.Printf("Created Bot %s with personality %s", name, personality)
+
+	// 4. Start the Bot Loop
 	go bot.Run()
 
 	return bot
@@ -100,132 +116,147 @@ func (b *Bot) decideMove() {
 		return
 	}
 
-	// Simple Strategy:
-	// 1. Look at hand
-	// 2. Look at declared rank
-	// 3. If I have matching cards, play them (Truth)
-	// 4. Else, bluff with random cards
-
-	// We need to parse real game structures to do this properly.
-	// Since 'state' is a map, it's messy. Accessing Room.Game directly is CHEATING but
-	// SAFE ACCESS via Room (since we are in same package)
-	// We MUST lock to avoid concurrent map read/write panic
 	room.mu.RLock()
-	defer room.mu.RUnlock()
-	// Use Read Lock if we implemented one, but for now access is mostly safe via channels.
-	// Wait, we can't access Game state safely while it might be mutating.
-	// But deciding a move doesn't mutate.
-
 	g := room.game
 	player := g.PlayerMap[b.Client.ID]
-	if player == nil {
+	room.mu.RUnlock()
+
+	if player == nil || len(player.Hand) == 0 {
 		return
 	}
 
-	declaredRankPtr := g.DeclaredRank
-	var declaredRank game.Rank
-	if declaredRankPtr != nil {
-		declaredRank = *declaredRankPtr
+	// 1. Pass Chance based on Personality (Dart matching)
+	passChance := 0.15 // Default (Balanced, Aggressive)
+	switch b.Personality {
+	case game.PersonalityGhost:
+		passChance = 0.45
+	case game.PersonalityConservative:
+		passChance = 0.25
 	}
 
-	// Logic
-	// Check if I have cards of declaredRank
-	var matchingCards []string
-	var otherCards []string
+	if rand.Float64() < passChance && g.PileCount > 0 {
+		b.executePass(room)
+		return
+	}
 
+	// 2. Rank Selection
+	declaredRankPtr := g.DeclaredRank
+	var targetRank game.Rank
+	isStartingRound := declaredRankPtr == nil
+
+	if isStartingRound {
+		// Pick a rank I have the most of
+		counts := make(map[game.Rank]int)
+		for _, c := range player.Hand {
+			counts[c.Rank]++
+		}
+		maxCount := 0
+		for r, count := range counts {
+			if count > maxCount {
+				maxCount = count
+				targetRank = r
+			}
+		}
+	} else {
+		targetRank = *declaredRankPtr
+	}
+
+	matchingCards := []string{}
+	otherCards := []string{}
 	for _, c := range player.Hand {
-		if c.Rank == declaredRank {
+		if c.Rank == targetRank {
 			matchingCards = append(matchingCards, c.ID)
 		} else {
 			otherCards = append(otherCards, c.ID)
 		}
 	}
 
-	var action string // "PLAY", "PASS", "CHALLENGE" (?)
-	// Bots usually don't challenge in this simple version, unless we add logic.
-	// Let's implement PLAY logic first.
+	cardsToPlay := []string{}
 
-	var cardsToPlay []string
-
-	newRank := declaredRank
-
-	if g.PileCount == 0 {
-		// Pick a rank I have the most of
-		counts := make(map[game.Rank]int)
-		for _, c := range player.Hand {
-			counts[c.Rank]++
-		}
-
-		maxCount := 0
-		bestRank := game.Rank("two") // Default
-
-		for r, count := range counts {
-			if count > maxCount {
-				maxCount = count
-				bestRank = r
+	// 3. Play Logic based on Personality
+	switch b.Personality {
+	case game.PersonalityAggressive:
+		if len(matchingCards) > 0 && rand.Float64() > 0.2 {
+			// Play Truth
+			count := len(matchingCards)
+			if count > 4 {
+				count = 4
 			}
-		}
-		newRank = bestRank
-		// Always play truth for new round if possible
-		for _, c := range player.Hand {
-			if c.Rank == newRank {
-				cardsToPlay = append(cardsToPlay, c.ID)
+			cardsToPlay = matchingCards[:count]
+		} else {
+			// Bluff
+			count := 1 + rand.Intn(3)
+			if count > len(player.Hand) {
+				count = len(player.Hand)
 			}
+			// Shuffle otherCards or player.Hand to pick random
+			shuffled := append([]string{}, otherCards...)
+			rand.Shuffle(len(shuffled), func(i, j int) { shuffled[i], shuffled[j] = shuffled[j], shuffled[i] })
+			cardsToPlay = shuffled[:count]
 		}
-		action = "PLAY"
-	} else {
-		// Pile not empty, must follow suite or bluff
+
+	case game.PersonalityConservative:
 		if len(matchingCards) > 0 {
-			// Play Truth (1 or 2 cards)
-			count := 1 + rand.Intn(len(matchingCards)) // 1 to all
+			cardsToPlay = []string{matchingCards[0]}
+		} else if rand.Float64() < 0.1 {
+			// Rare bluff
+			cardsToPlay = []string{player.Hand[rand.Intn(len(player.Hand))].ID}
+		} else if !isStartingRound {
+			b.executePass(room)
+			return
+		}
+
+	default: // Balanced / Ghost
+		if len(matchingCards) > 0 && rand.Float64() > 0.4 {
+			count := 1 + rand.Intn(2)
 			if count > len(matchingCards) {
 				count = len(matchingCards)
 			}
 			cardsToPlay = matchingCards[:count]
-			action = "PLAY"
-		} else {
-			// Must Bluff or Pass
-			// 80% Bluff, 20% Pass (if hand > 1)
-			if len(otherCards) > 0 {
-				// Bluff
-				cardsToPlay = []string{otherCards[0]}
-				action = "PLAY"
-			} else {
-				// No cards? Should probably pass or game over
-				action = "PASS"
+		} else if len(player.Hand) > 0 {
+			count := 1 + rand.Intn(2)
+			if count > len(player.Hand) {
+				count = len(player.Hand)
 			}
+			shuffled := append([]string{}, player.HandIDs()...)
+			for i := range shuffled {
+				j := rand.Intn(i + 1)
+				shuffled[i], shuffled[j] = shuffled[j], shuffled[i]
+			}
+			cardsToPlay = shuffled[:count]
 		}
 	}
 
-	// Execute Action
-	switch action {
-	case "PLAY":
-		payload := protocol.PlayCardsMessage{
-			CardIDs:      cardsToPlay,
-			DeclaredRank: string(newRank),
-		}
-		data, _ := json.Marshal(payload)
+	if len(cardsToPlay) == 0 {
+		b.executePass(room)
+	} else {
+		b.executePlay(room, cardsToPlay, targetRank)
+	}
+}
 
-		msg := protocol.BaseMessage{
+func (b *Bot) executePlay(room *Room, cardIDs []string, rank game.Rank) {
+	payload := protocol.PlayCardsMessage{
+		CardIDs:      cardIDs,
+		DeclaredRank: string(rank),
+	}
+	data, _ := json.Marshal(payload)
+	room.HandleAction(GameAction{
+		Client: b.Client,
+		Message: protocol.BaseMessage{
 			Type: protocol.MsgTypePlayCards,
 			Data: data,
-		}
+		},
+	})
+}
 
-		room.HandleAction(GameAction{
-			Client:  b.Client,
-			Message: msg,
-		})
-
-	case "PASS":
-		msg := protocol.BaseMessage{
+func (b *Bot) executePass(room *Room) {
+	room.HandleAction(GameAction{
+		Client: b.Client,
+		Message: protocol.BaseMessage{
 			Type: protocol.MsgTypePass,
 			Data: []byte("null"),
-		}
-		room.HandleAction(GameAction{
-			Client:  b.Client,
-			Message: msg,
-		})
-	}
+		},
+	})
 }
 
 func (b *Bot) decideChallenge() {
@@ -238,56 +269,49 @@ func (b *Bot) decideChallenge() {
 		return
 	}
 
-	// Lock for safe access
 	room.mu.RLock()
-	defer room.mu.RUnlock()
-
 	g := room.game
 	lastMove := g.LastMove
-	if lastMove == nil {
+	player := g.PlayerMap[b.Client.ID]
+	room.mu.RUnlock()
+
+	if lastMove == nil || player == nil || lastMove.PlayerID == b.Client.ID {
 		return
 	}
 
-	// Heuristic Logic:
-	// 1. Base Challenge Probability (10%)
-	chance := 0.1
-
-	// 2. Card Count Bonus: More cards played = higher suspicion
-	// Each card beyond the first adds 15% suspicion
-	cardCount := len(lastMove.ActualCards)
-	if cardCount > 1 {
-		chance += float64(cardCount-1) * 0.15
+	// 1. Base Challenge Probability based on Personality (Matching Dart logic)
+	chance := 0.15 // Default (Balanced, Ghost)
+	switch b.Personality {
+	case game.PersonalityAggressive:
+		chance = 0.35
+	case game.PersonalityConservative:
+		if g.PileCount > 8 {
+			chance = 0.25
+		} else {
+			chance = 0.05
+		}
 	}
 
-	// 3. Hand Knowledge Deduction:
-	// If I hold Aces, and you play Aces, and together we have > 4 Aces, you are a LIAR.
-	player := g.PlayerMap[b.Client.ID]
-	if player != nil {
-		myMatchingCount := 0
-		for _, c := range player.Hand {
-			if c.Rank == lastMove.DeclaredRank {
-				myMatchingCount++
-			}
+	// 2. Statistical Knowledge (Keep Go's advanced detection)
+	// If I hold some, and you play some, and total > 4 -> 100% chance
+	myMatchingCount := 0
+	for _, c := range player.Hand {
+		if c.Rank == lastMove.DeclaredRank {
+			myMatchingCount++
 		}
+	}
 
-		totalSeen := myMatchingCount + cardCount
-		if totalSeen > 4 {
-			// STATISTICALLY IMPOSSIBLE
-			log.Printf("Bot %s detected a definite bluff! (Seen %d %s's)", b.Client.ID, totalSeen, lastMove.DeclaredRank)
-			chance = 1.0
-		} else if myMatchingCount > 0 {
-			// I have some, so the probability of you having THIS MANY is lower
-			chance += float64(myMatchingCount) * 0.1
-		}
+	totalSeen := myMatchingCount + len(lastMove.ActualCards)
+	if totalSeen > 4 {
+		chance = 1.0
+		log.Printf("Bot %s (Personality: %s) detected a definite bluff!", b.Client.ID, b.Personality)
 	}
 
 	// Final Decision
 	action := protocol.MsgTypePass
 	if rand.Float64() < chance {
 		action = protocol.MsgTypeChallenge
-		log.Printf("Bot %s is CHALLENGING %s's move of %d %s", b.Client.ID, lastMove.PlayerID, cardCount, lastMove.DeclaredRank)
-	} else {
-		log.Printf("Bot %s is passing on challenge", b.Client.ID)
+		log.Printf("Bot %s (%s) is CHALLENGING %s", b.Client.ID, b.Personality, lastMove.PlayerID)
 	}
 
 	room.HandleAction(GameAction{

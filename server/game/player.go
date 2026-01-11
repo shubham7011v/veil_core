@@ -5,16 +5,16 @@ type Player struct {
 	Name        string `json:"name"`
 	Hand        []Card `json:"-"` // Hidden from JSON output usually, sent privately
 	IsConnected bool   `json:"isConnected"`
-	
+
 	// Game state flags
 	HasPassed bool `json:"hasPassed"` // Reset every round
 }
 
 func NewPlayer(id, name string) *Player {
 	return &Player{
-		ID:   id,
-		Name: name,
-		Hand: []Card{},
+		ID:          id,
+		Name:        name,
+		Hand:        []Card{},
 		IsConnected: true,
 	}
 }
@@ -30,7 +30,7 @@ func (p *Player) AddCards(cards []Card) {
 func (p *Player) RemoveCards(cardIDs []string) []Card {
 	removed := []Card{}
 	newHand := []Card{}
-	
+
 	for _, card := range p.Hand {
 		shouldRemove := false
 		for _, id := range cardIDs {
@@ -39,7 +39,7 @@ func (p *Player) RemoveCards(cardIDs []string) []Card {
 				break
 			}
 		}
-		
+
 		if shouldRemove {
 			removed = append(removed, card)
 		} else {
@@ -61,4 +61,12 @@ func (p *Player) HasCards(cardIDs []string) bool {
 		}
 	}
 	return count == len(cardIDs)
+}
+
+func (p *Player) HandIDs() []string {
+	ids := make([]string, len(p.Hand))
+	for i, c := range p.Hand {
+		ids[i] = c.ID
+	}
+	return ids
 }
