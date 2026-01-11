@@ -5,6 +5,7 @@ import 'session_error.dart';
 
 enum SessionPhase {
   lobby,
+  starting, // 10s countdown
   thinking, // Waiting for someone to play
   challenging, // Time to challenge
   revealing, // Waiting for bluff reveal animation
@@ -21,6 +22,7 @@ class SessionState extends Equatable {
   final String? lastActionText; // e.g. "Rahul played 2 Units"
   final String? winnerId;
   final UnitRank? currentRank;
+  final int? startTime; // Unix timestamp for starting phase
 
   final int? turnTimerS;
 
@@ -38,6 +40,7 @@ class SessionState extends Equatable {
     this.winnerId,
     this.turnTimerS,
     this.currentRank,
+    this.startTime,
     this.isSpectator = false,
     this.error,
   });
@@ -54,6 +57,7 @@ class SessionState extends Equatable {
     winnerId,
     turnTimerS,
     currentRank,
+    startTime,
     isSpectator,
     error,
   ];
@@ -80,6 +84,7 @@ class SessionState extends Equatable {
     String? winnerId,
     int? turnTimerS,
     UnitRank? currentRank,
+    int? startTime,
     bool? isSpectator,
     SessionError? error,
     bool clearTimer = false,
@@ -96,6 +101,7 @@ class SessionState extends Equatable {
       winnerId: winnerId ?? this.winnerId,
       turnTimerS: clearTimer ? null : (turnTimerS ?? this.turnTimerS),
       currentRank: currentRank ?? this.currentRank,
+      startTime: startTime ?? this.startTime,
       isSpectator: isSpectator ?? this.isSpectator,
       error: clearError ? null : (error ?? this.error),
     );

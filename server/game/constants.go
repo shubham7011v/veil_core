@@ -9,6 +9,7 @@ type Phase string
 
 const (
 	PhaseLobby       Phase = "lobby"
+	PhaseStarting    Phase = "starting"    // 10s countdown window
 	PhaseThinking    Phase = "thinking"    // Active player is choosing cards
 	PhaseChallenging Phase = "challenging" // Cards played, others deciding to challenge/pass
 	PhaseRevealing   Phase = "revealing"   // Waiting for bluff reveal animation
@@ -26,8 +27,9 @@ const (
 
 // Config
 var (
-	MaxPlayers = 10
-	MinPlayers = 2 // For testing
+	MaxPlayers      = 10
+	MinPlayers      = 2  // For testing
+	StartGameDelayS = 10 // Seconds to wait in PhaseStarting
 )
 
 func init() {

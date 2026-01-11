@@ -213,8 +213,9 @@ func (r *Room) Run() {
 
 				// Check auto-start for public rooms
 				if !r.isPrivate && len(r.game.Players) >= r.maxPlayers && r.game.Phase == game.PhaseLobby {
-					log.Printf("Auto-starting public match in room %s (All players joined)", r.ID)
-					r.game.Start()
+					log.Printf("Lobby full in room %s. Starting %ds countdown...", r.ID, game.StartGameDelayS)
+					r.game.Phase = game.PhaseStarting
+					r.game.StartTime = time.Now().Unix() + int64(game.StartGameDelayS)
 				}
 			}
 
@@ -281,6 +282,19 @@ func (r *Room) Run() {
 				r.webRTC.SetSpeaker(r.voice.CurrentSpeakerID)
 				r.broadcastVoiceState()
 			}
+
+			// Check Countdown Start
+			if r.game.Phase == game.PhaseStarting {
+				if time.Now().Unix() >= r.game.StartTime {
+					log.Printf("Countdown finished in Room %s. Starting game!", r.ID)
+					if err := r.game.Start(); err != nil {
+						log.Printf("Failed to start game after countdown: %v", err)
+						// Fallback: reset to lobby? or retry?
+						r.game.Phase = game.PhaseLobby
+					}
+					r.broadcastState()
+				}
+			}
 			r.mu.Unlock()
 		}
 	}
@@ -290,7 +304,6 @@ func (r *Room) processAction(action GameAction) {
 	client := action.Client
 	msg := action.Message
 
-	// 1. Validate client is in room
 	// 1. Validate client is in room
 	// r.mu.Lock() is already held by Run()
 	if !r.clients[client] {
@@ -581,6 +594,7 @@ func (r *Room) broadcastState() {
 			// Spectator View
 			view := map[string]interface{}{
 				"phase":              r.game.Phase,
+				"startTime":          r.game.StartTime,
 				"myHand":             []interface{}{},
 				"participants":       r.game.Participants,
 				"pileCount":          r.game.PileCount,
@@ -617,6 +631,7 @@ func (r *Room) broadcastState() {
 
 		view := map[string]interface{}{
 			"phase":              r.game.Phase,
+			"startTime":          r.game.StartTime,
 			"myHand":             p.Hand,
 			"participants":       r.game.Participants,
 			"pileCount":          r.game.PileCount,

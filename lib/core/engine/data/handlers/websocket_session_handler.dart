@@ -677,6 +677,9 @@ class WebSocketSessionHandler
       pileCount: stateData['pileCount'] as int? ?? 0,
       currentPhase: phase,
       activeParticipantId: activeId == myId ? 'me' : activeId,
+      startTime: stateData['startTime'] != null
+          ? (stateData['startTime'] as int)
+          : null,
       turnTimerS: null, // Timer removed
       isSpectator: stateData['isSpectator'] as bool? ?? false,
     );

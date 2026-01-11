@@ -27,6 +27,9 @@ class _MatchmakingScreenState extends State<MatchmakingScreen>
   WebSocketSessionHandler? _handler;
   StreamSubscription? _statsSubscription;
   StreamSubscription? _sessionStateSubscription;
+  List<Participant> _participants = [];
+  int _countdown = 10;
+  Timer? _countdownTimer;
 
   @override
   void initState() {
@@ -96,7 +99,20 @@ class _MatchmakingScreenState extends State<MatchmakingScreen>
           if (mounted) {
             setState(() {
               _playersFound = state.participants.length;
+              _participants = state.participants;
             });
+
+            // Check for server-side provided start time
+            if (state.startTime != null) {
+              _syncCountdown(state.startTime!);
+            } else {
+              // Reset if no start time (e.g. player left)
+              if (_countdownTimer != null) {
+                _countdownTimer!.cancel();
+                _countdownTimer = null;
+                setState(() => _countdown = 0);
+              }
+            }
           }
 
           if (state.currentPhase == SessionPhase.thinking && !_isMatchFound) {
@@ -134,7 +150,36 @@ class _MatchmakingScreenState extends State<MatchmakingScreen>
     }
   }
 
+  void _syncCountdown(int startTimeUnix) {
+    // If timer already running for this start time, do nothing
+    // We can check if existing timer is close to target?
+    // Simply restart it to be safe or check if running.
+    if (_countdownTimer != null && _countdownTimer!.isActive) return;
+
+    _countdownTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
+      if (mounted) {
+        final now = DateTime.now().millisecondsSinceEpoch ~/ 1000;
+        final remaining = startTimeUnix - now;
+
+        if (remaining <= 0) {
+          timer.cancel();
+          setState(() {
+            _countdown = 0;
+            // Don't manually trigger match found - wait for server Phase switch
+          });
+        } else {
+          setState(() {
+            _countdown = remaining;
+          });
+        }
+      } else {
+        timer.cancel();
+      }
+    });
+  }
+
   void _onMatchFound() {
+    _countdownTimer?.cancel();
     Future.delayed(
       Duration(seconds: AppConfig.instance.matchmakingDelaySeconds),
       () {
@@ -154,6 +199,7 @@ class _MatchmakingScreenState extends State<MatchmakingScreen>
     _controller.dispose();
     _statsSubscription?.cancel();
     _sessionStateSubscription?.cancel();
+    _countdownTimer?.cancel();
     super.dispose();
   }
 
@@ -168,16 +214,16 @@ class _MatchmakingScreenState extends State<MatchmakingScreen>
             child: Column(
               children: [
                 _buildHeader(),
-                const Spacer(),
-                _buildAnimatedCards(),
-                const Spacer(),
+                const SizedBox(height: 24),
                 _buildStatusInfo(),
+                const SizedBox(height: 32),
+                SizedBox(height: 140, child: _buildAnimatedCards()),
+                const SizedBox(height: 32),
+                Expanded(child: _buildParticipantsList()),
                 if (_playersFound >= 2 && !_isMatchFound) ...[
                   const SizedBox(height: 24),
                   _buildStartNowButton(),
                 ],
-                const SizedBox(height: 48),
-                _buildCancelButton(),
                 const SizedBox(height: 32),
               ],
             ),
@@ -240,14 +286,163 @@ class _MatchmakingScreenState extends State<MatchmakingScreen>
         ),
         const SizedBox(height: 12),
         Text(
-          'Players found: $_playersFound / 4',
+          'Players found: $_playersFound / 5',
           style: GoogleFonts.cinzel(
             color: const Color(0xFFE5A043),
             fontSize: 18,
             fontWeight: FontWeight.w500,
           ),
         ),
+        if (_countdownTimer != null && _countdown > 0) ...[
+          const SizedBox(height: 12),
+          Text(
+            'Starting in $_countdown seconds...',
+            style: GoogleFonts.inter(
+              color: Colors.greenAccent,
+              fontSize: 14,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+        ],
       ],
+    );
+  }
+
+  Widget _buildParticipantsList() {
+    const int maxPlayers = 5;
+    final List<Widget> slots = [];
+
+    // Add actual participants
+    for (int i = 0; i < _participants.length; i++) {
+      slots.add(
+        AnimatedOpacity(
+          opacity: 1.0,
+          duration: const Duration(milliseconds: 500),
+          child: _buildParticipantCard(_participants[i]),
+        ),
+      );
+    }
+
+    // Add empty slots
+    for (int i = _participants.length; i < maxPlayers; i++) {
+      slots.add(_buildEmptySlot(i + 1));
+    }
+
+    return GridView.count(
+      crossAxisCount: 2,
+      mainAxisSpacing: 16,
+      crossAxisSpacing: 16,
+      padding: const EdgeInsets.symmetric(horizontal: 24),
+      childAspectRatio: 0.85,
+      children: slots,
+    );
+  }
+
+  Widget _buildParticipantCard(Participant participant) {
+    return Container(
+      decoration: BoxDecoration(
+        color: const Color(0xFF1E1E1E),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(
+          color: participant.isMe ? const Color(0xFFE5A043) : Colors.white10,
+          width: 2,
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.3),
+            blurRadius: 10,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Container(
+            width: 60,
+            height: 60,
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              gradient: LinearGradient(
+                colors: [
+                  participant.isMe
+                      ? const Color(0xFFE5A043)
+                      : const Color(0xFF4CAF50),
+                  participant.isMe
+                      ? const Color(0xFFD4941F)
+                      : const Color(0xFF2E7D32),
+                ],
+              ),
+            ),
+            child: Center(
+              child: Text(
+                participant.name.isNotEmpty
+                    ? participant.name[0].toUpperCase()
+                    : 'P',
+                style: GoogleFonts.cinzel(
+                  color: Colors.white,
+                  fontSize: 28,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+            ),
+          ),
+          const SizedBox(height: 12),
+          Text(
+            participant.name,
+            style: GoogleFonts.inter(
+              color: Colors.white,
+              fontSize: 14,
+              fontWeight: FontWeight.w600,
+            ),
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+          ),
+          const SizedBox(height: 4),
+          Text(
+            participant.isMe ? '(You)' : 'Ready',
+            style: GoogleFonts.inter(
+              color: participant.isMe
+                  ? const Color(0xFFE5A043)
+                  : const Color(0xFF4CAF50),
+              fontSize: 12,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildEmptySlot(int slotNumber) {
+    return Container(
+      decoration: BoxDecoration(
+        color: const Color(0xFF0F0F0F),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: Colors.white10, width: 1),
+      ),
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Container(
+            width: 60,
+            height: 60,
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              border: Border.all(color: Colors.white10, width: 2),
+            ),
+            child: Icon(
+              Icons.person_outline,
+              color: Colors.white.withValues(alpha: 0.2),
+              size: 32,
+            ),
+          ),
+          const SizedBox(height: 12),
+          Text(
+            'Waiting...',
+            style: GoogleFonts.inter(color: Colors.white24, fontSize: 12),
+          ),
+        ],
+      ),
     );
   }
 
@@ -311,20 +506,6 @@ class _MatchmakingScreenState extends State<MatchmakingScreen>
             color: Colors.white.withValues(alpha: 0.05),
             size: 30,
           ),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildCancelButton() {
-    return TextButton(
-      onPressed: () => Navigator.pop(context),
-      child: Text(
-        'Cancel',
-        style: GoogleFonts.inter(
-          color: Colors.white54,
-          fontSize: 14,
-          decoration: TextDecoration.underline,
         ),
       ),
     );

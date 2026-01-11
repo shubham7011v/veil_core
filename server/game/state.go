@@ -22,6 +22,8 @@ type Game struct {
 	// Public View for Clients
 	Participants []PublicParticipant `json:"participants"`
 
+	StartTime int64 `json:"startTime,omitempty"` // Unix timestamp for PhaseStarting countdown
+
 	TurnOrder []string `json:"turnOrder"`
 	ActiveIdx int      `json:"activeIdx"`
 
