@@ -305,13 +305,15 @@ String _getErrorMessage(Object error) {
 
     // 3. Handle Obfuscated Classes (runtimeType might be "fta")
     final String typeName = error.runtimeType.toString();
+    String str = error.toString();
 
-    if (err.toString().startsWith('Instance of')) {
-      // For custom errors, try common property names
+    // If obfuscated (short name) or generic "Instance of", try to dig deeper
+    if (str.startsWith('Instance of') || typeName.length <= 3) {
       try {
-        final String? msg =
-            (err as dynamic).message?.toString() ??
-            (err as dynamic).description?.toString();
+        final dynamic err = error;
+        // Try accessing common properties dynamically
+        final dynamic msg =
+            err.message ?? err.failure ?? err.error ?? err.description;
 
         if (msg != null) {
           return '[$typeName]: $msg';
@@ -319,18 +321,7 @@ String _getErrorMessage(Object error) {
       } catch (_) {}
     }
 
-    // Default: capture the type and the string representation
-    String str = error.toString();
-
-    // Clean up "Instance of 'xxx'" messages
-    if (str.startsWith('Instance of')) {
-      // Try to extract useful info if possible, otherwise just keep it clean
-      // If we have a typeName, 'Instance of' is redundant if it doesn't add info.
-      // But stripping it might leave us with just 'fta'.
-      // Better to check if we can get ANYTHING else.
-      // But for now, let's just leave it as the raw string if we can't do better.
-      // However, the issue is that [fta]: Instance of 'fta' is ugly.
-    }
+    // Default: truncate long strings
 
     if (str.length > 500) {
       str = '${str.substring(0, 500)}...';
