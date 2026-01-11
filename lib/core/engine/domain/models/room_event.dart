@@ -78,16 +78,19 @@ class RoomUpdated extends RoomEvent {
     required this.isGameStarted,
   });
 
-  factory RoomUpdated.fromJson(Map<String, dynamic> json) {
+  factory RoomUpdated.fromJson(
+    Map<String, dynamic> json, {
+    String? currentUserId,
+  }) {
     final participantsList = json['participants'] as List<dynamic>? ?? [];
     final participants = participantsList.map((p) {
       final pMap = p as Map<String, dynamic>;
+      final pId = pMap['id'] as String;
       return Participant(
-        id: pMap['id'] as String,
+        id: pId,
         name: pMap['name'] as String,
         unitCount: pMap['cardCount'] as int? ?? 0,
-        // TODO: Dynamically determine isMe by comparing with current user ID from AuthBloc
-        isMe: false,
+        isMe: currentUserId != null && pId == currentUserId,
         isActive: pMap['isActive'] as bool? ?? false,
       );
     }).toList();

@@ -1,4 +1,5 @@
 import 'dart:async';
+import '../../../../core/error/failure.dart';
 import '../models/session_state.dart';
 import '../models/unit.dart';
 import '../models/session_enums.dart';
@@ -7,6 +8,7 @@ import '../models/game_move.dart';
 abstract class GameSessionHandler {
   Stream<SessionState> get sessionStateStream;
   Stream<SessionEventType> get eventStream;
+  Stream<Failure> get errorStream;
 
   // Optional: detailed getters if needed for specialized UI updates
   String? get activeEventActorId;

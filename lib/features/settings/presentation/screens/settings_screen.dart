@@ -281,7 +281,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
             _playVolumePreview();
           });
         }, palette),
-        // TODO: Consider adding more granular audio controls, such as individual SFX variant selection
         _buildDivider(palette),
         _buildSwitchTile(
           icon: Icons.music_note_rounded,

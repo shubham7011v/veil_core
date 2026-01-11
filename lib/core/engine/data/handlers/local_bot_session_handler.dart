@@ -1,4 +1,5 @@
 import 'dart:async';
+import '../../../../core/error/failure.dart';
 import '../../domain/models/session_enums.dart';
 import '../../domain/logic/bot_brain.dart';
 import 'base_authoritative_handler.dart';
@@ -17,6 +18,9 @@ class LocalBotSessionHandler extends BaseAuthoritativeHandler {
 
   @override
   Stream<Map<String, dynamic>> get chatStream => _chatController.stream;
+
+  @override
+  Stream<Failure> get errorStream => const Stream.empty();
 
   @override
   void sendChatMessage(String message) {

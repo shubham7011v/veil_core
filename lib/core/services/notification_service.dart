@@ -76,7 +76,9 @@ class NotificationService {
     // 6. Get Token
     final token = await _fcm.getToken();
     debugPrint("FCM Token: $token");
-    // TODO: Send token to server to associate with user
+    if (token != null) {
+      sl.webSocketSessionHandler.setFcmToken(token);
+    }
   }
 
   void _handleMessageInteraction(RemoteMessage message) {

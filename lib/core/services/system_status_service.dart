@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:io';
+import 'package:flutter/foundation.dart';
 import '../models/system_status.dart';
 import '../engine/data/handlers/websocket_session_handler.dart';
 import '../../../features/auth/auth.dart';
@@ -20,6 +21,10 @@ class SystemStatusService {
   Timer? _syncTimeout;
   int _updateVersion = 0;
 
+  // Backoff Configuration
+  Duration _currentPingInterval = const Duration(seconds: 30);
+  int _consecutiveFailures = 0;
+
   SystemStatusService({
     required WebSocketSessionHandler sessionHandler,
     required AuthBloc authBloc,
@@ -34,12 +39,19 @@ class SystemStatusService {
     });
     _authSub = _authBloc.stream.listen((_) => _updateStatus());
 
-    // Periodically check connectivity
-    _connectivityTimer = Timer.periodic(const Duration(seconds: 30), (_) {
-      _updateStatus();
-    });
-
+    // Start dynamic ping loop
+    _scheduleNextPing();
     _updateStatus();
+  }
+
+  void _scheduleNextPing() {
+    _connectivityTimer?.cancel();
+    _connectivityTimer = Timer(_currentPingInterval, _performPeriodicCheck);
+  }
+
+  Future<void> _performPeriodicCheck() async {
+    await _updateStatus();
+    _scheduleNextPing();
   }
 
   Future<void> _updateStatus() async {
@@ -50,6 +62,27 @@ class SystemStatusService {
 
     // If a newer update has started, abort this one to prevent UI "flicker" or stale states
     if (version != _updateVersion) return;
+
+    // Update Backoff Logic
+    if (hasInternet) {
+      _consecutiveFailures = 0;
+      _currentPingInterval = const Duration(seconds: 30);
+    } else {
+      if (_consecutiveFailures == 0) {
+        // First failure: Retry quickly to confirm it's not a blip
+        _currentPingInterval = const Duration(seconds: 2);
+      } else {
+        // Exponential backoff
+        final nextMs = (_currentPingInterval.inMilliseconds * 1.5).round();
+        _currentPingInterval = Duration(
+          milliseconds: nextMs > 60000 ? 60000 : nextMs,
+        );
+      }
+      _consecutiveFailures++;
+      debugPrint(
+        'Connection lost. Next ping in ${_currentPingInterval.inSeconds}s',
+      );
+    }
 
     // Fetch latest states AFTER completing the async internet check
     final authState = _authBloc.state;
@@ -95,12 +128,12 @@ class SystemStatusService {
   Future<bool> _checkInternet() async {
     // If we are already connected to the game server, we definitely have some connectivity.
     if (_sessionHandler.connectionStatus == ConnectionStatus.connected) {
+      // If we are connected, we can reset backoff implicitly effectively
       return true;
     }
 
     try {
       // Use a short timeout to prevent long DNS hangs that pin the UI to "Initializing..."
-      // TODO: Implement exponential backoff for these pings to reduce network load when offline
       final result = await InternetAddress.lookup(
         'google.com',
       ).timeout(const Duration(seconds: 2));

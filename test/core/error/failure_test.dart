@@ -1,6 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:veil_core/core/error/failure.dart';
-import 'package:veil_core/main_common.dart' show mainCommon;
 
 void main() {
   group('Failure Error Display Tests', () {

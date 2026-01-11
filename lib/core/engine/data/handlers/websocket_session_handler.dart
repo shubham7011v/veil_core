@@ -20,6 +20,7 @@ import '../../../../features/voice/data/voice_audio_manager.dart';
 import '../../../../core/di/service_locator.dart';
 import '../../../../core/constants/sound_assets.dart';
 import '../../../../core/services/audio/audio_service_interface.dart';
+import '../../../../core/error/failure.dart';
 
 enum ConnectionStatus {
   disconnected,
@@ -46,6 +47,7 @@ class WebSocketSessionHandler
   final _challengeClaimResultController =
       StreamController<Map<String, dynamic>>.broadcast();
   final _chatController = StreamController<Map<String, dynamic>>.broadcast();
+  final _errorController = StreamController<Failure>.broadcast();
 
   // Connection state
   ConnectionStatus _connectionStatus = ConnectionStatus.disconnected;
@@ -55,6 +57,18 @@ class WebSocketSessionHandler
   static const _maxReconnectAttempts = 5;
   static const _baseReconnectDelay = Duration(seconds: 2);
   String? _lastUrl;
+  String? _fcmToken;
+
+  void setFcmToken(String token) {
+    _fcmToken = token;
+    // If connected, update server immediately
+    if (_connectionStatus == ConnectionStatus.connected) {
+      _send({
+        'type': 'UPDATE_FCM',
+        'data': {'token': token},
+      });
+    }
+  }
 
   Stream<ConnectionStatus> get connectionStatusStream =>
       _connectionStatusController.stream;
@@ -93,11 +107,21 @@ class WebSocketSessionHandler
   final bool _isRevealingBluff = false;
   final Map<String, String> _pNames = {};
 
+  // Cached Data
+  UserStats? _lastStats;
+  List<FriendRecord> _friends = [];
+
+  UserStats? get lastStats => _lastStats;
+  List<FriendRecord> get currentFriends => _friends;
+
   @override
   Stream<SessionState> get sessionStateStream => _stateController.stream;
 
   @override
   Stream<SessionEventType> get eventStream => _eventController.stream;
+
+  @override
+  Stream<Failure> get errorStream => _errorController.stream;
 
   @override
   SessionState get currentState => _currentState;
@@ -206,6 +230,7 @@ class WebSocketSessionHandler
         'name': displayName ?? 'Player',
         'platform': Platform.isAndroid ? 'android' : 'ios',
         'version': '1.0.0',
+        'fcmToken': _fcmToken,
       },
     });
 
@@ -300,6 +325,7 @@ class WebSocketSessionHandler
               final stats = UserStats.fromJson(
                 authData['stats'] as Map<String, dynamic>,
               );
+              _lastStats = stats; // Cache stats
               if (!_isDisposed && !_statsController.isClosed) {
                 _statsController.add(stats);
               }
@@ -329,6 +355,7 @@ class WebSocketSessionHandler
             final stats = UserStats.fromJson(
               msg['data'] as Map<String, dynamic>,
             );
+            _lastStats = stats; // Cache stats
             if (!_isDisposed && !_statsController.isClosed) {
               _statsController.add(stats);
             }
@@ -339,8 +366,16 @@ class WebSocketSessionHandler
           break;
 
         case 'AUTH_FAIL':
-          // TODO: Implement better handling for AUTH_FAIL (e.g., notify user via event stream)
+          // Notify user via error stream
           debugPrint('Auth failed: ${msg['data']}');
+          if (!_isDisposed && !_errorController.isClosed) {
+            _errorController.add(
+              AuthFailure(
+                msg['data']['message'] ?? 'Authentication failed',
+                msg['data'],
+              ),
+            );
+          }
           break;
 
         case 'GAME_STATE':
@@ -349,8 +384,16 @@ class WebSocketSessionHandler
 
         case 'ERROR':
           final errorData = msg['data'] as Map<String, dynamic>;
-          // TODO: Propagate server errors to the UI via an error stream or notification bloc
+          // Propagate server errors to the UI
           debugPrint('Server Error: ${errorData['message']}');
+          if (!_isDisposed && !_errorController.isClosed) {
+            _errorController.add(
+              ServerFailure(
+                errorData['message'] ?? 'Unknown server error',
+                errorData,
+              ),
+            );
+          }
           break;
 
         case 'LEADERBOARD_DATA':
@@ -373,6 +416,7 @@ class WebSocketSessionHandler
             final friends = data
                 .map((f) => FriendRecord.fromJson(f as Map<String, dynamic>))
                 .toList();
+            _friends = friends; // Cache friends
             if (!_isDisposed && !_friendsController.isClosed) {
               _friendsController.add(friends);
             }
@@ -409,8 +453,10 @@ class WebSocketSessionHandler
 
         case 'ROOM_UPDATE':
           try {
+            final currentUserId = sl.authRepository.currentUser?.uid;
             final evt = RoomUpdated.fromJson(
               msg['data'] as Map<String, dynamic>,
+              currentUserId: currentUserId,
             );
             if (!_isDisposed && !_roomEventController.isClosed) {
               _roomEventController.add(evt);
@@ -692,6 +738,10 @@ class WebSocketSessionHandler
     _send({'type': 'FRIEND_ACCEPT', 'data': friendId});
   }
 
+  void removeFriend(String friendId) {
+    _send({'type': 'FRIEND_REMOVE', 'data': friendId});
+  }
+
   // -- Private Room Methods --
 
   Future<void> createPrivateRoom({
@@ -796,6 +846,7 @@ class WebSocketSessionHandler
     await _challengesController.close();
     await _challengeClaimResultController.close();
     await _chatController.close();
+    await _errorController.close();
     await _voiceManager?.dispose();
   }
 }

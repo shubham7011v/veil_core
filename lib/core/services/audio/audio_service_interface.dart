@@ -32,6 +32,9 @@ enum HapticType {
 }
 
 abstract class AudioService {
+  /// Check if the audio service is initialized
+  bool get isInitialized;
+
   /// Initialize the audio engine (preload sounds, set volume)
   Future<void> initialize();
 

@@ -298,8 +298,9 @@ String _getErrorMessage(Object error) {
     }
     if (err is StateError) return 'StateError: ${err.message}';
     if (err is TypeError) return 'TypeError: ${err.toString()}';
-    if (err is ArgumentError)
+    if (err is ArgumentError) {
       return 'ArgError: ${err.message ?? err.toString()}';
+    }
     if (err is FormatException) return 'FormatError: ${err.message}';
 
     // 3. Handle Obfuscated Classes (runtimeType might be "fta")

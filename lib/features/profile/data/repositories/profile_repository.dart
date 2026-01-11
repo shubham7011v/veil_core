@@ -1,7 +1,10 @@
+import 'dart:convert';
+import 'package:http/http.dart' as http;
 import 'package:firebase_auth/firebase_auth.dart';
 import '../../domain/models/user_profile.dart';
 import '../../../auth/domain/models/user_stats.dart';
 import '../../../../core/engine/data/handlers/websocket_session_handler.dart';
+import '../../../../core/config/app_config.dart';
 
 class ProfileRepository {
   final WebSocketSessionHandler _handler;
@@ -10,49 +13,88 @@ class ProfileRepository {
 
   /// Get a user's profile by their ID
   Future<UserProfile> getProfile(String userId) async {
-    // For now, we'll construct profile from available data
-    // In the future, this should call a backend API endpoint
-
-    // Get user stats from the handler's stats stream
-    // This is a simplified implementation - ideally the backend
-    // would have a GET /api/profile/:userId endpoint
-
     // For MVP, we'll use the current user's data if it's their own profile
     final currentUser = FirebaseAuth.instance.currentUser;
     final isOwnProfile = currentUser?.uid == userId;
 
     if (isOwnProfile && currentUser != null) {
-      // Return own profile - we have this data
+      // Use cached stats from WebSocket handler if available
+      final stats =
+          _handler.lastStats ??
+          const UserStats(
+            userId: '',
+            name: '',
+            gamesPlayed: 0,
+            wins: 0,
+            losses: 0,
+            rank: 'Novice',
+            coins: 1000,
+          );
+
       return UserProfile(
         userId: currentUser.uid,
         name: currentUser.displayName ?? 'Unknown',
         photoUrl: currentUser.photoURL,
         bio: null, // Not implemented yet
-        stats: const UserStats(
-          userId: '',
-          name: '',
-          gamesPlayed: 0,
-          wins: 0,
-          losses: 0,
-          rank: 'Novice',
-          coins: 1000,
-        ), // TODO: Get from AuthBloc
+        stats: stats,
         isOnline: true,
         isFriend: false,
         joinedDate: currentUser.metadata.creationTime ?? DateTime.now(),
       );
     }
 
-    // For other users, we need to fetch from backend
-    // TODO: Implement backend API call
-    throw UnimplementedError('Backend profile API not yet implemented');
+    // For other users, fetch from backend API
+    try {
+      final url = Uri.parse('${AppConfig.instance.apiBaseUrl}/users/$userId');
+      final response = await http.get(url);
+
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body) as Map<String, dynamic>;
+
+        // Check if friend
+        final isFriend = await this.isFriend(userId);
+
+        return UserProfile(
+          userId: userId,
+          name: data['name'] ?? 'Unknown',
+          photoUrl: data['photoUrl'],
+          bio: data['bio'],
+          stats: UserStats.fromJson(data['stats'] ?? {}),
+          isOnline: data['isOnline'] ?? false,
+          isFriend: isFriend,
+          joinedDate: DateTime.parse(
+            data['createdAt'] ?? DateTime.now().toIso8601String(),
+          ),
+        );
+      } else {
+        throw Exception('Failed to load profile: ${response.statusCode}');
+      }
+    } catch (e) {
+      // Fallback for demo / offline
+      return UserProfile(
+        userId: userId,
+        name: 'Player',
+        photoUrl: null,
+        bio: 'Could not load profile.',
+        stats: const UserStats(
+          userId: '',
+          name: '',
+          gamesPlayed: 0,
+          wins: 0,
+          losses: 0,
+          rank: '?',
+          coins: 0,
+        ),
+        isOnline: false,
+        isFriend: false,
+        joinedDate: DateTime.now(),
+      );
+    }
   }
 
   /// Check if a user is your friend
   Future<bool> isFriend(String userId) async {
-    // TODO: Query friends list from handler
-    // For now, return false
-    return false;
+    return _handler.currentFriends.any((f) => f.friendId == userId);
   }
 
   /// Add a user as a friend
@@ -62,7 +104,6 @@ class ProfileRepository {
 
   /// Remove a friend
   Future<void> removeFriend(String userId) async {
-    // TODO: Implement remove friend in handler
-    throw UnimplementedError('Remove friend not yet implemented');
+    _handler.removeFriend(userId);
   }
 }

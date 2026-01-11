@@ -7,11 +7,12 @@ import '../../di/service_locator.dart';
 
 class AudioServiceImpl implements AudioService {
   // --- Players ---
+  // --- Players ---
   final AudioPlayer _bgmPlayer = AudioPlayer();
   final AudioPlayer _sfxPlayer = AudioPlayer(); // For simple SFX (shared)
+  final AudioCache _audioCache = AudioCache(prefix: 'assets/$_sfxPath');
   // Note: For overlapping SFX, AudioPlayers supports "Low Latency" mode or multiple instances.
-  // For this implementation, we'll use AudioCache implicitly via AssetSource which handles some caching.
-  // Ideally, for high-frequency concurrent SFX, we might need a pool, but let's start simple.
+  // For this implementation, we'll use AudioCache to pre-load freq used sounds.
 
   // --- State ---
   AudioSettings _currentSettings = const AudioSettings(
@@ -26,6 +27,11 @@ class AudioServiceImpl implements AudioService {
     sfxVariantIndex: 1,
   );
   bool _isDucked = false;
+  bool _isInitialized = false;
+
+  @override
+  bool get isInitialized => _isInitialized;
+
   String? _currentBgmFile;
   bool _isPlayingBgm = false;
 
@@ -58,12 +64,42 @@ class AudioServiceImpl implements AudioService {
       );
 
       _bgmPlayer.setReleaseMode(ReleaseMode.loop);
-      // TODO: Pre-cache frequently used sound effects (e.g., cardSlide, turnAlert) to minimize latency
+
+      // Pre-cache frequently used sound effects
+      await _preCacheSounds();
+
       // Load initial settings from storage
       _loadInitialSettings();
+      _isInitialized = true;
     } catch (e) {
       debugPrint('AudioService initialization failed: $e');
       // We don't rethrow here to allow app to proceed without audio
+    }
+  }
+
+  Future<void> _preCacheSounds() async {
+    final soundsToCache = <String>[];
+
+    // Critical SFX list
+    const criticalSfx = [
+      'card_slide',
+      'deal_card',
+      'turn_alert',
+      'button_tap',
+      'chip_place',
+    ];
+
+    for (final sfx in criticalSfx) {
+      for (int i = 1; i <= 4; i++) {
+        soundsToCache.add('${sfx}_$i.wav');
+      }
+    }
+
+    try {
+      await _audioCache.loadAll(soundsToCache);
+      debugPrint('Pre-cached ${soundsToCache.length} sound assets');
+    } catch (e) {
+      debugPrint('Failed to pre-cache sounds: $e');
     }
   }
 

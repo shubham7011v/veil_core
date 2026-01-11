@@ -34,13 +34,15 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   void _startLobbyMusic() {
-    // Delay slightly to ensure audio service is fully initialized
-    // TODO: Replace this hardcoded delay with a proper 'isInitialized' check from AudioService
-    Future.delayed(const Duration(milliseconds: 500), () {
+    // Check if audio service is ready
+    if (sl.audioService.isInitialized) {
       if (mounted) {
         sl.audioService.playBgm(SoundAssets.lobbyAmbience);
       }
-    });
+    } else {
+      // Fallback: If for some reason it's not ready (e.g. error in init), log it.
+      debugPrint('AudioService not initialized yet. Skipping auto-play.');
+    }
   }
 
   void _goHome() {

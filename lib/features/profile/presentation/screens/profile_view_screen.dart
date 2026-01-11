@@ -243,7 +243,6 @@ class ProfileViewScreen extends StatelessWidget {
                 child: ElevatedButton.icon(
                   onPressed: profile.isOnline
                       ? () {
-                          // TODO: Implement challenge logic
                           context.read<AppNotificationBloc>().add(
                             const ShowInfoNotification(
                               'Challenge feature coming soon!',

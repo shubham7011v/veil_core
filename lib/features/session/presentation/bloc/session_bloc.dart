@@ -3,7 +3,6 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import '../../../../core/engine/engine.dart';
 import 'session_event.dart';
 import 'session_state.dart';
-import '../../../../core/error/failure.dart';
 import '../../../../core/di/service_locator.dart' as di;
 
 class SessionBloc extends Bloc<SessionEvent, SessionBlocState> {
@@ -11,6 +10,7 @@ class SessionBloc extends Bloc<SessionEvent, SessionBlocState> {
   StreamSubscription? _stateSub;
   StreamSubscription? _eventSub;
   StreamSubscription? _chatSub;
+  StreamSubscription? _errorSub;
 
   SessionBloc({GameSessionHandler? handler})
     : _handler = handler ?? di.sl.gameSessionHandler,
@@ -122,6 +122,12 @@ class SessionBloc extends Bloc<SessionEvent, SessionBlocState> {
     _chatSub = _handler.chatStream.listen((msg) {
       if (!isClosed) {
         add(ChatStreamUpdated(msg));
+      }
+    });
+
+    _errorSub = _handler.errorStream.listen((failure) {
+      if (!isClosed) {
+        add(SessionErrorOccurred(failure));
       }
     });
   }
@@ -272,6 +278,7 @@ class SessionBloc extends Bloc<SessionEvent, SessionBlocState> {
     _stateSub?.cancel();
     _eventSub?.cancel();
     _chatSub?.cancel();
+    _errorSub?.cancel();
     _handler.dispose();
     return super.close();
   }
@@ -280,9 +287,7 @@ class SessionBloc extends Bloc<SessionEvent, SessionBlocState> {
     SessionErrorOccurred event,
     Emitter<SessionBlocState> emit,
   ) {
-    emit(
-      state.copyWith(failure: SessionFailure(event.error.message, event.error)),
-    );
+    emit(state.copyWith(failure: event.error));
   }
 
   void _onErrorCleared(

@@ -1,5 +1,6 @@
 import 'package:equatable/equatable.dart';
 import '../../../../core/engine/engine.dart' as engine;
+import '../../../../core/error/failure.dart';
 
 abstract class SessionEvent extends Equatable {
   const SessionEvent();
@@ -93,7 +94,7 @@ class HandlerSyncRequested extends SessionEvent {
 
 // -- Error Events --
 class SessionErrorOccurred extends SessionEvent {
-  final engine.SessionError error;
+  final Failure error;
   const SessionErrorOccurred(this.error);
 
   @override
