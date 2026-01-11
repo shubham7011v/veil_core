@@ -11,7 +11,13 @@ Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
 }
 
 class NotificationService {
-  final FirebaseMessaging _fcm = FirebaseMessaging.instance;
+  // Lazy initialization to avoid NotInitializedError before Firebase.initializeApp()
+  FirebaseMessaging? _fcmInstance;
+  FirebaseMessaging get _fcm {
+    _fcmInstance ??= FirebaseMessaging.instance;
+    return _fcmInstance!;
+  }
+
   static bool _backgroundHandlerRegistered = false;
 
   Future<void> initialize() async {
