@@ -108,10 +108,10 @@ func (b *Bot) decideMove() {
 
 	// We need to parse real game structures to do this properly.
 	// Since 'state' is a map, it's messy. Accessing Room.Game directly is CHEATING but
-	// since we are the server, we can cheat for simplicity or better AI.
-	// However, to keep it clean, let's use the 'state' map or access the Room safely.
-
 	// SAFE ACCESS via Room (since we are in same package)
+	// We MUST lock to avoid concurrent map read/write panic
+	room.mu.RLock()
+	defer room.mu.RUnlock()
 	// Use Read Lock if we implemented one, but for now access is mostly safe via channels.
 	// Wait, we can't access Game state safely while it might be mutating.
 	// But deciding a move doesn't mutate.
@@ -237,6 +237,10 @@ func (b *Bot) decideChallenge() {
 	if room == nil {
 		return
 	}
+
+	// Lock for safe access
+	room.mu.RLock()
+	defer room.mu.RUnlock()
 
 	g := room.game
 	lastMove := g.LastMove

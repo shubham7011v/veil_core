@@ -21,6 +21,7 @@ import '../../../../core/notifications/bloc/app_notification_bloc.dart';
 import '../../../../core/notifications/bloc/app_notification_event.dart';
 import '../../../game/presentation/widgets/chat_widget.dart';
 import '../../../game/presentation/widgets/emoji_picker.dart';
+import '../../../../core/config/feature_flags.dart';
 
 class SessionScreen extends StatefulWidget {
   const SessionScreen({super.key});
@@ -495,7 +496,8 @@ class _SessionScreenState extends State<SessionScreen>
                   ),
 
                   // Voice Overlay - only when voice is enabled
-                  if (di.sl.voiceSessionHandler != null)
+                  if (di.sl.voiceSessionHandler != null &&
+                      FeatureFlags.enableVoiceChat)
                     Positioned.fill(
                       child: VoiceOverlay(
                         sessionHandler: di.sl.voiceSessionHandler!,
