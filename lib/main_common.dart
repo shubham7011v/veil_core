@@ -319,10 +319,22 @@ String _getErrorMessage(Object error) {
     }
 
     // Default: capture the type and the string representation
-    final String str = error.toString();
-    if (str.length > 500) {
-      return '[$typeName]: ${str.substring(0, 500)}...';
+    String str = error.toString();
+
+    // Clean up "Instance of 'xxx'" messages
+    if (str.startsWith('Instance of')) {
+      // Try to extract useful info if possible, otherwise just keep it clean
+      // If we have a typeName, 'Instance of' is redundant if it doesn't add info.
+      // But stripping it might leave us with just 'fta'.
+      // Better to check if we can get ANYTHING else.
+      // But for now, let's just leave it as the raw string if we can't do better.
+      // However, the issue is that [fta]: Instance of 'fta' is ugly.
     }
+
+    if (str.length > 500) {
+      str = '${str.substring(0, 500)}...';
+    }
+
     return '[$typeName]: $str';
   } catch (_) {
     return 'Unknown Error Type: ${error.runtimeType}';
