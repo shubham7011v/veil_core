@@ -127,8 +127,10 @@ func (g *Game) ResolveChallenge(challengerID string) string {
 	g.ResetRound()
 	g.SyncParticipants()
 
+	g.ResetRound()
+	g.SyncParticipants()
+
 	g.SetTurnMessages(winnerID)
-	g.TurnTimerS = g.ThinkingTimeS
 
 	result := "BLUFF CAUGHT!"
 	if !g.IsBluffSuccessful {
@@ -177,25 +179,10 @@ func (g *Game) Pass(playerID string) error {
 	return nil
 }
 
-// Tick decrements the timer and performs auto-actions
-func (g *Game) Tick() {
-	if g.Phase == PhaseThinking || g.Phase == PhaseChallenging {
-		if g.TurnTimerS > 0 {
-			g.TurnTimerS--
-		}
-
-		if g.TurnTimerS <= 0 {
-			// Auto-pass logic
-			g.Pass(g.ActivePlayerID())
-		}
-	}
-}
-
 // -- Helpers --
 
 func (g *Game) AdvanceTurn() {
 	g.ActiveIdx = (g.ActiveIdx + 1) % len(g.TurnOrder)
-	g.TurnTimerS = g.ThinkingTimeS // Reset timer for next player
 
 	// If the active player is finished (0 cards), do they get skipped?
 	// For "First to 0 wins", game ends immediately.
@@ -225,7 +212,6 @@ func (g *Game) ResetRound() {
 	g.LastMove = nil
 	g.ResetPassFlags()
 	g.Phase = PhaseThinking
-	g.TurnTimerS = g.ThinkingTimeS // Reset timer for new round starter
 }
 
 func (g *Game) ResetPassFlags() {

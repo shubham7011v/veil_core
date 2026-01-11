@@ -93,18 +93,20 @@ func (m *Manager) Run() {
 					break
 				}
 
-				if matchType == "BOT" {
-					if config.GetFeatureFlags().EnableBotPlayers {
-						// Spawn Bot
-						bot := NewBot(m)
-						clients = append(clients, bot.Client)
-						log.Println("Spawning Bot for timeout match")
-					} else {
-						// Bots disabled, put player back in queue
-						m.Queue.Add(clients[0])
-						break // Stop processing this tick if bots are disabled and we can't match
+				if matchType == "BOT" && config.GetFeatureFlags().EnableBotPlayers {
+					// Only spawn Bots if specifically requested (single player timeout)
+					targetCount := 5
+					currentCount := len(clients)
+
+					if currentCount < targetCount {
+						for i := 0; i < targetCount-currentCount; i++ {
+							bot := NewBot(m)
+							clients = append(clients, bot.Client)
+						}
+						log.Printf("Spawning %d Bots to fill single-player timeout match", targetCount-currentCount)
 					}
 				}
+
 				m.createMatchRoom(clients)
 			}
 		}
@@ -309,6 +311,7 @@ func (m *Manager) HandleMessage(c *Client, message []byte) {
 	case "JOIN_ROOM":
 		// Public Matchmaking
 		if c.CurrentRoom == nil {
+			c.IsSpectator = false // Ensure they are a player for public matches
 			m.Queue.Add(c)
 		} else {
 			c.CurrentRoom.ForceBroadcastState()

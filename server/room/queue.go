@@ -53,24 +53,33 @@ func (q *MatchmakingQueue) Tick() (clients []*Client, matchType string) {
 		return nil, ""
 	}
 
-	// 1. Pair 2 Human Players
-	if len(q.items) >= 2 {
-		c1 := q.items[0].Client
-		c2 := q.items[1].Client
-
-		q.items = q.items[2:] // Pop 2
-		return []*Client{c1, c2}, "HUMAN"
+	// 1. Check Head Timeout
+	head := q.items[0]
+	if time.Since(head.EntryTime) < 10*time.Second {
+		// Wait for more players to accumulate
+		return nil, ""
 	}
 
-	// 2. Timeout -> Bot Match
-	if len(q.items) == 1 {
-		item := q.items[0]
-		if time.Since(item.EntryTime) > 10*time.Second {
-			log.Printf("Queue: Timeout for %s, requesting Bot.", item.Client.ID)
-			q.items = make([]*QueueItem, 0) // Clear
-			return []*Client{item.Client}, "BOT"
-		}
+	// 2. Timeout Reached
+	// Gather all clients currently in queue (Limit to 5)
+	matchClients := make([]*Client, 0)
+	limit := 5
+	if len(q.items) < limit {
+		limit = len(q.items)
 	}
 
-	return nil, ""
+	for i := 0; i < limit; i++ {
+		matchClients = append(matchClients, q.items[i].Client)
+	}
+	q.items = q.items[limit:]
+
+	if len(matchClients) >= 2 {
+		log.Printf("Queue: Matched %d humans after timeout.", len(matchClients))
+		return matchClients, "MATCH"
+	}
+
+	// Single player timeout -> Request Bots
+	log.Printf("Queue: Timeout for single player %s, requesting Bot.", matchClients[0].ID)
+	return matchClients, "BOT"
+
 }

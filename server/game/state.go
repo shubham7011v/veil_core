@@ -31,14 +31,11 @@ type Game struct {
 	LastMove     *LastMove `json:"-"`            // Server-only (contains truth)
 	DeclaredRank *Rank     `json:"declaredRank"` // Current round rank (visible)
 
-	TurnTimerS    int `json:"turnTimerS"`
-	ThinkingTimeS int `json:"-"` // Configuration
-
 	// Event Context for UI Animations
 	LastEvent          string `json:"lastEvent,omitempty"`
 	LastEventActorID   string `json:"lastEventActorId,omitempty"`
 	LastEventCardCount int    `json:"lastEventCardCount,omitempty"`
-	IsBluffSuccessful  bool   `json:"isBluffSuccessful,omitempty"`
+	IsBluffSuccessful  bool   `json:"isbluffSuccessful,omitempty"`
 
 	WinnerID string   `json:"winnerId,omitempty"`
 	GameLog  []string `json:"gameLog"`
@@ -53,13 +50,12 @@ type PublicParticipant struct {
 
 func NewGame() *Game {
 	return &Game{
-		Phase:         PhaseLobby,
-		Players:       make([]*Player, 0),
-		PlayerMap:     make(map[string]*Player),
-		Participants:  make([]PublicParticipant, 0),
-		Pile:          make([]Card, 0),
-		TurnOrder:     make([]string, 0),
-		ThinkingTimeS: 10, // Default 10s turn
+		Phase:        PhaseLobby,
+		Players:      make([]*Player, 0),
+		PlayerMap:    make(map[string]*Player),
+		Participants: make([]PublicParticipant, 0),
+		Pile:         make([]Card, 0),
+		TurnOrder:    make([]string, 0),
 	}
 }
 
@@ -132,7 +128,6 @@ func (g *Game) Start() error {
 	}
 
 	g.Phase = PhaseThinking
-	g.TurnTimerS = g.ThinkingTimeS
 	g.LastEvent = "shuffling"
 	g.SyncParticipants()
 

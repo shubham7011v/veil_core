@@ -274,10 +274,6 @@ func (r *Room) Run() {
 			tickCount++
 			if tickCount >= 5 {
 				tickCount = 0
-				if r.game.Phase != game.PhaseLobby && r.game.Phase != game.PhaseFinished {
-					r.game.Tick()
-					r.broadcastState() // Broadcast to sync timer UI
-				}
 			}
 
 			// Voice updates
@@ -590,7 +586,6 @@ func (r *Room) broadcastState() {
 				"pileCount":          r.game.PileCount,
 				"activePlayerId":     r.game.ActivePlayerID(),
 				"declaredRank":       r.game.DeclaredRank,
-				"turnTimerS":         r.game.TurnTimerS,
 				"isSpectator":        true,
 				"lastEvent":          r.game.LastEvent,
 				"lastEventActorId":   r.game.LastEventActorID,
@@ -626,7 +621,6 @@ func (r *Room) broadcastState() {
 			"pileCount":          r.game.PileCount,
 			"activePlayerId":     r.game.ActivePlayerID(),
 			"declaredRank":       r.game.DeclaredRank,
-			"turnTimerS":         r.game.TurnTimerS,
 			"lastEvent":          r.game.LastEvent,
 			"lastEventActorId":   r.game.LastEventActorID,
 			"lastEventCardCount": r.game.LastEventCardCount,
