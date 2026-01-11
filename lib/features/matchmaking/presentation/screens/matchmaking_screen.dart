@@ -315,20 +315,24 @@ class _MatchmakingScreenState extends State<MatchmakingScreen>
     const int maxPlayers = 5;
     final List<Widget> slots = [];
 
-    // Add actual participants
-    for (int i = 0; i < _participants.length; i++) {
+    // Filter out self - only show other players
+    final others = _participants.where((p) => !p.isMe).toList();
+
+    // Add actual participants (excluding self)
+    for (int i = 0; i < others.length; i++) {
       slots.add(
         AnimatedOpacity(
           opacity: 1.0,
           duration: const Duration(milliseconds: 500),
-          child: _buildParticipantCard(_participants[i]),
+          child: _buildParticipantCard(others[i]),
         ),
       );
     }
 
-    // Add empty slots
-    for (int i = _participants.length; i < maxPlayers; i++) {
-      slots.add(_buildEmptySlot(i + 1));
+    // Add empty slots for remaining spots (4 others max since you're player 5)
+    final remainingSlots = (maxPlayers - 1) - others.length;
+    for (int i = 0; i < remainingSlots; i++) {
+      slots.add(_buildEmptySlot(others.length + i + 1));
     }
 
     return GridView.count(

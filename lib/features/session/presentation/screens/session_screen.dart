@@ -66,6 +66,15 @@ class _SessionScreenState extends State<SessionScreen>
 
   @override
   void dispose() {
+    // Leave online room to clean up server state
+    final args = ModalRoute.of(context)?.settings.arguments;
+    if (args is Map && args['useWebSocket'] == true) {
+      try {
+        di.sl.webSocketSessionHandler.leaveRoom('');
+      } catch (e) {
+        debugPrint('Error leaving room on dispose: $e');
+      }
+    }
     _entryController.dispose();
     super.dispose();
   }
