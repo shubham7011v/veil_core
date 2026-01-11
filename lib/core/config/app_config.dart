@@ -113,7 +113,8 @@ class AppConfig {
   /// Update configuration from server-side /api/config response
   void updateFromServer(Map<String, dynamic> serverConfig) {
     // Helper to check if a flag is locally overridden
-    bool isOverridden(String envKey) => dotenv.maybeGet(envKey) != null;
+    // Helper to check if a flag is locally overridden
+    bool isOverridden(String envKey) => _safeGetEnv(envKey) != null;
 
     if (serverConfig['enableVoiceChat'] is bool &&
         !isOverridden('ENABLE_VOICE_CHAT')) {
@@ -165,12 +166,18 @@ class AppConfig {
     // 2. Set environment & app name (priority: injected > .env > String.fromEnvironment)
     environment =
         injectedEnv ??
-        dotenv.maybeGet('ENV') ??
+    environment =
+        injectedEnv ??
+        _safeGetEnv('ENV') ??
+        const String.fromEnvironment('ENV', defaultValue: 'development');
         const String.fromEnvironment('ENV', defaultValue: 'development');
 
     appName =
         injectedAppName ??
-        dotenv.maybeGet('APP_NAME') ??
+    appName =
+        injectedAppName ??
+        _safeGetEnv('APP_NAME') ??
+        const String.fromEnvironment('APP_NAME', defaultValue: 'Bluff');
         const String.fromEnvironment('APP_NAME', defaultValue: 'Bluff');
 
     isProduction = environment == 'production' || environment == 'prod';
@@ -180,20 +187,31 @@ class AppConfig {
     _customApiUrl = customApiUrl;
   }
 
+  /// Safely get value from dotenv, returning null if not initialized
+  static String? _safeGetEnv(String key) {
+    try {
+      return dotenv.maybeGet(key);
+    } catch (_) {
+      return null;
+    }
+  }
+
   void _load() {
     // Server Configuration
     bootStep = '4a. Loading Server URLs';
     if (isProduction) {
       serverUrl =
           _customServerUrl ??
-          dotenv.maybeGet('SERVER_URL') ??
+      serverUrl =
+          _customServerUrl ??
+          _safeGetEnv('SERVER_URL') ??
           const String.fromEnvironment(
             'SERVER_URL',
             defaultValue: 'wss://bluffzone.duckdns.org/ws',
           );
       apiBaseUrl =
           _customApiUrl ??
-          dotenv.maybeGet('API_URL') ??
+          _safeGetEnv('API_URL') ??
           const String.fromEnvironment(
             'API_URL',
             defaultValue: 'https://bluffzone.duckdns.org/api',
@@ -201,14 +219,16 @@ class AppConfig {
     } else {
       var defaultServerUrl =
           _customServerUrl ??
-          dotenv.maybeGet('SERVER_URL') ??
+      var defaultServerUrl =
+          _customServerUrl ??
+          _safeGetEnv('SERVER_URL') ??
           const String.fromEnvironment(
             'SERVER_URL',
             defaultValue: 'ws://72.62.197.76:8080/ws',
           );
       var defaultApiUrl =
           _customApiUrl ??
-          dotenv.maybeGet('API_URL') ??
+          _safeGetEnv('API_URL') ??
           const String.fromEnvironment(
             'API_URL',
             defaultValue: 'http://72.62.197.76:8080/api',
@@ -425,7 +445,7 @@ class AppConfig {
     }
 
     // 2. Try .env
-    final envFileValue = dotenv.maybeGet(envKey);
+    final envFileValue = _safeGetEnv(envKey);
     if (envFileValue != null) return int.tryParse(envFileValue) ?? defaultValue;
 
     // 3. Try Environment Variable (Build Time)
@@ -442,7 +462,7 @@ class AppConfig {
     }
 
     // 2. Try .env
-    final envFileValue = dotenv.maybeGet(envKey);
+    final envFileValue = _safeGetEnv(envKey);
     if (envFileValue != null) return envFileValue;
 
     // 3. Try Environment Variable (Build Time)
@@ -451,7 +471,7 @@ class AppConfig {
 
   bool _getBoolConfig(String rcKey, String envKey, bool defaultValue) {
     // 1. Try .env (Local developer override)
-    final envFileValue = dotenv.maybeGet(envKey);
+    final envFileValue = _safeGetEnv(envKey);
     if (envFileValue != null) return envFileValue.toLowerCase() == 'true';
 
     // 2. Try Environment Variable (Build-time override)
@@ -487,7 +507,7 @@ class AppConfig {
     }
 
     // 2. Try .env
-    final envFileValue = dotenv.maybeGet(envKey);
+    final envFileValue = _safeGetEnv(envKey);
     if (envFileValue != null) {
       return envFileValue
           .split(',')
