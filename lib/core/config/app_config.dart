@@ -34,13 +34,13 @@ class AppConfig {
     String? customApiUrl,
   }) async {
     final config = AppConfig._();
+    _instance = config; // Set instance immediately
     await config._bootstrap(
       injectedEnv: env,
       injectedAppName: appName,
       customServerUrl: customServerUrl,
       customApiUrl: customApiUrl,
     );
-    _instance = config;
   }
 
   // Custom Overrides
