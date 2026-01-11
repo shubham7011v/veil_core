@@ -166,18 +166,12 @@ class AppConfig {
     // 2. Set environment & app name (priority: injected > .env > String.fromEnvironment)
     environment =
         injectedEnv ??
-    environment =
-        injectedEnv ??
         _safeGetEnv('ENV') ??
-        const String.fromEnvironment('ENV', defaultValue: 'development');
         const String.fromEnvironment('ENV', defaultValue: 'development');
 
     appName =
         injectedAppName ??
-    appName =
-        injectedAppName ??
         _safeGetEnv('APP_NAME') ??
-        const String.fromEnvironment('APP_NAME', defaultValue: 'Bluff');
         const String.fromEnvironment('APP_NAME', defaultValue: 'Bluff');
 
     isProduction = environment == 'production' || environment == 'prod';
@@ -202,8 +196,6 @@ class AppConfig {
     if (isProduction) {
       serverUrl =
           _customServerUrl ??
-      serverUrl =
-          _customServerUrl ??
           _safeGetEnv('SERVER_URL') ??
           const String.fromEnvironment(
             'SERVER_URL',
@@ -217,8 +209,6 @@ class AppConfig {
             defaultValue: 'https://bluffzone.duckdns.org/api',
           );
     } else {
-      var defaultServerUrl =
-          _customServerUrl ??
       var defaultServerUrl =
           _customServerUrl ??
           _safeGetEnv('SERVER_URL') ??
