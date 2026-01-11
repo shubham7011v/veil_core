@@ -33,6 +33,7 @@ type Game struct {
 
 	// Event Context for UI Animations
 	LastEvent          string `json:"lastEvent,omitempty"`
+	LastEventID        string `json:"lastEventId,omitempty"` // Unique ID for event de-duplication
 	LastEventActorID   string `json:"lastEventActorId,omitempty"`
 	LastEventCardCount int    `json:"lastEventCardCount,omitempty"`
 	IsBluffSuccessful  bool   `json:"isbluffSuccessful,omitempty"`

@@ -55,6 +55,7 @@ func (g *Game) PlayCards(playerID string, cardIDs []string, declaredRank Rank) e
 
 	// UI Context
 	g.LastEvent = "cardsPlayed"
+	g.LastEventID = fmt.Sprintf("%d", time.Now().UnixNano())
 	g.LastEventActorID = playerID
 	g.LastEventCardCount = len(cardIDs)
 
@@ -94,7 +95,10 @@ func (g *Game) Challenge(challengerID string) (bool, error) {
 
 	// Prepare for Reveal Phase
 	g.Phase = PhaseRevealing
+	// Prepare for Reveal Phase
+	g.Phase = PhaseRevealing
 	g.LastEvent = "bluffCalled"
+	g.LastEventID = fmt.Sprintf("%d", time.Now().UnixNano())
 	g.LastEventActorID = challengerID
 	g.IsBluffSuccessful = isBluff
 	// Note: We don't resolve yet. ResolveChallenge() must be called later.
@@ -158,6 +162,7 @@ func (g *Game) Pass(playerID string) error {
 
 		// UI Context
 		g.LastEvent = "pileDiscarded"
+		g.LastEventID = fmt.Sprintf("%d", time.Now().UnixNano())
 		g.LastEventActorID = "" // Neutral
 
 		g.AddToLog("Everyone passed. Pile discarded.")
@@ -168,6 +173,7 @@ func (g *Game) Pass(playerID string) error {
 	} else {
 		// UI Context
 		g.LastEvent = "passed"
+		g.LastEventID = fmt.Sprintf("%d", time.Now().UnixNano())
 		g.LastEventActorID = playerID
 
 		g.AddToLog(fmt.Sprintf("%s passed", g.PlayerMap[playerID].Name))

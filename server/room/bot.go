@@ -9,6 +9,10 @@ import (
 	"veil_server/protocol"
 )
 
+func init() {
+	rand.Seed(time.Now().UnixNano())
+}
+
 // BotNameList is a pool of realistic names for bots
 var BotNameList = []string{
 	"Shubham", "Julie", "Shivam", "Sandhya", "Sabhya",
@@ -26,7 +30,6 @@ type Bot struct {
 // NewBot creates a fake Client and a Bot controller
 func NewBot(manager *Manager) *Bot {
 	// 1. Generate Identity
-	rand.Seed(time.Now().UnixNano())
 	name := BotNameList[rand.Intn(len(BotNameList))]
 	id := "bot_" + generateRandomString(8)
 

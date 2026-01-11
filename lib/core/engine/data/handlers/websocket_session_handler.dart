@@ -106,6 +106,7 @@ class WebSocketSessionHandler
   GameMove? _lastMove;
   bool _isRevealingBluff = false;
   final Map<String, String> _pNames = {};
+  String? _lastProcessedEventId;
 
   // Cached Data
   UserStats? _lastStats;
@@ -686,26 +687,40 @@ class WebSocketSessionHandler
     }
 
     // Emit events based on lastEvent from server
+    // Emit events based on lastEvent from server
+    // NEW: Use lastEventId to deduplicate events (prevents multiple animations)
+    final lastEventId = stateData['lastEventId'] as String?;
+
     if (lastEvent != null && !_isDisposed && !_eventController.isClosed) {
-      switch (lastEvent) {
-        case 'cardsPlayed':
-          _eventController.add(SessionEventType.cardsPlayed);
-          break;
-        case 'passed':
-          _eventController.add(SessionEventType.passed);
-          break;
-        case 'bluffCalled':
-          _eventController.add(SessionEventType.bluffCalled);
-          break;
-        case 'pileDiscarded':
-          _eventController.add(SessionEventType.pileDiscarded);
-          break;
-        case 'cardsPickedUp':
-          _eventController.add(SessionEventType.cardsPickedUp);
-          break;
-        case 'shuffling':
-          _eventController.add(SessionEventType.shuffling);
-          break;
+      // If server provides an ID, check if we already processed it
+      if (lastEventId != null && lastEventId == _lastProcessedEventId) {
+        // Duplicate event, ignore
+      } else {
+        // New event or legacy/local event
+        if (lastEventId != null) {
+          _lastProcessedEventId = lastEventId;
+        }
+
+        switch (lastEvent) {
+          case 'cardsPlayed':
+            _eventController.add(SessionEventType.cardsPlayed);
+            break;
+          case 'passed':
+            _eventController.add(SessionEventType.passed);
+            break;
+          case 'bluffCalled':
+            _eventController.add(SessionEventType.bluffCalled);
+            break;
+          case 'pileDiscarded':
+            _eventController.add(SessionEventType.pileDiscarded);
+            break;
+          case 'cardsPickedUp':
+            _eventController.add(SessionEventType.cardsPickedUp);
+            break;
+          case 'shuffling':
+            _eventController.add(SessionEventType.shuffling);
+            break;
+        }
       }
     }
 
