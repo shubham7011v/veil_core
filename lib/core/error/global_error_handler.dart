@@ -42,15 +42,19 @@ class GlobalErrorHandler {
 
     // Report to Crashlytics if Firebase is initialized
     if (Firebase.apps.isNotEmpty) {
-      // Use recordError with reason for better crash reports
-      FirebaseCrashlytics.instance.recordError(
-        Exception(
-          message,
-        ), // Wrap in Exception so Crashlytics shows the message
-        stack,
-        reason: error.runtimeType.toString(),
-        fatal: true,
-      );
+      try {
+        // Use recordError with reason for better crash reports
+        FirebaseCrashlytics.instance.recordError(
+          Exception(
+            message,
+          ), // Wrap in Exception so Crashlytics shows the message
+          stack,
+          reason: error.runtimeType.toString(),
+          fatal: true,
+        );
+      } catch (_) {
+        // Failed to report to Crashlytics, ignore to prevent recursive crashes
+      }
     }
   }
 

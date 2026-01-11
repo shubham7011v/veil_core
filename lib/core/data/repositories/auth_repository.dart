@@ -2,12 +2,16 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:google_sign_in/google_sign_in.dart';
 
 class AuthRepository {
-  final FirebaseAuth _firebaseAuth;
-  final GoogleSignIn _googleSignIn;
+  FirebaseAuth? _firebaseAuthInstance;
+  GoogleSignIn? _googleSignInInstance;
 
   AuthRepository({FirebaseAuth? firebaseAuth, GoogleSignIn? googleSignIn})
-    : _firebaseAuth = firebaseAuth ?? FirebaseAuth.instance,
-      _googleSignIn = googleSignIn ?? GoogleSignIn();
+    : _firebaseAuthInstance = firebaseAuth,
+      _googleSignInInstance = googleSignIn;
+
+  FirebaseAuth get _firebaseAuth =>
+      _firebaseAuthInstance ??= FirebaseAuth.instance;
+  GoogleSignIn get _googleSignIn => _googleSignInInstance ??= GoogleSignIn();
 
   Stream<User?> get authStateChanges => _firebaseAuth.authStateChanges();
 
