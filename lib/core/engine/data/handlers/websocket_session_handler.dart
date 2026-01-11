@@ -580,14 +580,18 @@ class WebSocketSessionHandler
     }
 
     // Parse participants
+    final myId = sl.authRepository.currentUser?.uid;
     final participantsList = stateData['participants'] as List<dynamic>? ?? [];
     final participants = participantsList.map((p) {
       final pMap = p as Map<String, dynamic>;
+      final pId = pMap['id'] as String;
+      final isMe = pId == myId;
+
       return Participant(
-        id: pMap['id'] as String,
+        id: isMe ? 'me' : pId,
         name: pMap['name'] as String,
         unitCount: pMap['cardCount'] as int,
-        isMe: false, // Will be set based on player ID match
+        isMe: isMe,
         isActive: pMap['isActive'] as bool? ?? false,
       );
     }).toList();
@@ -609,13 +613,14 @@ class WebSocketSessionHandler
       );
     }).toList();
 
+    final activeId = stateData['activePlayerId'] as String?;
     final newState = SessionState(
       roomId: 'online',
       participants: participants,
       myHand: myHand,
       pileCount: stateData['pileCount'] as int? ?? 0,
       currentPhase: phase,
-      activeParticipantId: stateData['activePlayerId'] as String?,
+      activeParticipantId: activeId == myId ? 'me' : activeId,
       isSpectator: stateData['isSpectator'] as bool? ?? false,
     );
 

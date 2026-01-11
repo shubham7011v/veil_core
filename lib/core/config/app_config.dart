@@ -80,6 +80,7 @@ class AppConfig {
   // UI Settings
   late final int animationDurationMs;
   late final int cardDealDelayMs;
+  late final int matchmakingDelaySeconds;
 
   // Development
   late final bool enableLogging;
@@ -266,6 +267,11 @@ class AppConfig {
     cardDealDelayMs = const int.fromEnvironment(
       'CARD_DEAL_DELAY_MS',
       defaultValue: 100,
+    );
+    matchmakingDelaySeconds = _getIntConfig(
+      'matchmaking_delay_seconds',
+      'MATCHMAKING_DELAY_SECONDS',
+      5,
     );
 
     // Development

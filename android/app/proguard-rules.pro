@@ -12,9 +12,26 @@
 -dontwarn com.google.android.gms.**
 -dontwarn io.flutter.embedding.android.FlutterPlayStoreSplitApplication
 
-# Firebase
+# Firebase (Keep all Firebase classes)
 -keep class com.google.firebase.** { *; }
+-keep class com.google.android.gms.** { *; }
 -dontwarn com.google.firebase.**
+-dontwarn com.google.android.gms.**
+
+# Firebase App Check & Play Integrity (Critical for Play Store builds)
+-keep class com.google.firebase.appcheck.** { *; }
+-keep class com.google.android.play.core.integrity.** { *; }
+-keep class com.google.android.gms.tasks.** { *; }
+-dontwarn com.google.firebase.appcheck.**
+-dontwarn com.google.android.play.core.integrity.**
+
+# Firebase Remote Config
+-keep class com.google.firebase.remoteconfig.** { *; }
+-dontwarn com.google.firebase.remoteconfig.**
+
+# Firebase Auth
+-keep class com.google.firebase.auth.** { *; }
+-dontwarn com.google.firebase.auth.**
 
 # WebRTC
 -keep class org.webrtc.** { *; }

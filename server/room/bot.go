@@ -68,11 +68,23 @@ func (b *Bot) Run() {
 			}
 
 			// Check if it's my turn
-			if phase, ok := state["phase"].(string); ok && phase == string(game.PhaseThinking) {
-				if activeID, ok := state["activePlayerId"].(string); ok && activeID == b.Client.ID {
-					// It's my turn! Think and Act
-					go b.decideMove()
-				}
+			phase, ok := state["phase"].(string)
+			if !ok {
+				continue
+			}
+
+			activeID, _ := state["activePlayerId"].(string)
+			if activeID != b.Client.ID {
+				continue
+			}
+
+			switch phase {
+			case string(game.PhaseThinking):
+				// It's my turn to play!
+				go b.decideMove()
+			case string(game.PhaseChallenging):
+				// It's my turn to challenge!
+				go b.decideChallenge()
 			}
 		}
 	}
@@ -214,6 +226,73 @@ func (b *Bot) decideMove() {
 			Message: msg,
 		})
 	}
+}
+
+func (b *Bot) decideChallenge() {
+	// Artificial Delay (2s - 4s) for suspense
+	delay := time.Duration(2000+rand.Intn(2000)) * time.Millisecond
+	time.Sleep(delay)
+
+	room := b.Client.CurrentRoom
+	if room == nil {
+		return
+	}
+
+	g := room.game
+	lastMove := g.LastMove
+	if lastMove == nil {
+		return
+	}
+
+	// Heuristic Logic:
+	// 1. Base Challenge Probability (10%)
+	chance := 0.1
+
+	// 2. Card Count Bonus: More cards played = higher suspicion
+	// Each card beyond the first adds 15% suspicion
+	cardCount := len(lastMove.ActualCards)
+	if cardCount > 1 {
+		chance += float64(cardCount-1) * 0.15
+	}
+
+	// 3. Hand Knowledge Deduction:
+	// If I hold Aces, and you play Aces, and together we have > 4 Aces, you are a LIAR.
+	player := g.PlayerMap[b.Client.ID]
+	if player != nil {
+		myMatchingCount := 0
+		for _, c := range player.Hand {
+			if c.Rank == lastMove.DeclaredRank {
+				myMatchingCount++
+			}
+		}
+
+		totalSeen := myMatchingCount + cardCount
+		if totalSeen > 4 {
+			// STATISTICALLY IMPOSSIBLE
+			log.Printf("Bot %s detected a definite bluff! (Seen %d %s's)", b.Client.ID, totalSeen, lastMove.DeclaredRank)
+			chance = 1.0
+		} else if myMatchingCount > 0 {
+			// I have some, so the probability of you having THIS MANY is lower
+			chance += float64(myMatchingCount) * 0.1
+		}
+	}
+
+	// Final Decision
+	action := protocol.MsgTypePass
+	if rand.Float64() < chance {
+		action = protocol.MsgTypeChallenge
+		log.Printf("Bot %s is CHALLENGING %s's move of %d %s", b.Client.ID, lastMove.PlayerID, cardCount, lastMove.DeclaredRank)
+	} else {
+		log.Printf("Bot %s is passing on challenge", b.Client.ID)
+	}
+
+	room.HandleAction(GameAction{
+		Client: b.Client,
+		Message: protocol.BaseMessage{
+			Type: action,
+			Data: []byte("null"),
+		},
+	})
 }
 
 func generateRandomString(n int) string {

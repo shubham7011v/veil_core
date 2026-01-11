@@ -135,11 +135,18 @@ class _MatchmakingScreenState extends State<MatchmakingScreen>
   }
 
   void _onMatchFound() {
-    Future.delayed(const Duration(milliseconds: 1000), () {
-      if (mounted) {
-        Navigator.pushReplacementNamed(context, '/session');
-      }
-    });
+    Future.delayed(
+      Duration(seconds: AppConfig.instance.matchmakingDelaySeconds),
+      () {
+        if (mounted) {
+          Navigator.pushReplacementNamed(
+            context,
+            '/session',
+            arguments: {'useWebSocket': true},
+          );
+        }
+      },
+    );
   }
 
   @override

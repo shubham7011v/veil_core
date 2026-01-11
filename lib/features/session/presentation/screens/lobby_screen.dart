@@ -41,7 +41,13 @@ class _LobbyScreenState extends State<LobbyScreen> {
 
         // If game starts, navigate to session
         if (state.engineState.currentPhase != SessionPhase.lobby) {
-          Navigator.pushReplacementNamed(context, '/session');
+          final useWebSocket =
+              context.read<SessionBloc>().handler is WebSocketSessionHandler;
+          Navigator.pushReplacementNamed(
+            context,
+            '/session',
+            arguments: {'useWebSocket': useWebSocket},
+          );
         }
       },
       builder: (context, state) {
