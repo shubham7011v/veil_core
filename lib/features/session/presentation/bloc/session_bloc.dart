@@ -35,6 +35,8 @@ class SessionBloc extends Bloc<SessionEvent, SessionBlocState> {
     on<ChatStreamUpdated>(_onChatStreamUpdated);
     on<SendChatMessage>(_onSendChatMessage);
     on<SendEmojiMessage>(_onSendEmojiMessage);
+    on<SendTypingStatus>(_onSendTypingStatus);
+    on<TypingStatusChanged>(_onTypingStatusChanged);
 
     // Engine update handlers
     on<EngineStateUpdated>((event, emit) {
@@ -110,13 +112,25 @@ class SessionBloc extends Bloc<SessionEvent, SessionBlocState> {
 
     _eventSub = _handler.eventStream.listen((event) {
       if (!isClosed) {
-        add(
-          EngineEventReceived(
-            event,
-            _handler.activeEventActorId,
-            cardCount: _handler.lastCountClaimed,
-          ),
-        );
+        if (event == engine.SessionEventType.typingStatusChanged) {
+          final actorId = _handler.activeEventActorId;
+          if (actorId != null) {
+            add(
+              TypingStatusChanged(
+                actorId,
+                _handler.typingStatus[actorId] ?? false,
+              ),
+            );
+          }
+        } else {
+          add(
+            EngineEventReceived(
+              event,
+              _handler.activeEventActorId,
+              cardCount: _handler.lastCountClaimed,
+            ),
+          );
+        }
       }
     });
 
@@ -338,5 +352,21 @@ class SessionBloc extends Bloc<SessionEvent, SessionBlocState> {
     Emitter<SessionBlocState> emit,
   ) {
     _handler.sendEmojiMessage(event.emojiId);
+  }
+
+  void _onSendTypingStatus(
+    SendTypingStatus event,
+    Emitter<SessionBlocState> emit,
+  ) {
+    _handler.setTypingStatus(event.isTyping);
+  }
+
+  void _onTypingStatusChanged(
+    TypingStatusChanged event,
+    Emitter<SessionBlocState> emit,
+  ) {
+    final updatedTypingStatus = Map<String, bool>.from(state.typingStatus);
+    updatedTypingStatus[event.senderId] = event.isTyping;
+    emit(state.copyWith(typingStatus: updatedTypingStatus));
   }
 }

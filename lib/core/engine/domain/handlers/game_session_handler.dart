@@ -23,6 +23,7 @@ abstract class GameSessionHandler {
   // UI Helper Properties (Generic)
   bool get isRevealingBluff;
   Map<String, String> get pNames;
+  Map<String, bool> get typingStatus;
   SessionState get currentState;
 
   Stream<Map<String, dynamic>> get chatStream;
@@ -35,6 +36,7 @@ abstract class GameSessionHandler {
 
   void sendChatMessage(String message);
   void sendEmojiMessage(String emojiId);
+  void setTypingStatus(bool isTyping);
 
   /// Manual & Auto Sorting
   void sortHand();

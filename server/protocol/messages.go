@@ -58,8 +58,9 @@ const (
 	MsgTypeChallengeClaim   = "CHALLENGE_CLAIM"
 	MsgTypeChallengeClaimOk = "CHALLENGE_CLAIM_OK"
 	// Social
-	MsgTypeChat  = "CHAT"
-	MsgTypeEmoji = "EMOJI"
+	MsgTypeChat   = "CHAT"
+	MsgTypeEmoji  = "EMOJI"
+	MsgTypeTyping = "TYPING"
 )
 
 // BaseMessage structure for all WebSocket messages
@@ -90,6 +91,10 @@ type ChatMessage struct {
 
 type EmojiMessage struct {
 	EmojiID string `json:"emojiId"`
+}
+
+type TypingMessage struct {
+	IsTyping bool `json:"isTyping"`
 }
 
 type CreatePrivateRoomMessage struct {

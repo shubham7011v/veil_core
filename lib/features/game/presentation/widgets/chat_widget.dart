@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:intl/intl.dart';
@@ -20,12 +21,35 @@ class _ChatWidgetState extends State<ChatWidget> {
   final TextEditingController _controller = TextEditingController();
   final ScrollController _scrollController = ScrollController();
   final bool _isAutoScrolling = true;
+  Timer? _typingTimer;
+  bool _isTyping = false;
 
   @override
   void dispose() {
     _controller.dispose();
     _scrollController.dispose();
+    _typingTimer?.cancel();
     super.dispose();
+  }
+
+  void _onTextChanged(String value) {
+    if (!_isTyping && value.trim().isNotEmpty) {
+      _isTyping = true;
+      context.read<SessionBloc>().add(const SendTypingStatus(true));
+    }
+
+    _typingTimer?.cancel();
+    _typingTimer = Timer(const Duration(seconds: 2), () {
+      if (_isTyping) {
+        _isTyping = false;
+        context.read<SessionBloc>().add(const SendTypingStatus(false));
+      }
+    });
+
+    if (value.trim().isEmpty && _isTyping) {
+      _isTyping = false;
+      context.read<SessionBloc>().add(const SendTypingStatus(false));
+    }
   }
 
   void _sendMessage() {
@@ -34,6 +58,13 @@ class _ChatWidgetState extends State<ChatWidget> {
       context.read<SessionBloc>().add(SendChatMessage(text));
       _controller.clear();
       _scrollToBottom();
+
+      // Reset typing status
+      if (_isTyping) {
+        _isTyping = false;
+        _typingTimer?.cancel();
+        context.read<SessionBloc>().add(const SendTypingStatus(false));
+      }
     }
   }
 
@@ -113,16 +144,14 @@ class _ChatWidgetState extends State<ChatWidget> {
                       .where((m) => m['type'] == 'chat')
                       .toList();
 
-                  if (messages.isEmpty) {
-                    return Center(
-                      child: Text(
-                        'No messages yet',
-                        style: TextStyle(
-                          color: hintColor.withValues(alpha: 0.5),
-                        ),
-                      ),
-                    );
-                  }
+                  final typingUsers = state.typingStatus.entries
+                      .where(
+                        (e) =>
+                            e.value &&
+                            e.key != di.sl.authRepository.currentUser?.uid,
+                      )
+                      .map((e) => state.getPlayerName(e.key))
+                      .toList();
 
                   WidgetsBinding.instance.addPostFrameCallback((_) {
                     if (_isAutoScrolling) {
@@ -133,8 +162,23 @@ class _ChatWidgetState extends State<ChatWidget> {
                   return ListView.builder(
                     controller: _scrollController,
                     padding: const EdgeInsets.all(12),
-                    itemCount: messages.length,
+                    itemCount:
+                        messages.length + (typingUsers.isNotEmpty ? 1 : 0),
                     itemBuilder: (context, index) {
+                      if (index == messages.length) {
+                        return Padding(
+                          padding: const EdgeInsets.only(top: 4, bottom: 8),
+                          child: Text(
+                            '${typingUsers.join(", ")} ${typingUsers.length > 1 ? "are" : "is"} typing...',
+                            style: TextStyle(
+                              color: hintColor.withValues(alpha: 0.7),
+                              fontSize: 11,
+                              fontStyle: FontStyle.italic,
+                            ),
+                          ),
+                        );
+                      }
+
                       final msg = messages[index];
                       final myId = di.sl.authRepository.currentUser?.uid;
                       final bool isFromMe =
@@ -224,6 +268,7 @@ class _ChatWidgetState extends State<ChatWidget> {
                     child: TextField(
                       controller: _controller,
                       style: const TextStyle(color: textColor, fontSize: 14),
+                      onChanged: _onTextChanged,
                       onSubmitted: (_) => _sendMessage(),
                       decoration: InputDecoration(
                         hintText: 'Type a message...',

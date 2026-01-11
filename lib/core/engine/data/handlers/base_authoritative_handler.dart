@@ -80,6 +80,9 @@ abstract class BaseAuthoritativeHandler implements GameSessionHandler {
   @override
   bool get isRevealingBluff => _isRevealingBluff;
 
+  @override
+  Map<String, bool> get typingStatus => const {};
+
   // -- Protected Getters for Subclasses --
   @protected
   List<Unit> get pile => _pile;

@@ -130,3 +130,20 @@ class ChatStreamUpdated extends SessionEvent {
   @override
   List<Object?> get props => [message];
 }
+
+class SendTypingStatus extends SessionEvent {
+  final bool isTyping;
+  const SendTypingStatus(this.isTyping);
+
+  @override
+  List<Object?> get props => [isTyping];
+}
+
+class TypingStatusChanged extends SessionEvent {
+  final String senderId;
+  final bool isTyping;
+  const TypingStatusChanged(this.senderId, this.isTyping);
+
+  @override
+  List<Object?> get props => [senderId, isTyping];
+}

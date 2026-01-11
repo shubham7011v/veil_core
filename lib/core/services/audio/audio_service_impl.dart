@@ -242,6 +242,32 @@ class AudioServiceImpl implements AudioService {
   }
 
   @override
+  Future<void> playEmojiSound(String emojiId) async {
+    // Map categories to sounds
+    // Positive/Laugh: chip_place
+    // Negative/Angry: error
+    // Alert/Surprise: turn_alert
+    // Pass/Wait: button_tap
+
+    String sound = 'button_tap';
+    if (emojiId.contains('laugh') ||
+        emojiId.contains('smile') ||
+        emojiId.contains('joy')) {
+      sound = 'chip_place';
+    } else if (emojiId.contains('angry') ||
+        emojiId.contains('sad') ||
+        emojiId.contains('cry')) {
+      sound = 'error';
+    } else if (emojiId.contains('wow') ||
+        emojiId.contains('surprise') ||
+        emojiId.contains('shock')) {
+      sound = 'turn_alert';
+    }
+
+    await playSfx('$sound.wav');
+  }
+
+  @override
   Future<void> updateVolumes(AudioSettings settings) async {
     _currentSettings = settings;
 

@@ -53,6 +53,9 @@ abstract class AudioService {
   /// [path] relative to assets/audio/sfx/
   Future<void> playSfx(String filename);
 
+  /// Play a sound dedicated to an emoji
+  Future<void> playEmojiSound(String emojiId);
+
   /// Update all volumes based on settings (Master * Channel)
   Future<void> updateVolumes(AudioSettings settings);
 

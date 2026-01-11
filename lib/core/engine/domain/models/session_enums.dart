@@ -14,4 +14,5 @@ enum SessionEventType {
   shuffling,
   connectionFailed,
   emojiReceived,
+  typingStatusChanged,
 }

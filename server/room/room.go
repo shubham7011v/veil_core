@@ -445,6 +445,19 @@ func (r *Room) processAction(action GameAction) {
 			bytes, _ := json.Marshal(response)
 			r.broadcast <- bytes
 		}
+
+	case protocol.MsgTypeTyping:
+		var payload protocol.TypingMessage
+		if json.Unmarshal(msg.Data, &payload) == nil {
+			// Broadcast typing status to all
+			out := map[string]interface{}{
+				"senderId": client.ID,
+				"isTyping": payload.IsTyping,
+			}
+			response := protocol.NewMessage(protocol.MsgTypeTyping, out)
+			bytes, _ := json.Marshal(response)
+			r.broadcast <- bytes
+		}
 	}
 
 	if err != nil {
@@ -505,6 +518,7 @@ func isValidGameMessageType(msgType string) bool {
 		protocol.MsgTypeStartPrivateGame: true,
 		protocol.MsgTypeChat:             true,
 		protocol.MsgTypeEmoji:            true,
+		protocol.MsgTypeTyping:           true,
 	}
 	return validTypes[msgType]
 }

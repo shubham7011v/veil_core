@@ -25,6 +25,7 @@ class SessionBlocState extends Equatable {
   // -- Game History --
   final List<String> gameLog;
   final List<Map<String, dynamic>> chatMessages;
+  final Map<String, bool> typingStatus;
 
   // -- Error State --
   final Failure? failure;
@@ -43,6 +44,7 @@ class SessionBlocState extends Equatable {
     required this.pNames,
     required this.gameLog,
     required this.chatMessages,
+    required this.typingStatus,
     this.failure,
   });
 
@@ -56,6 +58,7 @@ class SessionBlocState extends Equatable {
     pNames: const {},
     gameLog: const [],
     chatMessages: const [],
+    typingStatus: const {},
   );
 
   SessionBlocState copyWith({
@@ -72,6 +75,7 @@ class SessionBlocState extends Equatable {
     Map<String, String>? pNames,
     List<String>? gameLog,
     List<Map<String, dynamic>>? chatMessages,
+    Map<String, bool>? typingStatus,
     Failure? failure,
     bool clearStagedRank = false,
     bool clearLastMove = false,
@@ -91,6 +95,7 @@ class SessionBlocState extends Equatable {
       pNames: pNames ?? this.pNames,
       gameLog: gameLog ?? this.gameLog,
       chatMessages: chatMessages ?? this.chatMessages,
+      typingStatus: typingStatus ?? this.typingStatus,
       failure: clearFailure ? null : (failure ?? this.failure),
     );
   }
@@ -134,6 +139,7 @@ class SessionBlocState extends Equatable {
     pNames,
     gameLog,
     chatMessages,
+    typingStatus,
     failure,
   ];
 }

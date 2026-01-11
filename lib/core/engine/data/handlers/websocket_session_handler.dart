@@ -147,6 +147,10 @@ class WebSocketSessionHandler
   @override
   String? get activeEventActorId => _activeEventActorId;
 
+  final Map<String, bool> _typingStatus = {};
+  @override
+  Map<String, bool> get typingStatus => Map.unmodifiable(_typingStatus);
+
   @override
   UnitRank? get lastRankClaimed => _lastRankClaimed;
 
@@ -528,11 +532,23 @@ class WebSocketSessionHandler
             }
 
             // Play emoji sound
-            sl.audioService.playSfx(
-              SoundAssets.turnAlert,
-            ); // Reusing alert for now
+            sl.audioService.playEmojiSound(data['emojiId'] as String);
           } catch (e) {
             debugPrint('Failed to parse emoji message: $e');
+          }
+          break;
+
+        case 'TYPING':
+          try {
+            final data = msg['data'] as Map<String, dynamic>;
+            final senderId = data['senderId'] as String;
+            final isTyping = data['isTyping'] as bool;
+
+            _typingStatus[senderId] = isTyping;
+            _activeEventActorId = senderId;
+            _eventController.add(SessionEventType.typingStatusChanged);
+          } catch (e) {
+            debugPrint('Failed to parse typing message: $e');
           }
           break;
       }
@@ -883,6 +899,14 @@ class WebSocketSessionHandler
     _send({
       'type': 'EMOJI',
       'data': {'emojiId': emojiId},
+    });
+  }
+
+  @override
+  void setTypingStatus(bool isTyping) {
+    _send({
+      'type': 'TYPING',
+      'data': {'isTyping': isTyping},
     });
   }
 
