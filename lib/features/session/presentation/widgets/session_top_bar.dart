@@ -5,6 +5,7 @@ import '../bloc/session_event.dart';
 import '../bloc/session_state.dart';
 import 'session_history_list.dart';
 import 'doc_viewer.dart';
+import '../../../../core/config/feature_flags.dart';
 
 class SessionTopBar extends StatelessWidget {
   final SessionBlocState state;
@@ -49,7 +50,12 @@ class SessionTopBar extends StatelessWidget {
               ),
             ],
           ),
-          _CircleButton(icon: Icons.chat_bubble_outline, onTap: onChatTap),
+          if (FeatureFlags.enableGameChat)
+            _CircleButton(icon: Icons.chat_bubble_outline, onTap: onChatTap)
+          else
+            const SizedBox(
+              width: 40,
+            ), // Placeholder to keep spacing or just empty
         ],
       ),
     );

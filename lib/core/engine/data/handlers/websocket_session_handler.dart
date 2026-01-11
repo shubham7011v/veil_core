@@ -614,6 +614,25 @@ class WebSocketSessionHandler
     }).toList();
 
     final activeId = stateData['activePlayerId'] as String?;
+
+    // Parse lastMove if present
+    final lastMoveData = stateData['lastMove'] as Map<String, dynamic>?;
+    if (lastMoveData != null) {
+      final movePlayerId = lastMoveData['playerId'] as String;
+      final declaredRankStr = lastMoveData['declaredRank'] as String;
+
+      _lastMove = GameMove(
+        playerId: movePlayerId == myId ? 'me' : movePlayerId,
+        declaredRank: UnitRank.values.firstWhere(
+          (r) => r.name == declaredRankStr,
+          orElse: () => UnitRank.two,
+        ),
+        actualUnits: [], // Server doesn't send actual cards for security
+      );
+    } else {
+      _lastMove = null;
+    }
+
     final newState = SessionState(
       roomId: 'online',
       participants: participants,

@@ -107,6 +107,7 @@ class AppConfig {
   late bool enableInnerCircle;
   late bool enableGlobalRankings;
   late bool enableEliteDecks;
+  late bool enableGameChat;
 
   /// Update configuration from server-side /api/config response
   void updateFromServer(Map<String, dynamic> serverConfig) {
@@ -128,6 +129,10 @@ class AppConfig {
     if (serverConfig['enableAdminDashboard'] is bool &&
         !isOverridden('ENABLE_ADMIN_DASHBOARD')) {
       enableAdminDashboard = serverConfig['enableAdminDashboard'];
+    }
+    if (serverConfig['enableGameChat'] is bool &&
+        !isOverridden('ENABLE_GAME_CHAT')) {
+      enableGameChat = serverConfig['enableGameChat'];
     }
   }
 
@@ -375,6 +380,11 @@ class AppConfig {
     enableEliteDecks = _getBoolConfig(
       'enable_elite_decks',
       'ENABLE_ELITE_DECKS',
+      false,
+    );
+    enableGameChat = _getBoolConfig(
+      'enable_game_chat',
+      'ENABLE_GAME_CHAT',
       false,
     );
 

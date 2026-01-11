@@ -401,23 +401,6 @@ class _SessionScreenState extends State<SessionScreen>
                                     pileKey: _pileKey,
                                   ),
                                 ),
-                                // Emoji Button near "pile container middle right corner"
-                                if (!showSpectatorView)
-                                  Positioned(
-                                    right: -60,
-                                    child: FloatingActionButton.small(
-                                      heroTag: 'emoji_btn',
-                                      backgroundColor: AppColors.surfaceLight,
-                                      onPressed: () => setState(() {
-                                        _showEmoji = !_showEmoji;
-                                        if (_showEmoji) _showChat = false;
-                                      }),
-                                      child: const Icon(
-                                        Icons.emoji_emotions_outlined,
-                                        color: Colors.white,
-                                      ),
-                                    ),
-                                  ),
                               ],
                             ),
                           ),
@@ -549,7 +532,8 @@ class _SessionScreenState extends State<SessionScreen>
                       child: Stack(
                         children: [
                           FlyingCardsLayer(activeAnimations: _flyingCards),
-                          FloatingEmojiLayer(activeEmojis: _activeEmojis),
+                          if (FeatureFlags.enableGameChat)
+                            FloatingEmojiLayer(activeEmojis: _activeEmojis),
                         ],
                       ),
                     ),
@@ -573,7 +557,7 @@ class _SessionScreenState extends State<SessionScreen>
               content,
 
               // Chat Overlay
-              if (_showChat)
+              if (_showChat && FeatureFlags.enableGameChat)
                 Positioned(
                   bottom: 100,
                   left: 16,
@@ -583,12 +567,33 @@ class _SessionScreenState extends State<SessionScreen>
                 ),
 
               // Emoji Overlay
-              if (_showEmoji)
+              if (_showEmoji && FeatureFlags.enableGameChat)
                 Positioned(
-                  bottom: 100,
+                  top:
+                      MediaQuery.of(context).size.height / 2 -
+                      140, // Centered vertically
                   right: 16,
                   child: EmojiPicker(
                     onClose: () => setState(() => _showEmoji = false),
+                  ),
+                ),
+
+              // Emoji Toggle Button (Middle Right)
+              if (!showSpectatorView && FeatureFlags.enableGameChat)
+                Positioned(
+                  right: 16,
+                  top: MediaQuery.of(context).size.height / 2 - 24,
+                  child: FloatingActionButton.small(
+                    heroTag: 'emoji_btn_fixed',
+                    backgroundColor: AppColors.surfaceLight,
+                    onPressed: () => setState(() {
+                      _showEmoji = !_showEmoji;
+                      if (_showEmoji) _showChat = false;
+                    }),
+                    child: const Icon(
+                      Icons.emoji_emotions_outlined,
+                      color: Colors.white,
+                    ),
                   ),
                 ),
             ],

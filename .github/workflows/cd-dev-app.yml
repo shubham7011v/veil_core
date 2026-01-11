@@ -63,6 +63,7 @@ jobs:
           SERVER_URL: ${{ secrets.SERVER_URL }}
           API_URL: ${{ secrets.API_URL }}
           MASTER_ADMIN_ID: ${{ secrets.ADMIN_UIDS }}
+          ENABLE_GAME_CHAT: ${{ secrets.ENABLE_GAME_CHAT }}
         run: |
           DART_DEFINES="--dart-define=ENV=dev"
           if [ ! -z "$SERVER_URL" ]; then
@@ -73,6 +74,9 @@ jobs:
           fi
           if [ ! -z "$MASTER_ADMIN_ID" ]; then
             DART_DEFINES="$DART_DEFINES --dart-define=MASTER_ADMIN_ID=$MASTER_ADMIN_ID"
+          fi
+          if [ ! -z "$ENABLE_GAME_CHAT" ]; then
+            DART_DEFINES="$DART_DEFINES --dart-define=ENABLE_GAME_CHAT=$ENABLE_GAME_CHAT"
           fi
 
           mkdir -p build/app/outputs/symbols

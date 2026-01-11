@@ -561,6 +561,13 @@ func (r *Room) broadcastState() {
 				"turnTimerS":     r.game.TurnTimerS,
 				"isSpectator":    true,
 			}
+			// Add lastMove if exists
+			if r.game.LastMove != nil {
+				view["lastMove"] = map[string]interface{}{
+					"playerId":     r.game.LastMove.PlayerID,
+					"declaredRank": r.game.LastMove.DeclaredRank,
+				}
+			}
 			msg := protocol.NewMessage(protocol.MsgTypeGameState, view)
 			bytes, _ := json.Marshal(msg)
 			select {
@@ -583,6 +590,13 @@ func (r *Room) broadcastState() {
 			"activePlayerId": r.game.ActivePlayerID(),
 			"declaredRank":   r.game.DeclaredRank,
 			"turnTimerS":     r.game.TurnTimerS,
+		}
+		// Add lastMove if exists
+		if r.game.LastMove != nil {
+			view["lastMove"] = map[string]interface{}{
+				"playerId":     r.game.LastMove.PlayerID,
+				"declaredRank": r.game.LastMove.DeclaredRank,
+			}
 		}
 
 		msg := protocol.NewMessage(protocol.MsgTypeGameState, view)

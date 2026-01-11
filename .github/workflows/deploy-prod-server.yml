@@ -1,82 +1,84 @@
 name: Deploy Prod Server
 
 on:
-    push:
-        tags:
-            - "server_prod_v*"
-            - "go_prod_v*"
+  push:
+    tags:
+      - "server_prod_v*"
+      - "go_prod_v*"
 
 jobs:
-    deploy:
-        runs-on: ubuntu-latest
-        environment: prod
-        steps:
-            - name: Deploy to Server via SSH
-              uses: appleboy/ssh-action@v1.0.3
-              env:
-                  FIREBASE_CREDS: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
-                  ADMIN_UIDS: ${{ secrets.ADMIN_UIDS }}
-                  ENABLE_VOICE_CHAT: ${{ vars.ENABLE_VOICE_CHAT }}
-                  ENABLE_DAILY_CHALLENGES: ${{ vars.ENABLE_DAILY_CHALLENGES }}
-                  ENABLE_TOURNAMENTS: ${{ vars.ENABLE_TOURNAMENTS }}
-                  ENABLE_ADMIN_DASHBOARD: ${{ vars.ENABLE_ADMIN_DASHBOARD }}
-                  MAX_PLAYERS: ${{ vars.MAX_PLAYERS }}
-              with:
-                  host: ${{ secrets.SERVER_IP }}
-                  username: root
-                  key: ${{ secrets.SSH_KEY }}
-                  envs: FIREBASE_CREDS,ADMIN_UIDS,ENABLE_VOICE_CHAT,ENABLE_DAILY_CHALLENGES,ENABLE_TOURNAMENTS,ENABLE_ADMIN_DASHBOARD,MAX_PLAYERS
-                  script: |
-                      # Extract version from tag
-                      VERSION="${{ github.ref_name }}"
-                      echo "Deploying version: $VERSION"
+  deploy:
+    runs-on: ubuntu-latest
+    environment: prod
+    steps:
+      - name: Deploy to Server via SSH
+        uses: appleboy/ssh-action@v1.0.3
+        env:
+          FIREBASE_CREDS: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
+          ADMIN_UIDS: ${{ secrets.ADMIN_UIDS }}
+          ENABLE_VOICE_CHAT: ${{ vars.ENABLE_VOICE_CHAT }}
+          ENABLE_GAME_CHAT: ${{ vars.ENABLE_GAME_CHAT }}
+          ENABLE_DAILY_CHALLENGES: ${{ vars.ENABLE_DAILY_CHALLENGES }}
+          ENABLE_TOURNAMENTS: ${{ vars.ENABLE_TOURNAMENTS }}
+          ENABLE_ADMIN_DASHBOARD: ${{ vars.ENABLE_ADMIN_DASHBOARD }}
+          MAX_PLAYERS: ${{ vars.MAX_PLAYERS }}
+        with:
+          host: ${{ secrets.SERVER_IP }}
+          username: root
+          key: ${{ secrets.SSH_KEY }}
+          envs: FIREBASE_CREDS,ADMIN_UIDS,ENABLE_VOICE_CHAT,ENABLE_GAME_CHAT,ENABLE_DAILY_CHALLENGES,ENABLE_TOURNAMENTS,ENABLE_ADMIN_DASHBOARD,MAX_PLAYERS
+          script: |
+            # Extract version from tag
+            VERSION="${{ github.ref_name }}"
+            echo "Deploying version: $VERSION"
 
-                      # Update code
-                      cd ~/veil_core
-                      git fetch --all --tags
-                      git checkout ${{ github.ref_name }}
+            # Update code
+            cd ~/veil_core
+            git fetch --all --tags
+            git checkout ${{ github.ref_name }}
 
-                      # Write credentials
-                      echo "$FIREBASE_CREDS" > /root/firebase-service-account-prod.json
+            # Write credentials
+            echo "$FIREBASE_CREDS" > /root/firebase-service-account-prod.json
 
-                      # Create .env file for docker-compose
-                      cat <<EOF > /root/.env
-                      ADMIN_UIDS=$ADMIN_UIDS
-                      ENABLE_VOICE_CHAT=$ENABLE_VOICE_CHAT
-                      ENABLE_DAILY_CHALLENGES=$ENABLE_DAILY_CHALLENGES
-                      ENABLE_TOURNAMENTS=$ENABLE_TOURNAMENTS
-                      ENABLE_ADMIN_DASHBOARD=$ENABLE_ADMIN_DASHBOARD
-                      MAX_PLAYERS=$MAX_PLAYERS
-                      EOF
+            # Create .env file for docker-compose
+            cat <<EOF > /root/.env
+            ADMIN_UIDS=$ADMIN_UIDS
+            ENABLE_VOICE_CHAT=$ENABLE_VOICE_CHAT
+            ENABLE_GAME_CHAT=$ENABLE_GAME_CHAT
+            ENABLE_DAILY_CHALLENGES=$ENABLE_DAILY_CHALLENGES
+            ENABLE_TOURNAMENTS=$ENABLE_TOURNAMENTS
+            ENABLE_ADMIN_DASHBOARD=$ENABLE_ADMIN_DASHBOARD
+            MAX_PLAYERS=$MAX_PLAYERS
+            EOF
 
-                      # Build image with version
-                      cd server
-                      docker build --network=host --build-arg VERSION=$VERSION -t veil-server:prod .
+            # Build image with version
+            cd server
+            docker build --network=host --build-arg VERSION=$VERSION -t veil-server:prod .
 
-                      # Ensure docker-compose.yml is up to date
-                      cp ~/veil_core/docker-compose-production.yml /root/docker-compose.yml
+            # Ensure docker-compose.yml is up to date
+            cp ~/veil_core/docker-compose-production.yml /root/docker-compose.yml
 
-                      # Restart container using docker compose
-                      cd /root
-                      docker compose up -d --force-recreate veil-game-prod
+            # Restart container using docker compose
+            cd /root
+            docker compose up -d --force-recreate veil-game-prod
 
-                      # Health check
-                      sleep 5
-                      if [ "$(docker inspect -f '{{.State.Running}}' veil-game-prod)" != "true" ]; then
-                        echo "Error: Container failed to start!"
-                        docker logs veil-game-prod
-                        exit 1
-                      fi
+            # Health check
+            sleep 5
+            if [ "$(docker inspect -f '{{.State.Running}}' veil-game-prod)" != "true" ]; then
+              echo "Error: Container failed to start!"
+              docker logs veil-game-prod
+              exit 1
+            fi
 
-                      # Verify version
-                      echo "Verifying deployed version..."
-                      DEPLOYED_VERSION=$(curl -s http://localhost:8081/api/version | grep -o '"version":"[^"]*"' | cut -d'"' -f4)
-                      echo "Expected: $VERSION"
-                      echo "Deployed: $DEPLOYED_VERSION"
+            # Verify version
+            echo "Verifying deployed version..."
+            DEPLOYED_VERSION=$(curl -s http://localhost:8081/api/version | grep -o '"version":"[^"]*"' | cut -d'"' -f4)
+            echo "Expected: $VERSION"
+            echo "Deployed: $DEPLOYED_VERSION"
 
-                      if [ "$DEPLOYED_VERSION" != "$VERSION" ]; then
-                        echo "❌ Version mismatch! Expected $VERSION but got $DEPLOYED_VERSION"
-                        exit 1
-                      fi
+            if [ "$DEPLOYED_VERSION" != "$VERSION" ]; then
+              echo "❌ Version mismatch! Expected $VERSION but got $DEPLOYED_VERSION"
+              exit 1
+            fi
 
-                      echo "✅ Prod deployment successful! Version $VERSION verified."
+            echo "✅ Prod deployment successful! Version $VERSION verified."

@@ -89,7 +89,8 @@ class SessionBloc extends Bloc<SessionEvent, SessionBlocState> {
           gameLog: _handler.gameLog,
           lastMove: shouldSync
               ? _handler.lastMove
-              : null, // keep existing if null
+              : state
+                    .lastMove, // Preserve existing lastMove instead of clearing
           // IMPORTANT: Never clearLastMove here. Let EngineStateUpdated do it.
           clearLastMove: false,
         ),

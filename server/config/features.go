@@ -11,6 +11,7 @@ type FeatureFlags struct {
 	EnableAdminDashboard  bool `json:"enableAdminDashboard"`
 	EnableVoiceChat       bool `json:"enableVoiceChat"`
 	EnableBotPlayers      bool `json:"enableBotPlayers"`
+	EnableGameChat        bool `json:"enableGameChat"`
 }
 
 // GetFeatureFlags returns the current feature state, potentially from env vars
@@ -21,6 +22,7 @@ func GetFeatureFlags() FeatureFlags {
 		EnableAdminDashboard:  getEnvBool("ENABLE_ADMIN_DASHBOARD", true),
 		EnableVoiceChat:       getEnvBool("ENABLE_VOICE_CHAT", false),
 		EnableBotPlayers:      getEnvBool("ENABLE_BOT_PLAYERS", true),
+		EnableGameChat:        getEnvBool("ENABLE_GAME_CHAT", false),
 	}
 }
 
