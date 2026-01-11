@@ -29,16 +29,21 @@ import 'package:firebase_app_check/firebase_app_check.dart';
 import 'config/firebase_options_dev.dart' as dev;
 import 'config/firebase_options_prod.dart' as prod;
 
+// Boot progress tracking for debugging production crashes
+String _bootStep = 'Startup';
+
 Future<void> mainCommon({required String env, required String appName}) async {
   GlobalErrorHandler.run(() async {
     try {
-      debugPrint('🚀 [STARTUP] Initializing $env environment...');
+      _bootStep = 'Initializing $env environment';
+      debugPrint('🚀 [STARTUP] $_bootStep...');
 
       // Bindings are initialized inside GlobalErrorHandler.run
       FlutterNativeSplash.preserve(widgetsBinding: WidgetsBinding.instance);
 
       // Initialize Core Configuration Singleton
-      debugPrint('🚀 [STARTUP] 1. Initializing AppConfig...');
+      _bootStep = '1. Initializing AppConfig';
+      debugPrint('🚀 [STARTUP] $_bootStep...');
       try {
         await AppConfig.initialize(env: env, appName: appName);
         debugPrint('🚀 [STARTUP] 1. AppConfig initialized');
@@ -52,7 +57,8 @@ Future<void> mainCommon({required String env, required String appName}) async {
           ? prod.DefaultFirebaseOptions.currentPlatform
           : dev.DefaultFirebaseOptions.currentPlatform;
 
-      debugPrint('🚀 [STARTUP] 2. Initializing Firebase...');
+      _bootStep = '2. Initializing Firebase';
+      debugPrint('🚀 [STARTUP] $_bootStep...');
       try {
         // Check if Firebase is already initialized to prevent duplicate-app error
         if (Firebase.apps.isEmpty) {
@@ -75,7 +81,8 @@ Future<void> mainCommon({required String env, required String appName}) async {
       }
 
       // Initialize Remote Config Service (Fetch values from Firebase)
-      debugPrint('🚀 [STARTUP] 3. Initializing Remote Config...');
+      _bootStep = '3. Initializing Remote Config';
+      debugPrint('🚀 [STARTUP] $_bootStep...');
       try {
         await RemoteConfigService.instance.initialize().timeout(
           const Duration(seconds: 10),
@@ -89,11 +96,13 @@ Future<void> mainCommon({required String env, required String appName}) async {
       }
 
       // Fully load config
+      _bootStep = '4. Loading Config';
       config.load();
       debugPrint('🚀 [STARTUP] 4. Config loaded');
 
       // Connectivity Doctor & Server Config Sync
-      debugPrint('🚀 [STARTUP] 5. Syncing Server Config...');
+      _bootStep = '5. Syncing Server Config';
+      debugPrint('🚀 [STARTUP] $_bootStep...');
       try {
         final client = HttpClient();
         client.connectionTimeout = const Duration(seconds: 5);
@@ -118,7 +127,8 @@ Future<void> mainCommon({required String env, required String appName}) async {
         );
       }
 
-      debugPrint('🚀 [STARTUP] 6. Activating App Check...');
+      _bootStep = '6. Activating App Check';
+      debugPrint('🚀 [STARTUP] $_bootStep...');
       try {
         // Only run App Check if Firebase is initialized
         if (Firebase.apps.isNotEmpty) {
@@ -139,12 +149,14 @@ Future<void> mainCommon({required String env, required String appName}) async {
       }
 
       // Initialize Service Locator
-      debugPrint('🚀 [STARTUP] 7. Setting up Service Locator...');
+      _bootStep = '7. Setting up Service Locator';
+      debugPrint('🚀 [STARTUP] $_bootStep...');
       await di.sl.setup();
       debugPrint('🚀 [STARTUP] 7. Service Locator ready');
 
       // Initialize Notifications
-      debugPrint('🚀 [STARTUP] 8. Initializing Notifications...');
+      _bootStep = '8. Initializing Notifications';
+      debugPrint('🚀 [STARTUP] $_bootStep...');
       try {
         await di.sl.notificationService.initialize().timeout(
           const Duration(seconds: 5),
@@ -156,18 +168,21 @@ Future<void> mainCommon({required String env, required String appName}) async {
         );
       }
 
+      _bootStep = '9. Running App';
       debugPrint('🚀 [STARTUP] runApp() called');
       runApp(const BluffApp());
     } catch (e, stack) {
       debugPrint('🔥 CRITICAL STARTUP ERROR: $e');
       debugPrintStack(stackTrace: stack);
 
-      // Report to Crashlytics if available
+      // Report to Crashlytics if available and initialized
       try {
         if (Firebase.apps.isNotEmpty) {
           FirebaseCrashlytics.instance.recordError(e, stack, fatal: true);
         }
-      } catch (_) {}
+      } catch (_) {
+        // Ignore crash reporting failure if Firebase isn't ready
+      }
 
       FlutterNativeSplash.remove(); // Force remove splash to show error
       runApp(
@@ -195,6 +210,25 @@ Future<void> mainCommon({required String env, required String appName}) async {
                       ),
                     ),
                     const SizedBox(height: 10),
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 12,
+                        vertical: 6,
+                      ),
+                      decoration: BoxDecoration(
+                        color: Colors.black26,
+                        borderRadius: BorderRadius.circular(4),
+                      ),
+                      child: Text(
+                        'Last Step: $_bootStep',
+                        style: const TextStyle(
+                          color: Colors.yellowAccent,
+                          fontSize: 14,
+                          fontFamily: 'monospace',
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 20),
                     Text(
                       _getErrorMessage(e),
                       style: const TextStyle(
