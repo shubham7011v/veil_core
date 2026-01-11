@@ -41,6 +41,7 @@ abstract class GameSessionHandler {
   /// Manual & Auto Sorting
   void sortHand();
   void reorderHand(int oldIndex, int newIndex);
+  void resetGameSession();
 
   void dispose();
 }

@@ -939,6 +939,27 @@ class WebSocketSessionHandler
   }
 
   @override
+  void resetGameSession() {
+    _currentState = SessionState.initial();
+    _activeEventActorId = null;
+    _lastRankClaimed = null;
+    _lastCountClaimed = 0;
+    _gameLog.clear();
+    _lastBluffWinnerId = null;
+    _lastBluffLoserId = null;
+    _isBluffSuccessful = null;
+    _lastMove = null;
+    _isRevealingBluff = false;
+    _pNames.clear();
+    _lastProcessedEventId = null;
+
+    // Add initial state to stream to clear UI
+    if (!_isDisposed && !_stateController.isClosed) {
+      _stateController.add(_currentState);
+    }
+  }
+
+  @override
   Future<void> dispose() async {
     if (_isDisposed) return;
     _isDisposed = true;

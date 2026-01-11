@@ -297,6 +297,30 @@ abstract class BaseAuthoritativeHandler implements GameSessionHandler {
   }
 
   @override
+  void resetGameSession() {
+    stopTurnTimer();
+    _currentState = SessionState.initial();
+    _activeEventActorId = null;
+    _lastRankClaimed = null;
+    _lastCountClaimed = 0;
+    _gameLog.clear();
+    _lastBluffWinnerId = null;
+    _lastBluffLoserId = null;
+    _isBluffSuccessful = null;
+    _lastMove = null;
+    _isRevealingBluff = false;
+    _pile.clear();
+    _hands.clear();
+    _currentRank = null;
+    _lastPlayedById = null;
+    _potentialWinnerId = null;
+    _passCount = 0;
+
+    // Emit initial state
+    emitState();
+  }
+
+  @override
   void dispose() {
     stopTurnTimer();
     _disposed = true;

@@ -77,6 +77,9 @@ class _MatchmakingScreenState extends State<MatchmakingScreen>
         debugPrint('Already connected, reusing connection');
       }
 
+      // RESET GAME STATE: Clear any data from previous sessions
+      handler.resetGameSession();
+
       // Update SessionBloc with the handler
       if (mounted) {
         context.read<SessionBloc>().add(SessionHandlerSwapped(handler));
@@ -389,7 +392,7 @@ class _MatchmakingScreenState extends State<MatchmakingScreen>
           ),
           const SizedBox(height: 12),
           Text(
-            participant.name,
+            participant.isMe ? 'Me' : participant.name,
             style: GoogleFonts.inter(
               color: Colors.white,
               fontSize: 14,
@@ -399,15 +402,14 @@ class _MatchmakingScreenState extends State<MatchmakingScreen>
             overflow: TextOverflow.ellipsis,
           ),
           const SizedBox(height: 4),
-          Text(
-            participant.isMe ? '(You)' : 'Ready',
-            style: GoogleFonts.inter(
-              color: participant.isMe
-                  ? const Color(0xFFE5A043)
-                  : const Color(0xFF4CAF50),
-              fontSize: 12,
+          if (!participant.isMe)
+            Text(
+              'Ready',
+              style: GoogleFonts.inter(
+                color: const Color(0xFF4CAF50),
+                fontSize: 12,
+              ),
             ),
-          ),
         ],
       ),
     );
