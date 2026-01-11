@@ -2,6 +2,7 @@ import 'package:flutter/foundation.dart';
 import 'dart:io' show Platform;
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'remote_config_service.dart';
+import '../../main_common.dart' show bootStep;
 
 /// Environment-based configuration management
 ///
@@ -181,6 +182,7 @@ class AppConfig {
 
   void _load() {
     // Server Configuration
+    bootStep = '4a. Loading Server URLs';
     if (isProduction) {
       serverUrl =
           _customServerUrl ??
@@ -230,6 +232,7 @@ class AppConfig {
     }
 
     // Reconnection Settings
+    bootStep = '4b. Loading Reconnection Settings';
     maxReconnectAttempts = _getIntConfig(
       'max_reconnect_attempts',
       'MAX_RECONNECT_ATTEMPTS',
@@ -242,6 +245,7 @@ class AppConfig {
     );
 
     // Game Settings
+    bootStep = '4c. Loading Game Settings';
     defaultThinkingTimeS = _getIntConfig(
       'default_thinking_time_s',
       'DEFAULT_THINKING_TIME_S',
@@ -254,6 +258,7 @@ class AppConfig {
     maxPlayers = _getIntConfig('max_players', 'MAX_PLAYERS', 8);
 
     // Voice Settings
+    bootStep = '4d. Loading Voice Settings';
     voiceTimeoutSeconds = _getIntConfig(
       'voice_timeout_seconds',
       'VOICE_TIMEOUT_SECONDS',
@@ -265,6 +270,7 @@ class AppConfig {
     );
 
     // Rate Limiting
+    bootStep = '4e. Loading Rate Limiting';
     maxActionsPerSecond = _getIntConfig(
       'max_actions_per_second',
       'MAX_ACTIONS_PER_SECOND',
@@ -272,6 +278,7 @@ class AppConfig {
     );
 
     // UI Settings
+    bootStep = '4f. Loading UI Settings';
     animationDurationMs = const int.fromEnvironment(
       'ANIMATION_DURATION_MS',
       defaultValue: 300,
@@ -287,6 +294,7 @@ class AppConfig {
     );
 
     // Development
+    bootStep = '4g. Loading Development Settings';
     enableLogging = const bool.fromEnvironment(
       'ENABLE_LOGGING',
       defaultValue: kDebugMode,
@@ -297,9 +305,11 @@ class AppConfig {
     );
 
     // Admin Configuration
+    bootStep = '4h. Loading Admin UIDs';
     adminUids = _getStringListConfig('admin_uids', 'ADMIN_UIDS', []);
 
     // Legal & Support URLs
+    bootStep = '4i. Loading Legal URLs';
     privacyPolicyUrl = _getStringConfig(
       'privacy_policy_url',
       'PRIVACY_POLICY_URL',
@@ -327,6 +337,7 @@ class AppConfig {
     );
 
     // Feature Flags
+    bootStep = '4j. Loading Feature Flags';
     enableVoiceChat = _getBoolConfig(
       'enable_voice_chat',
       'ENABLE_VOICE_CHAT',
@@ -388,6 +399,7 @@ class AppConfig {
       false,
     );
 
+    bootStep = '4k. Config Logging';
     if (enableLogging) {
       _logConfig();
     }
@@ -405,8 +417,12 @@ class AppConfig {
 
   int _getIntConfig(String rcKey, String envKey, int defaultValue) {
     // 1. Try Remote Config
-    final rcValue = RemoteConfigService.instance.getInt(rcKey);
-    if (rcValue != 0) return rcValue;
+    try {
+      final rcValue = RemoteConfigService.instance.getInt(rcKey);
+      if (rcValue != 0) return rcValue;
+    } catch (_) {
+      // Ignore Remote Config errors, fall back to defaults
+    }
 
     // 2. Try .env
     final envFileValue = dotenv.maybeGet(envKey);
@@ -418,8 +434,12 @@ class AppConfig {
 
   String _getStringConfig(String rcKey, String envKey, String defaultValue) {
     // 1. Try Remote Config
-    final rcValue = RemoteConfigService.instance.getString(rcKey);
-    if (rcValue.isNotEmpty) return rcValue;
+    try {
+      final rcValue = RemoteConfigService.instance.getString(rcKey);
+      if (rcValue.isNotEmpty) return rcValue;
+    } catch (_) {
+      // Ignore Remote Config errors
+    }
 
     // 2. Try .env
     final envFileValue = dotenv.maybeGet(envKey);
@@ -439,7 +459,12 @@ class AppConfig {
     if (envValue) return true;
 
     // 3. Try Remote Config (Server-side control)
-    return RemoteConfigService.instance.getBool(rcKey);
+    try {
+      return RemoteConfigService.instance.getBool(rcKey);
+    } catch (_) {
+      // Ignore Remote Config errors
+      return defaultValue;
+    }
   }
 
   List<String> _getStringListConfig(
@@ -448,13 +473,17 @@ class AppConfig {
     List<String> defaultValues,
   ) {
     // 1. Try Remote Config
-    final rcValue = RemoteConfigService.instance.getString(rcKey);
-    if (rcValue.isNotEmpty) {
-      return rcValue
-          .split(',')
-          .map((s) => s.trim())
-          .where((u) => u.isNotEmpty)
-          .toList();
+    try {
+      final rcValue = RemoteConfigService.instance.getString(rcKey);
+      if (rcValue.isNotEmpty) {
+        return rcValue
+            .split(',')
+            .map((s) => s.trim())
+            .where((u) => u.isNotEmpty)
+            .toList();
+      }
+    } catch (_) {
+      // Ignore
     }
 
     // 2. Try .env

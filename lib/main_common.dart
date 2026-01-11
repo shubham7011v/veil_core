@@ -31,6 +31,8 @@ import 'config/firebase_options_prod.dart' as prod;
 
 // Boot progress tracking for debugging production crashes
 String _bootStep = 'Startup';
+String get bootStep => _bootStep;
+set bootStep(String value) => _bootStep = value;
 
 Future<void> mainCommon({required String env, required String appName}) async {
   GlobalErrorHandler.run(() async {
