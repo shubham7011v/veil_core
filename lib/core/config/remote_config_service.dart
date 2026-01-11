@@ -5,7 +5,12 @@ class RemoteConfigService {
   static final RemoteConfigService _instance = RemoteConfigService._();
   static RemoteConfigService get instance => _instance;
 
-  final FirebaseRemoteConfig _remoteConfig = FirebaseRemoteConfig.instance;
+  // Lazy initialization to avoid NotInitializedError before Firebase.initializeApp()
+  FirebaseRemoteConfig? _remoteConfigInstance;
+  FirebaseRemoteConfig get _remoteConfig {
+    _remoteConfigInstance ??= FirebaseRemoteConfig.instance;
+    return _remoteConfigInstance!;
+  }
 
   RemoteConfigService._();
 
