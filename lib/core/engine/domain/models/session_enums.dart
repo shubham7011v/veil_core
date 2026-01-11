@@ -13,4 +13,5 @@ enum SessionEventType {
   cardStaged,
   shuffling,
   connectionFailed,
+  emojiReceived,
 }

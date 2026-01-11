@@ -16,7 +16,7 @@ func (g *Game) PlayCards(playerID string, cardIDs []string, declaredRank Rank) e
 	if len(cardIDs) == 0 || len(cardIDs) > 4 {
 		return errors.New("invalid card count (1-4)")
 	}
-	
+
 	p := g.PlayerMap[playerID]
 	if !p.HasCards(cardIDs) {
 		return errors.New("you don't possess these cards")
@@ -24,7 +24,7 @@ func (g *Game) PlayCards(playerID string, cardIDs []string, declaredRank Rank) e
 
 	// Logic Check: If round rank is set, must match (server authorizes this rule)
 	// But in bluff, you can LIE. So you just check against declaredRank.
-	// HOWEVER, providing a different registered *rank* than the round's rank 
+	// HOWEVER, providing a different registered *rank* than the round's rank
 	// is usually illegal unless it's the start of a round.
 	if g.DeclaredRank != nil && *g.DeclaredRank != declaredRank {
 		return errors.New("must play current round rank")
@@ -42,7 +42,7 @@ func (g *Game) PlayCards(playerID string, cardIDs []string, declaredRank Rank) e
 		ActualCards:  removed,
 		Timestamp:    time.Now(),
 	}
-	
+
 	// Set round rank if new round
 	if g.DeclaredRank == nil {
 		g.DeclaredRank = &declaredRank
@@ -52,12 +52,12 @@ func (g *Game) PlayCards(playerID string, cardIDs []string, declaredRank Rank) e
 	g.AdvanceTurn()
 	g.Phase = PhaseChallenging // Now others can challenge
 	g.SyncParticipants()
-	
+
 	// Check for immediate win (0 cards) - NO, must survive challenge first?
-	// Rules say: "Winner: First player to reach 0 cards". 
+	// Rules say: "Winner: First player to reach 0 cards".
 	// Usually safe if they survive the circle, but let's check count.
 	// We'll verify win condition after challenge window or on next turn start.
-	
+
 	return nil
 }
 
@@ -78,7 +78,7 @@ func (g *Game) Challenge(challengerID string) (string, error) {
 	blufferID := g.LastMove.PlayerID
 	declared := g.LastMove.DeclaredRank
 	actual := g.LastMove.ActualCards
-	
+
 	isBluff := false
 	for _, c := range actual {
 		if c.Rank != declared {
@@ -99,13 +99,14 @@ func (g *Game) Challenge(challengerID string) (string, error) {
 		loserID = challengerID
 		winnerID = blufferID
 	}
-	
+
 	g.GivePileTo(loserID)
 	g.ResetRound()
 	g.SyncParticipants()
-	
+
 	// Set turn to Winner (who was right/innocent)
 	g.SetTurnMessages(winnerID)
+	g.TurnTimerS = g.ThinkingTimeS // Reset timer for winner's turn
 
 	return loserID + " lost the challenge!", nil
 }
@@ -135,18 +136,33 @@ func (g *Game) Pass(playerID string) error {
 	} else {
 		g.AdvanceTurn()
 	}
-	
+
 	g.SyncParticipants()
 	return nil
+}
+
+// Tick decrements the timer and performs auto-actions
+func (g *Game) Tick() {
+	if g.Phase == PhaseThinking || g.Phase == PhaseChallenging {
+		if g.TurnTimerS > 0 {
+			g.TurnTimerS--
+		}
+
+		if g.TurnTimerS <= 0 {
+			// Auto-pass logic
+			g.Pass(g.ActivePlayerID())
+		}
+	}
 }
 
 // -- Helpers --
 
 func (g *Game) AdvanceTurn() {
 	g.ActiveIdx = (g.ActiveIdx + 1) % len(g.TurnOrder)
-	
+	g.TurnTimerS = g.ThinkingTimeS // Reset timer for next player
+
 	// If the active player is finished (0 cards), do they get skipped?
-	// For "First to 0 wins", game ends immediately. 
+	// For "First to 0 wins", game ends immediately.
 	// If "Last Man Standing", skip. Assumed First to 0 for now.
 }
 
@@ -173,6 +189,7 @@ func (g *Game) ResetRound() {
 	g.LastMove = nil
 	g.ResetPassFlags()
 	g.Phase = PhaseThinking
+	g.TurnTimerS = g.ThinkingTimeS // Reset timer for new round starter
 }
 
 func (g *Game) ResetPassFlags() {
@@ -182,7 +199,7 @@ func (g *Game) ResetPassFlags() {
 }
 
 func (g *Game) CheckAllPassed() bool {
-	// If Everyone EXCEPT the last mover has passed... 
+	// If Everyone EXCEPT the last mover has passed...
 	// In 2 player: A plays, B passes -> All passed? Yes.
 	passCount := 0
 	for _, p := range g.Players {

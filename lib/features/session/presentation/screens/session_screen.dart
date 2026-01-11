@@ -22,6 +22,7 @@ import '../../../../core/notifications/bloc/app_notification_event.dart';
 import '../../../game/presentation/widgets/chat_widget.dart';
 import '../../../game/presentation/widgets/emoji_picker.dart';
 import '../../../../core/config/feature_flags.dart';
+import '../widgets/floating_emoji_layer.dart';
 
 class SessionScreen extends StatefulWidget {
   const SessionScreen({super.key});
@@ -51,6 +52,7 @@ class _SessionScreenState extends State<SessionScreen>
   final List<FlyingCard> _flyingCards = [];
   bool _showChat = false;
   bool _showEmoji = false;
+  final List<FloatingEmoji> _activeEmojis = [];
 
   @override
   void initState() {
@@ -234,6 +236,37 @@ class _SessionScreenState extends State<SessionScreen>
           });
         }
         break;
+      case engine.SessionEventType.emojiReceived:
+        final senderId = state.lastEventActorId;
+        if (senderId != null) {
+          final isMe = senderId == 'me';
+          final sourceKey = isMe ? _avatarKeys['me'] : _avatarKeys[senderId];
+
+          if (sourceKey != null) {
+            final emojiChar =
+                state.chatMessages.lastWhere(
+                  (m) => m['type'] == 'emoji',
+                )['emojiId'] ??
+                '😊';
+            final position = _getCenterOffset(sourceKey);
+            final id = DateTime.now().microsecondsSinceEpoch.toString();
+
+            setState(() {
+              _activeEmojis.add(
+                FloatingEmoji(id: id, emoji: emojiChar, position: position),
+              );
+            });
+
+            Future.delayed(const Duration(seconds: 2), () {
+              if (mounted) {
+                setState(() {
+                  _activeEmojis.removeWhere((e) => e.id == id);
+                });
+              }
+            });
+          }
+        }
+        break;
       default:
         break;
     }
@@ -304,7 +337,13 @@ class _SessionScreenState extends State<SessionScreen>
                                 curve: Curves.easeOut,
                               ),
                             ),
-                            child: SessionTopBar(state: state),
+                            child: SessionTopBar(
+                              state: state,
+                              onChatTap: () => setState(() {
+                                _showChat = !_showChat;
+                                if (_showChat) _showEmoji = false;
+                              }),
+                            ),
                           ),
                         ),
 
@@ -362,6 +401,23 @@ class _SessionScreenState extends State<SessionScreen>
                                     pileKey: _pileKey,
                                   ),
                                 ),
+                                // Emoji Button near "pile container middle right corner"
+                                if (!showSpectatorView)
+                                  Positioned(
+                                    right: -60,
+                                    child: FloatingActionButton.small(
+                                      heroTag: 'emoji_btn',
+                                      backgroundColor: AppColors.surfaceLight,
+                                      onPressed: () => setState(() {
+                                        _showEmoji = !_showEmoji;
+                                        if (_showEmoji) _showChat = false;
+                                      }),
+                                      child: const Icon(
+                                        Icons.emoji_emotions_outlined,
+                                        color: Colors.white,
+                                      ),
+                                    ),
+                                  ),
                               ],
                             ),
                           ),
@@ -488,10 +544,14 @@ class _SessionScreenState extends State<SessionScreen>
                       declaredRank: state.lastMove!.declaredRank,
                     ),
 
-                  // Action Overlays
                   Positioned.fill(
                     child: IgnorePointer(
-                      child: FlyingCardsLayer(activeAnimations: _flyingCards),
+                      child: Stack(
+                        children: [
+                          FlyingCardsLayer(activeAnimations: _flyingCards),
+                          FloatingEmojiLayer(activeEmojis: _activeEmojis),
+                        ],
+                      ),
                     ),
                   ),
 
@@ -529,42 +589,6 @@ class _SessionScreenState extends State<SessionScreen>
                   right: 16,
                   child: EmojiPicker(
                     onClose: () => setState(() => _showEmoji = false),
-                  ),
-                ),
-
-              // Toggle Buttons
-              if (!showSpectatorView)
-                Positioned(
-                  bottom: 180, // Adjust based on hand view height
-                  left: 16,
-                  child: Column(
-                    children: [
-                      FloatingActionButton.small(
-                        heroTag: 'chat_btn',
-                        backgroundColor: AppColors.surfaceLight,
-                        onPressed: () => setState(() {
-                          _showChat = !_showChat;
-                          if (_showChat) _showEmoji = false;
-                        }),
-                        child: const Icon(
-                          Icons.chat_bubble_outline,
-                          color: Colors.white,
-                        ),
-                      ),
-                      const SizedBox(height: 8),
-                      FloatingActionButton.small(
-                        heroTag: 'emoji_btn',
-                        backgroundColor: AppColors.surfaceLight,
-                        onPressed: () => setState(() {
-                          _showEmoji = !_showEmoji;
-                          if (_showEmoji) _showChat = false;
-                        }),
-                        child: const Icon(
-                          Icons.emoji_emotions_outlined,
-                          color: Colors.white,
-                        ),
-                      ),
-                    ],
                   ),
                 ),
             ],

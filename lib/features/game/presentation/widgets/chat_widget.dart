@@ -5,6 +5,7 @@ import '../../../../core/theme/colors.dart';
 import '../../../../features/session/presentation/bloc/session_bloc.dart';
 import '../../../../features/session/presentation/bloc/session_event.dart';
 import '../../../../features/session/presentation/bloc/session_state.dart';
+import '../../../../core/di/service_locator.dart' as di;
 
 class ChatWidget extends StatefulWidget {
   final VoidCallback onClose;
@@ -138,8 +139,11 @@ class _ChatWidgetState extends State<ChatWidget> {
                     // For now, let's assume message has 'isMe' or we check against a known key.
                     // LocalBotSessionHandler sends 'isMe': true.
                     // WebSocket handler might not set 'isMe'.
+                    final myId = di.sl.authRepository.currentUser?.uid;
                     final bool isFromMe =
-                        msg['isMe'] == true || msg['senderId'] == 'me';
+                        msg['isMe'] == true ||
+                        msg['senderId'] == 'me' ||
+                        msg['senderId'] == myId;
 
                     return Padding(
                       padding: const EdgeInsets.only(bottom: 8),

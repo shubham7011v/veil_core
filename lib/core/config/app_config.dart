@@ -110,16 +110,23 @@ class AppConfig {
 
   /// Update configuration from server-side /api/config response
   void updateFromServer(Map<String, dynamic> serverConfig) {
-    if (serverConfig['enableVoiceChat'] is bool) {
+    // Helper to check if a flag is locally overridden
+    bool isOverridden(String envKey) => dotenv.maybeGet(envKey) != null;
+
+    if (serverConfig['enableVoiceChat'] is bool &&
+        !isOverridden('ENABLE_VOICE_CHAT')) {
       enableVoiceChat = serverConfig['enableVoiceChat'];
     }
-    if (serverConfig['enableDailyChallenges'] is bool) {
+    if (serverConfig['enableDailyChallenges'] is bool &&
+        !isOverridden('ENABLE_DAILY_CHALLENGES')) {
       enableDailyChallenges = serverConfig['enableDailyChallenges'];
     }
-    if (serverConfig['enableTournaments'] is bool) {
+    if (serverConfig['enableTournaments'] is bool &&
+        !isOverridden('ENABLE_TOURNAMENTS')) {
       enableTournaments = serverConfig['enableTournaments'];
     }
-    if (serverConfig['enableAdminDashboard'] is bool) {
+    if (serverConfig['enableAdminDashboard'] is bool &&
+        !isOverridden('ENABLE_ADMIN_DASHBOARD')) {
       enableAdminDashboard = serverConfig['enableAdminDashboard'];
     }
   }
@@ -413,18 +420,16 @@ class AppConfig {
   }
 
   bool _getBoolConfig(String rcKey, String envKey, bool defaultValue) {
-    // 1. Try Remote Config
-    // Firebase RC getBool returns false if the key doesn't exist, but we checked defaults in service.
-    // However, for local overrides, we want .env to win if RC isn't returning a 'live' value.
-    final rcValue = RemoteConfigService.instance.getBool(rcKey);
-    if (rcValue != false) return rcValue; // If true in RC, return true.
-
-    // 2. Try .env
+    // 1. Try .env (Local developer override)
     final envFileValue = dotenv.maybeGet(envKey);
     if (envFileValue != null) return envFileValue.toLowerCase() == 'true';
 
-    // 3. Try Environment Variable (Build Time)
-    return bool.fromEnvironment(envKey, defaultValue: defaultValue);
+    // 2. Try Environment Variable (Build-time override)
+    final envValue = bool.fromEnvironment(envKey, defaultValue: false);
+    if (envValue) return true;
+
+    // 3. Try Remote Config (Server-side control)
+    return RemoteConfigService.instance.getBool(rcKey);
   }
 
   List<String> _getStringListConfig(

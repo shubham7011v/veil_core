@@ -1,18 +1,18 @@
 import 'dart:async';
 import 'package:flutter_bloc/flutter_bloc.dart';
-import '../../../../core/engine/engine.dart';
+import '../../../../core/engine/engine.dart' as engine;
 import 'session_event.dart';
 import 'session_state.dart';
 import '../../../../core/di/service_locator.dart' as di;
 
 class SessionBloc extends Bloc<SessionEvent, SessionBlocState> {
-  GameSessionHandler _handler;
+  engine.GameSessionHandler _handler;
   StreamSubscription? _stateSub;
   StreamSubscription? _eventSub;
   StreamSubscription? _chatSub;
   StreamSubscription? _errorSub;
 
-  SessionBloc({GameSessionHandler? handler})
+  SessionBloc({engine.GameSessionHandler? handler})
     : _handler = handler ?? di.sl.gameSessionHandler,
       super(SessionBlocState.initial()) {
     // Action handlers
@@ -165,7 +165,7 @@ class SessionBloc extends Bloc<SessionEvent, SessionBlocState> {
     emit(
       state.copyWith(
         selectedUnitIds: ids,
-        lastEvent: SessionEventType.cardStaged,
+        lastEvent: engine.SessionEventType.cardStaged,
         lastEventActorId: 'me',
         lastEventCardCount: 1,
         lastEventTimestamp: DateTime.now().millisecondsSinceEpoch,
@@ -271,7 +271,7 @@ class SessionBloc extends Bloc<SessionEvent, SessionBlocState> {
   }
 
   // Getters for UI convenience
-  GameSessionHandler get handler => _handler;
+  engine.GameSessionHandler get handler => _handler;
 
   @override
   Future<void> close() {
@@ -303,8 +303,15 @@ class SessionBloc extends Bloc<SessionEvent, SessionBlocState> {
     Emitter<SessionBlocState> emit,
   ) {
     if (event.message['type'] == 'emoji') {
-      // Ideally we can show a transient animation state, but for now we just log or let UI listen
-      // If UI listens to state.chatMessages, they will see emoji messages too.
+      add(
+        EngineEventReceived(
+          engine.SessionEventType.emojiReceived,
+          event.message['senderId'] == di.sl.authRepository.currentUser?.uid
+              ? 'me'
+              : event.message['senderId'],
+          cardCount: 0, // Not used for emojis
+        ),
+      );
     }
 
     final updatedMessages = List<Map<String, dynamic>>.from(state.chatMessages)

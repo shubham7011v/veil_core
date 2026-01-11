@@ -8,8 +8,13 @@ import 'doc_viewer.dart';
 
 class SessionTopBar extends StatelessWidget {
   final SessionBlocState state;
+  final VoidCallback onChatTap;
 
-  const SessionTopBar({super.key, required this.state});
+  const SessionTopBar({
+    super.key,
+    required this.state,
+    required this.onChatTap,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -44,7 +49,7 @@ class SessionTopBar extends StatelessWidget {
               ),
             ],
           ),
-          _CircleButton(icon: Icons.chat_bubble_outline, onTap: () {}),
+          _CircleButton(icon: Icons.chat_bubble_outline, onTap: onChatTap),
         ],
       ),
     );

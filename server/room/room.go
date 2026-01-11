@@ -162,6 +162,7 @@ func (r *Room) GetPlayerIDs() []string {
 
 func (r *Room) Run() {
 	ticker := time.NewTicker(200 * time.Millisecond)
+	tickCount := 0
 	defer func() {
 		ticker.Stop()
 		close(r.register)
@@ -270,8 +271,13 @@ func (r *Room) Run() {
 		case <-ticker.C:
 			r.mu.Lock()
 			// Game updates
-			if r.game.Phase != game.PhaseLobby && r.game.Phase != game.PhaseFinished {
-				// r.game.Tick()
+			tickCount++
+			if tickCount >= 5 {
+				tickCount = 0
+				if r.game.Phase != game.PhaseLobby && r.game.Phase != game.PhaseFinished {
+					r.game.Tick()
+					r.broadcastState() // Broadcast to sync timer UI
+				}
 			}
 
 			// Voice updates
@@ -552,6 +558,7 @@ func (r *Room) broadcastState() {
 				"pileCount":      r.game.PileCount,
 				"activePlayerId": r.game.ActivePlayerID(),
 				"declaredRank":   r.game.DeclaredRank,
+				"turnTimerS":     r.game.TurnTimerS,
 				"isSpectator":    true,
 			}
 			msg := protocol.NewMessage(protocol.MsgTypeGameState, view)
@@ -575,6 +582,7 @@ func (r *Room) broadcastState() {
 			"pileCount":      r.game.PileCount,
 			"activePlayerId": r.game.ActivePlayerID(),
 			"declaredRank":   r.game.DeclaredRank,
+			"turnTimerS":     r.game.TurnTimerS,
 		}
 
 		msg := protocol.NewMessage(protocol.MsgTypeGameState, view)
