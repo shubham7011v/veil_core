@@ -389,6 +389,10 @@ class WebSocketSessionHandler
           _handleGameState(msg['data'] as Map<String, dynamic>);
           break;
 
+        case 'GAME_ACTION':
+          _handleGameAction(msg['data'] as Map<String, dynamic>);
+          break;
+
         case 'ERROR':
           final errorData = msg['data'] as Map<String, dynamic>;
           // Propagate server errors to the UI
@@ -745,6 +749,73 @@ class WebSocketSessionHandler
           _eventController.add(SessionEventType.turnChanged);
         }
       }
+    }
+  }
+
+  /// HYBRID SYSTEM: Handle lightweight action events from server
+  void _handleGameAction(Map<String, dynamic> actionData) {
+    final action = actionData['action'] as String?;
+    final data = actionData['data'] as Map<String, dynamic>? ?? {};
+
+    if (action == null) return;
+
+    debugPrint('Game Action: $action');
+
+    final myId = sl.authRepository.currentUser?.uid;
+
+    switch (action) {
+      case 'PLAY_CARDS':
+        // Patch state with lightweight update
+        final playerId = data['playerId'] as String?;
+        final count = data['count'] as int? ?? 0;
+        final declaredRank = data['declaredRank'] as String?;
+        final newPileCount = data['newPileCount'] as int? ?? 0;
+        final nextPlayerId = data['nextPlayerId'] as String?;
+
+        // Update current state
+        _currentState = _currentState.copyWith(
+          pileCount: newPileCount,
+          activeParticipantId: nextPlayerId == myId ? 'me' : nextPlayerId,
+          currentPhase: SessionPhase.challenging,
+        );
+
+        // Emit state update
+        if (!_isDisposed && !_stateController.isClosed) {
+          _stateController.add(_currentState);
+        }
+
+        // Emit event for animations
+        _activeEventActorId = playerId == myId ? 'me' : playerId;
+        _lastCountClaimed = count;
+
+        if (!_isDisposed && !_eventController.isClosed) {
+          _eventController.add(SessionEventType.cardsPlayed);
+        }
+        break;
+
+      case 'PASS':
+        // Patch state with turn advance
+        final nextPlayerId = data['nextPlayerId'] as String?;
+
+        _currentState = _currentState.copyWith(
+          activeParticipantId: nextPlayerId == myId ? 'me' : nextPlayerId,
+        );
+
+        if (!_isDisposed && !_stateController.isClosed) {
+          _stateController.add(_currentState);
+        }
+
+        // Emit pass event
+        final playerId = data['playerId'] as String?;
+        _activeEventActorId = playerId == myId ? 'me' : playerId;
+
+        if (!_isDisposed && !_eventController.isClosed) {
+          _eventController.add(SessionEventType.passed);
+        }
+        break;
+
+      default:
+        debugPrint('Unknown game action: $action');
     }
   }
 

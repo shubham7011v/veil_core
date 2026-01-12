@@ -2,7 +2,6 @@ package game
 
 import (
 	"math/rand"
-	"time"
 )
 
 // -- Enums --
@@ -56,10 +55,10 @@ func NewDeck() []Card {
 
 	for _, s := range suits {
 		for _, r := range ranks {
-			// Simple ID generation for now. 
+			// Simple ID generation for now.
 			// In production, maybe use UUID or generic IDs.
 			// Dart app uses UUIDs usually, but simple string valid too.
-			id := string(r) + "_of_" + string(s) 
+			id := string(r) + "_of_" + string(s)
 			deck = append(deck, Card{
 				ID:   id,
 				Suit: s,
@@ -68,9 +67,8 @@ func NewDeck() []Card {
 			idCounter++
 		}
 	}
-	
+
 	// Shuffle
-	rand.Seed(time.Now().UnixNano())
 	rand.Shuffle(len(deck), func(i, j int) {
 		deck[i], deck[j] = deck[j], deck[i]
 	})

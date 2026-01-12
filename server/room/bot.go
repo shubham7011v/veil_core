@@ -66,6 +66,12 @@ func NewBot(manager *Manager) *Bot {
 }
 
 func (b *Bot) Run() {
+	defer func() {
+		if r := recover(); r != nil {
+			log.Printf("Bot %s (%s) panic recovered: %v", b.Client.ID, b.Client.Name, r)
+		}
+	}()
+
 	// Listen to Game State updates directed at this bot
 	for {
 		message, ok := <-b.Client.Send

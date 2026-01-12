@@ -35,6 +35,7 @@ type Room struct {
 	turnDuration    time.Duration
 	gracePeriod     time.Duration
 	disconnectTimes map[string]time.Time // Track when each player disconnected
+	lastFullSync    time.Time            // Periodic full state sync (hybrid approach)
 
 	// Game State
 	game *game.Game
@@ -49,6 +50,9 @@ type Room struct {
 	bootAmount float64
 	voice      *game.VoiceState
 	webRTC     *game.WebRTCManager
+
+	// Event sequencing for race condition prevention
+	eventSequence int64
 }
 
 type GameAction struct {
@@ -73,6 +77,7 @@ func NewRoom(id string) *Room {
 		turnDuration:    25 * time.Second, // 20s + buffer
 		gracePeriod:     30 * time.Second,
 		disconnectTimes: make(map[string]time.Time),
+		lastFullSync:    time.Now(), // Initialize for periodic sync
 	}
 	return r
 }
@@ -390,6 +395,15 @@ func (r *Room) Run() {
 					r.broadcastRoomInfo()
 				}
 			}
+
+			// HYBRID APPROACH: Periodic Full State Sync (every 30s during active game)
+			if r.game.Phase != game.PhaseLobby && r.game.Phase != game.PhaseFinished {
+				if now.Sub(r.lastFullSync) >= 30*time.Second {
+					r.lastFullSync = now
+					r.broadcastState() // Full state resync to prevent drift
+					log.Printf("Room %s: Periodic full state sync", r.ID)
+				}
+			}
 			r.mu.Unlock()
 		}
 	}
@@ -427,10 +441,37 @@ func (r *Room) processAction(action GameAction) {
 		var payload protocol.PlayCardsMessage
 		if json.Unmarshal(msg.Data, &payload) == nil {
 			err = r.game.PlayCards(client.ID, payload.CardIDs, game.Rank(payload.DeclaredRank))
+			if err == nil {
+				// HYBRID: Send lightweight event instead of full state
+				p := r.game.PlayerMap[client.ID]
+				r.broadcastAction("PLAY_CARDS", map[string]interface{}{
+					"playerId":           client.ID,
+					"count":              len(payload.CardIDs),
+					"declaredRank":       payload.DeclaredRank,
+					"newPileCount":       r.game.PileCount,
+					"nextPlayerId":       r.game.ActivePlayerID(),
+					"playerNewCardCount": len(p.Hand), // Fix state drift
+				})
+				return // Skip default broadcast
+			}
 		}
 
 	case protocol.MsgTypePass:
 		err = r.game.Pass(client.ID)
+		if err == nil {
+			// Check if pile was discarded (all passed)
+			if r.game.LastEvent == "pileDiscarded" {
+				// Send full state for round reset
+				r.broadcastState()
+			} else {
+				// HYBRID: Send lightweight pass event
+				r.broadcastAction("PASS", map[string]interface{}{
+					"playerId":     client.ID,
+					"nextPlayerId": r.game.ActivePlayerID(),
+				})
+			}
+			return // Skip default broadcast
+		}
 
 	case protocol.MsgTypeChallenge:
 		_, err = r.game.Challenge(client.ID)
@@ -575,8 +616,7 @@ func (r *Room) processAction(action GameAction) {
 		default:
 		}
 	} else {
-		// Valid move -> Broadcast new state
-		r.broadcastState()
+		// Valid move -> Already sent event or full state above
 
 		// Check Game Over
 		if r.game.Phase == game.PhaseFinished {
@@ -639,6 +679,22 @@ func (r *Room) sendErrorToClient(client *Client, code, message string) {
 	}
 }
 
+// HYBRID APPROACH: Lightweight event broadcasting
+// Sends ~150 bytes instead of ~1200 bytes for most actions
+func (r *Room) broadcastAction(action string, data map[string]interface{}) {
+	// Generate monotonic sequence number (thread-safe due to room.mu lock)
+	r.eventSequence++
+
+	msg := protocol.NewMessage(protocol.MsgTypeGameAction, map[string]interface{}{
+		"action":    action,
+		"data":      data,
+		"timestamp": time.Now().Unix(),
+		"sequence":  r.eventSequence, // Prevents race condition
+	})
+	bytes, _ := json.Marshal(msg)
+	r.broadcast <- bytes
+}
+
 func (r *Room) broadcastStats() {
 	// 1. Get client snapshot and release lock quickly
 	r.mu.RLock()
@@ -684,33 +740,41 @@ func (r *Room) broadcastState() {
 		}
 	}()
 
+	// OPTIMIZATION: Build shared state once instead of per-client
+	sharedState := map[string]interface{}{
+		"phase":              r.game.Phase,
+		"startTime":          r.game.StartTime,
+		"participants":       r.game.Participants,
+		"pileCount":          r.game.PileCount,
+		"activePlayerId":     r.game.ActivePlayerID(),
+		"declaredRank":       r.game.DeclaredRank,
+		"lastEvent":          r.game.LastEvent,
+		"lastEventId":        r.game.LastEventID,
+		"lastEventActorId":   r.game.LastEventActorID,
+		"lastEventCardCount": r.game.LastEventCardCount,
+		"isBluffSuccessful":  r.game.IsBluffSuccessful,
+		"gameLog":            r.game.GameLog,
+		"createdAt":          r.CreationTime,
+	}
+
+	// Add lastMove if exists
+	if r.game.LastMove != nil {
+		sharedState["lastMove"] = map[string]interface{}{
+			"playerId":     r.game.LastMove.PlayerID,
+			"declaredRank": r.game.LastMove.DeclaredRank,
+		}
+	}
+
 	for client := range r.clients {
 		if client.IsSpectator {
-			// Spectator View
-			view := map[string]interface{}{
-				"phase":              r.game.Phase,
-				"startTime":          r.game.StartTime,
-				"myHand":             []interface{}{},
-				"participants":       r.game.Participants,
-				"pileCount":          r.game.PileCount,
-				"activePlayerId":     r.game.ActivePlayerID(),
-				"declaredRank":       r.game.DeclaredRank,
-				"isSpectator":        true,
-				"lastEvent":          r.game.LastEvent,
-				"lastEventId":        r.game.LastEventID,
-				"lastEventActorId":   r.game.LastEventActorID,
-				"lastEventCardCount": r.game.LastEventCardCount,
-				"isBluffSuccessful":  r.game.IsBluffSuccessful,
-				"gameLog":            r.game.GameLog,
-				"createdAt":          r.CreationTime,
+			// Spectators get shared state + empty hand
+			view := make(map[string]interface{})
+			for k, v := range sharedState {
+				view[k] = v
 			}
-			// Add lastMove if exists
-			if r.game.LastMove != nil {
-				view["lastMove"] = map[string]interface{}{
-					"playerId":     r.game.LastMove.PlayerID,
-					"declaredRank": r.game.LastMove.DeclaredRank,
-				}
-			}
+			view["myHand"] = []interface{}{}
+			view["isSpectator"] = true
+
 			msg := protocol.NewMessage(protocol.MsgTypeGameState, view)
 			bytes, _ := json.Marshal(msg)
 			select {
@@ -727,29 +791,12 @@ func (r *Room) broadcastState() {
 
 		r.game.SyncParticipants(client.ID) // Generate personalized view with masked IDs
 
-		view := map[string]interface{}{
-			"phase":              r.game.Phase,
-			"startTime":          r.game.StartTime,
-			"myHand":             p.Hand,
-			"participants":       r.game.Participants,
-			"pileCount":          r.game.PileCount,
-			"activePlayerId":     r.game.ActivePlayerID(),
-			"declaredRank":       r.game.DeclaredRank,
-			"lastEvent":          r.game.LastEvent,
-			"lastEventId":        r.game.LastEventID,
-			"lastEventActorId":   r.game.LastEventActorID,
-			"lastEventCardCount": r.game.LastEventCardCount,
-			"isBluffSuccessful":  r.game.IsBluffSuccessful,
-			"gameLog":            r.game.GameLog,
-			"createdAt":          r.CreationTime,
+		// Clone shared state and add personal data
+		view := make(map[string]interface{})
+		for k, v := range sharedState {
+			view[k] = v
 		}
-		// Add lastMove if exists
-		if r.game.LastMove != nil {
-			view["lastMove"] = map[string]interface{}{
-				"playerId":     r.game.LastMove.PlayerID,
-				"declaredRank": r.game.LastMove.DeclaredRank,
-			}
-		}
+		view["myHand"] = p.Hand
 
 		msg := protocol.NewMessage(protocol.MsgTypeGameState, view)
 		bytes, _ := json.Marshal(msg)
@@ -763,17 +810,7 @@ func (r *Room) broadcastState() {
 }
 
 func (r *Room) broadcastRoomInfo() {
-	roomInfo := map[string]interface{}{
-		"roomCode":    r.code,
-		"roomName":    r.name,
-		"hostId":      r.hostID,
-		"maxPlayers":  r.maxPlayers,
-		"bootAmount":  r.bootAmount,
-		"playerCount": len(r.clients),
-		"createdAt":   r.CreationTime,
-	}
-
-	// Participants List
+	// Build participants list
 	var participants []map[string]interface{}
 	for client := range r.clients {
 		p := map[string]interface{}{
@@ -786,12 +823,24 @@ func (r *Room) broadcastRoomInfo() {
 		}
 		participants = append(participants, p)
 	}
-	roomInfo["participants"] = participants
-	roomInfo["isGameStarted"] = r.game.Phase != game.PhaseLobby
 
+	roomInfo := map[string]interface{}{
+		"roomCode":      r.code,
+		"roomName":      r.name,
+		"hostId":        r.hostID,
+		"maxPlayers":    r.maxPlayers,
+		"bootAmount":    r.bootAmount,
+		"playerCount":   len(r.clients),
+		"createdAt":     r.CreationTime,
+		"participants":  participants,
+		"isGameStarted": r.game.Phase != game.PhaseLobby,
+	}
+
+	// OPTIMIZATION: Serialize once
 	msg := protocol.NewMessage(protocol.MsgTypeRoomUpdate, roomInfo)
 	bytes, _ := json.Marshal(msg)
 
+	// Broadcast to all clients
 	for client := range r.clients {
 		select {
 		case client.Send <- bytes:

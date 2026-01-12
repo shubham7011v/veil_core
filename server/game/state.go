@@ -99,6 +99,29 @@ func (g *Game) RemovePlayer(id string) {
 		}
 	}
 	g.Players = newPlayers
+
+	// CRITICAL FIX: Rebuild TurnOrder to remove disconnected player
+	newTurnOrder := make([]string, 0)
+	removedBeforeActive := false
+	for i, pid := range g.TurnOrder {
+		if pid != id {
+			newTurnOrder = append(newTurnOrder, pid)
+		} else if i < g.ActiveIdx {
+			removedBeforeActive = true
+		}
+	}
+	g.TurnOrder = newTurnOrder
+
+	// Adjust ActiveIdx if player was removed before current position
+	if removedBeforeActive && g.ActiveIdx > 0 {
+		g.ActiveIdx--
+	}
+
+	// Ensure ActiveIdx is within bounds
+	if len(g.TurnOrder) > 0 && g.ActiveIdx >= len(g.TurnOrder) {
+		g.ActiveIdx = 0
+	}
+
 	g.SyncParticipants("")
 }
 
@@ -108,7 +131,6 @@ func (g *Game) Start() error {
 	}
 
 	// 1. Shuffle Players for Turn Order
-	rand.Seed(time.Now().UnixNano())
 	perm := rand.Perm(len(g.Players))
 	g.TurnOrder = make([]string, len(g.Players))
 	for i, v := range perm {
@@ -198,7 +220,7 @@ func CalculateRank(wins int) string {
 }
 
 func (g *Game) ActivePlayerID() string {
-	if len(g.TurnOrder) == 0 {
+	if len(g.TurnOrder) == 0 || g.ActiveIdx < 0 || g.ActiveIdx >= len(g.TurnOrder) {
 		return ""
 	}
 	return g.TurnOrder[g.ActiveIdx]

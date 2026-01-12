@@ -3,6 +3,7 @@ package game
 import (
 	"errors"
 	"fmt"
+	"log"
 	"time"
 )
 
@@ -63,10 +64,14 @@ func (g *Game) PlayCards(playerID string, cardIDs []string, declaredRank Rank) e
 
 	g.SyncParticipants("")
 
-	// Check for immediate win (0 cards) - NO, must survive challenge first?
-	// Rules say: "Winner: First player to reach 0 cards".
-	// Usually safe if they survive the circle, but let's check count.
-	// We'll verify win condition after challenge window or on next turn start.
+	// CHECK WIN CONDITION: Player reaches 0 cards
+	if len(p.Hand) == 0 {
+		g.Phase = PhaseFinished
+		g.WinnerID = playerID
+		g.LastEvent = "gameOver"
+		g.AddToLog(fmt.Sprintf("%s won the game!", g.PlayerMap[playerID].Name))
+		log.Printf("Game Over: %s won by reaching 0 cards", playerID)
+	}
 
 	return nil
 }
@@ -93,8 +98,6 @@ func (g *Game) Challenge(challengerID string) (bool, error) {
 		}
 	}
 
-	// Prepare for Reveal Phase
-	g.Phase = PhaseRevealing
 	// Prepare for Reveal Phase
 	g.Phase = PhaseRevealing
 	g.LastEvent = "bluffCalled"
@@ -128,9 +131,6 @@ func (g *Game) ResolveChallenge(challengerID string) string {
 
 	pileCount := g.PileCount
 	g.GivePileTo(loserID)
-	g.ResetRound()
-	g.SyncParticipants("")
-
 	g.ResetRound()
 	g.SyncParticipants("")
 
@@ -188,12 +188,27 @@ func (g *Game) Pass(playerID string) error {
 // -- Helpers --
 
 func (g *Game) AdvanceTurn() {
-	g.ActiveIdx = (g.ActiveIdx + 1) % len(g.TurnOrder)
-	g.TurnStartTime = time.Now().Unix()
+	if len(g.TurnOrder) == 0 {
+		return
+	}
 
-	// If the active player is finished (0 cards), do they get skipped?
-	// For "First to 0 wins", game ends immediately.
-	// If "Last Man Standing", skip. Assumed First to 0 for now.
+	// Advance to next player, skipping disconnected ones
+	maxAttempts := len(g.TurnOrder) // Prevent infinite loop
+	for i := 0; i < maxAttempts; i++ {
+		g.ActiveIdx = (g.ActiveIdx + 1) % len(g.TurnOrder)
+		playerID := g.TurnOrder[g.ActiveIdx]
+		player := g.PlayerMap[playerID]
+
+		// Found a connected player
+		if player != nil && !player.IsDisconnected {
+			g.TurnStartTime = time.Now().Unix()
+			return
+		}
+	}
+
+	// All players disconnected - this shouldn't happen in practice
+	// but we set timer anyway to prevent nil pointer issues
+	g.TurnStartTime = time.Now().Unix()
 }
 
 func (g *Game) SetTurnMessages(playerID string) {

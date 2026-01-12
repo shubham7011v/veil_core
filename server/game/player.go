@@ -56,6 +56,16 @@ func (p *Player) RemoveCards(cardIDs []string) []Card {
 }
 
 func (p *Player) HasCards(cardIDs []string) bool {
+	// CRITICAL FIX: Check for duplicate card IDs (exploit prevention)
+	seen := make(map[string]bool)
+	for _, id := range cardIDs {
+		if seen[id] {
+			return false // Duplicate detected
+		}
+		seen[id] = true
+	}
+
+	// Now check each unique card exists in hand
 	count := 0
 	for _, id := range cardIDs {
 		for _, c := range p.Hand {

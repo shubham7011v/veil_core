@@ -25,6 +25,7 @@ const (
 	MsgTypeAuthOk          = "AUTH_OK"
 	MsgTypeAuthFail        = "AUTH_FAIL"
 	MsgTypeGameState       = "GAME_STATE"
+	MsgTypeGameAction      = "GAME_ACTION" // Lightweight event for actions
 	MsgTypePlayerJoined    = "PLAYER_JOINED"
 	MsgTypeCardsPlayed     = "CARDS_PLAYED"
 	MsgTypeTurnPassed      = "TURN_PASSED"
