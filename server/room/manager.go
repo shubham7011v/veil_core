@@ -200,30 +200,36 @@ func (m *Manager) HandleMessage(c *Client, message []byte) {
 	case protocol.MsgTypeCreatePrivateRoom:
 		var payload protocol.CreatePrivateRoomMessage
 		if err := json.Unmarshal(baseMsg.Data, &payload); err == nil {
-			// For private rooms, we need to create it manually here or delegate?
-			// Wait, the matchmaker doesn't have createPrivateRoom yet?
-			// Checking implementation... matchmaker has GenerateRoomCode but NOT createPrivateRoom.
-			// Actually manager.go has a lot of private room logic.
-			// Ideally matchmaker handles this. But for now, let's keep it here if it's not moved.
-			// Ah, I see "createPrivateRoom" in Manager. Let me check if I should move it.
-			// The auditing plan said "Review Manager integration".
-			// Let's assume for this step, I should only remove what IS duplicated.
-			// But checkLobbyTimeout IS duplicated and moved to matchmaker.
-			// createPrivateRoom is NOT in matchmaker yet based on my view_file usage?
-			// Re-reading Matchmaker file content...
-			// Matchmaker only has: CheckLobbyTimeout, AttemptJoinActiveLobby, GenerateRoomCode, CleanupEmptyRooms.
-			// It updates rooms map directly via m.manager.Rooms.
-			// So CreatePrivateRoom is likely still in Manager (local).
-			// If I remove the local method, I break it.
-			// Wait, the previous view_file of Matchmaker did NOT show CreatePrivateRoom.
-			// So I should KEEP CreatePrivateRoom in Manager OR move it now.
-			// I will KEEP it for now to be safe, unless I move it.
-			// But the refactoring goal is to remove duplicates.
-			// The methods I marked as DELEGATED above (checkLobbyTimeout, AttemptJoinActiveLobby) are definitely safe to remove.
-			// The AUTH methods are definitely safe to remove (they are in AuthHandler).
-			// Let's check `handleDeleteAccount`. It is in AuthHandler.
-			m.authHandler.HandleDeleteAccount(c)
+			m.createPrivateRoom(c, payload)
 		}
+		return
+
+	case protocol.MsgTypeJoinPrivateRoom:
+		var payload protocol.JoinPrivateRoomMessage
+		if err := json.Unmarshal(baseMsg.Data, &payload); err == nil {
+			m.joinPrivateRoom(c, payload)
+		}
+		return
+
+	case protocol.MsgTypeLeaveRoom:
+		if c.CurrentRoom != nil {
+			m.mu.Lock()
+			if m.ActiveLobby != nil && c.CurrentRoom == m.ActiveLobby {
+				m.ActiveLobbyCount--
+				if m.ActiveLobbyCount < 0 {
+					m.ActiveLobbyCount = 0
+				}
+				log.Printf("Manual Leave: Lobby slot freed. Remaining: %d", m.ActiveLobbyCount)
+			}
+			m.mu.Unlock()
+
+			c.CurrentRoom.Leave(c)
+			c.CurrentRoom = nil
+		}
+		return
+
+	case protocol.MsgTypeDeleteAccount:
+		m.authHandler.HandleDeleteAccount(c)
 		return
 
 	case "PING":

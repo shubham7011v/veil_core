@@ -23,7 +23,7 @@ func NewMatchmaker(m *Manager) *Matchmaker {
 
 // Constants for matchmaking
 const (
-	LobbyTimeout  = 10 * time.Second
+	LobbyTimeout  = 50 * time.Second
 	TargetPlayers = 5
 	RoomCodeChars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789" // Excludes I, O, 0, 1
 )
@@ -39,8 +39,9 @@ func (mm *Matchmaker) CheckLobbyTimeout() {
 		return
 	}
 
-	// Check if lobby is still valid/open (sanity check)
-	if lobby.GetGamePhase() != "Lobby" || mm.manager.ActiveLobbyCount >= TargetPlayers {
+	// Check if lobby is full (no need for bots)
+	// Don't check phase here - we want to spawn bots even if game is starting
+	if mm.manager.ActiveLobbyCount >= TargetPlayers {
 		mm.manager.ActiveLobby = nil
 		mm.manager.ActiveLobbyCount = 0
 		return
@@ -48,13 +49,17 @@ func (mm *Matchmaker) CheckLobbyTimeout() {
 
 	if time.Since(mm.manager.ActiveLobbyStartTime) > LobbyTimeout {
 		// Timeout Reached! Fill with Bots.
+		log.Printf("DEBUG: Lobby timeout reached for room %s (lobby age: %v)", lobby.ID, time.Since(mm.manager.ActiveLobbyStartTime))
+
 		if !config.GetFeatureFlags().EnableBotPlayers {
+			log.Printf("DEBUG: Bot spawning disabled by feature flag")
 			return // Leave open if bots disabled
 		}
 
 		botsNeeded := TargetPlayers - mm.manager.ActiveLobbyCount
 
 		if botsNeeded <= 0 {
+			log.Printf("DEBUG: No bots needed (count: %d, target: %d)", mm.manager.ActiveLobbyCount, TargetPlayers)
 			mm.manager.ActiveLobby = nil
 			mm.manager.ActiveLobbyCount = 0
 			return
@@ -72,6 +77,11 @@ func (mm *Matchmaker) CheckLobbyTimeout() {
 		// Seal the lobby so no new humans join this bot-filled game
 		mm.manager.ActiveLobby = nil
 		mm.manager.ActiveLobbyCount = 0
+	} else {
+		// Log how much time is left
+		timeLeft := LobbyTimeout - time.Since(mm.manager.ActiveLobbyStartTime)
+		log.Printf("DEBUG: Lobby %s waiting for timeout (%v remaining, count: %d/%d)",
+			lobby.ID, timeLeft, mm.manager.ActiveLobbyCount, TargetPlayers)
 	}
 }
 
