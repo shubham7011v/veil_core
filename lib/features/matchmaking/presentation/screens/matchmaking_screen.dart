@@ -578,9 +578,9 @@ class _MatchmakingScreenState extends State<MatchmakingScreen>
 
     return GridView.count(
       crossAxisCount: 3,
-      mainAxisSpacing: 12,
-      crossAxisSpacing: 12,
-      padding: const EdgeInsets.symmetric(horizontal: 24),
+      mainAxisSpacing: 10,
+      crossAxisSpacing: 10,
+      padding: const EdgeInsets.symmetric(horizontal: 12),
       childAspectRatio: 0.75, // Adjusted from 0.75 to prevent overflow
       children: slots,
     );
@@ -607,7 +607,7 @@ class _MatchmakingScreenState extends State<MatchmakingScreen>
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
           Container(
-            width: 100,
+            width: 60,
             height: 60,
             decoration: BoxDecoration(
               shape: BoxShape.circle,
@@ -674,14 +674,6 @@ class _MatchmakingScreenState extends State<MatchmakingScreen>
               ),
             ),
           const SizedBox(height: 4),
-          if (!participant.isMe)
-            Text(
-              'Ready',
-              style: GoogleFonts.inter(
-                color: const Color(0xFF4CAF50),
-                fontSize: 12,
-              ),
-            ),
         ],
       ),
     );

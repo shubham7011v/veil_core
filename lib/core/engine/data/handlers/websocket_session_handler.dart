@@ -400,7 +400,10 @@ class WebSocketSessionHandler extends GameSessionHandler
   }
 
   void _send(Map<String, dynamic> message) {
-    if (_channel != null && _connectionStatus == ConnectionStatus.connected) {
+    if (_channel != null &&
+        (_connectionStatus == ConnectionStatus.connected ||
+            _connectionStatus == ConnectionStatus.connecting ||
+            _connectionStatus == ConnectionStatus.reconnecting)) {
       try {
         _channel!.sink.add(jsonEncode(message));
       } catch (e) {
