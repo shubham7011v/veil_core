@@ -336,6 +336,15 @@ func (m *Manager) HandleMessage(c *Client, message []byte) {
 	case protocol.MsgTypeDeleteAccount:
 		m.handleDeleteAccount(c)
 		return
+
+	case "PING":
+		// Heartbeat - respond with PONG (no room required)
+		pongBytes, _ := json.Marshal(protocol.NewMessage("PONG", nil))
+		select {
+		case c.Send <- pongBytes:
+		default:
+		}
+		return
 	}
 
 	// 3. Room-scoped Handlers
