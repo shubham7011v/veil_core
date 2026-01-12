@@ -88,6 +88,10 @@ class WebSocketSessionHandler extends GameSessionHandler
         debugPrint(
           '⚠️ Watchdog: No server activity for ${idleTime.inSeconds}s. Reconnecting...',
         );
+        // Stop heartbeat BEFORE closing to prevent send-after-close errors
+        timer.cancel();
+        _heartbeatTimer = null;
+        _updateConnectionStatus(ConnectionStatus.reconnecting);
         _channel?.sink.close(1006, 'Watchdog timeout');
         // Reconnection will be handled by _channel.stream.onDone -> _handleConnectionFailure
       }
@@ -356,6 +360,10 @@ class WebSocketSessionHandler extends GameSessionHandler
   }
 
   void _handleConnectionFailure(String firebaseToken, {String? displayName}) {
+    // Stop heartbeat immediately to prevent send-after-close errors
+    _heartbeatTimer?.cancel();
+    _heartbeatTimer = null;
+
     if (_reconnectAttempts < _maxReconnectAttempts) {
       _reconnectAttempts++;
       final baseDelay = _baseReconnectDelay * (1 << (_reconnectAttempts - 1));
@@ -392,8 +400,15 @@ class WebSocketSessionHandler extends GameSessionHandler
   }
 
   void _send(Map<String, dynamic> message) {
-    if (_channel != null) {
-      _channel!.sink.add(jsonEncode(message));
+    if (_channel != null && _connectionStatus == ConnectionStatus.connected) {
+      try {
+        _channel!.sink.add(jsonEncode(message));
+      } catch (e) {
+        debugPrint('⚠️ Failed to send message: $e');
+        // Channel is likely closed, trigger reconnection
+        _heartbeatTimer?.cancel();
+        _heartbeatTimer = null;
+      }
     }
   }
 
