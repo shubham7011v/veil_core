@@ -23,7 +23,7 @@ class WebSocketSessionRepository implements SessionRepository {
 
   @override
   Future<void> disconnect() async {
-    await _handler.dispose();
+    // Cannot dispose singleton handler
   }
 
   @override
@@ -61,6 +61,6 @@ class WebSocketSessionRepository implements SessionRepository {
 
   @override
   Future<void> dispose() async {
-    await _handler.dispose();
+    // Cannot dispose singleton handler
   }
 }

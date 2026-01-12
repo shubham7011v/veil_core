@@ -482,7 +482,11 @@ func (m *Manager) createPrivateRoom(c *Client, data protocol.CreatePrivateRoomMe
 	roomID := fmt.Sprintf("private_%s_%d", code, time.Now().Unix())
 
 	r := NewPrivateRoom(roomID, data.RoomName, code, data.Password, c.ID, data.MaxPlayers, data.BootAmount)
+
+	m.mu.Lock()
 	m.Rooms[code] = r
+	m.mu.Unlock()
+
 	go r.Run()
 
 	log.Printf("Created Private Room %s (%s)", data.RoomName, code)
@@ -507,7 +511,10 @@ func (m *Manager) joinPrivateRoom(c *Client, data protocol.JoinPrivateRoomMessag
 		return
 	}
 
+	m.mu.RLock()
 	r, ok := m.Rooms[data.RoomCode]
+	m.mu.RUnlock()
+
 	if !ok {
 		m.sendError(c, "ROOM_NOT_FOUND", "Room not found")
 		return

@@ -581,7 +581,7 @@ class _MatchmakingScreenState extends State<MatchmakingScreen>
       mainAxisSpacing: 12,
       crossAxisSpacing: 12,
       padding: const EdgeInsets.symmetric(horizontal: 24),
-      childAspectRatio: 0.70, // Adjusted from 0.75 to prevent overflow
+      childAspectRatio: 0.75, // Adjusted from 0.75 to prevent overflow
       children: slots,
     );
   }

@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
-	"math/rand"
 	"sync"
 	"time"
 
@@ -351,30 +350,7 @@ func (r *Room) Run() {
 				tickCount = 0
 			}
 
-			// Public Lobby Timeout (60s) - Fill with Bots
-			if !r.isPrivate && r.game.Phase == game.PhaseLobby {
-				elapsed := time.Now().Unix() - r.CreationTime
-				if elapsed >= 60 {
-					log.Printf("Lobby %s timed out. filling with bots...", r.ID)
-					// Fill up to 5 players (or MaxPlayers if fewer)
-					targetCount := 5
-					if targetCount > r.maxPlayers {
-						targetCount = r.maxPlayers
-					}
-
-					currentCount := len(r.game.Players)
-					needed := targetCount - currentCount
-
-					if needed > 0 {
-						r.addBots(needed)
-					}
-
-					// Start Countdown
-					r.game.Phase = game.PhaseStarting
-					r.game.StartTime = time.Now().Unix() + int64(game.StartGameDelayS)
-					r.broadcastState()
-				}
-			}
+			// Public Lobby Timeout is handled by Manager (checkLobbyTimeout)
 
 			// Voice updates
 			if r.voice.Tick() {
@@ -829,25 +805,4 @@ func (r *Room) ForceBroadcastState() {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	r.broadcastState()
-}
-
-func (r *Room) addBots(count int) {
-	botNames := []string{
-		"Shubham", "Julie", "Shivam", "Sandhya", "Sabhya",
-		"Sanchit", "Satyam", "Sarvottam", "Dipesh", "Divyam",
-		"Rashmi", "Gaurav", "Saurav", "Nitish", "Nishu",
-		"Aarush", "Arman", "Riya", "Angel", "Mushkan",
-	}
-
-	for i := 0; i < count; i++ {
-		botID := fmt.Sprintf("bot_%d_%d", time.Now().UnixNano(), i)
-		// Pick random name
-		nameIdx := rand.Intn(len(botNames))
-		botName := botNames[nameIdx]
-
-		// Random avatar if you like, or default
-		if err := r.game.AddPlayer(botID, botName, ""); err != nil {
-			log.Printf("Failed to add bot: %v", err)
-		}
-	}
 }
