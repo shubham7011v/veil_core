@@ -13,10 +13,6 @@ import (
 	"firebase.google.com/go/v4/auth"
 )
 
-const (
-	charset = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789" // Excludes I, O, 0, 1
-)
-
 // ActiveRoomInfo for admin dashboard
 type ActiveRoomInfo struct {
 	ID          string   `json:"id"`

@@ -177,6 +177,11 @@ func (r *Room) GetGamePhase() string {
 	return string(r.game.Phase)
 }
 
+// SetMaxPlayers allows overriding the default max players (used by matchmaker)
+func (r *Room) SetMaxPlayers(max int) {
+	r.maxPlayers = max
+}
+
 func (r *Room) GetClientCount() int {
 	r.mu.RLock()
 	defer r.mu.RUnlock()

@@ -49,17 +49,13 @@ func (mm *Matchmaker) CheckLobbyTimeout() {
 
 	if time.Since(mm.manager.ActiveLobbyStartTime) > LobbyTimeout {
 		// Timeout Reached! Fill with Bots.
-		log.Printf("DEBUG: Lobby timeout reached for room %s (lobby age: %v)", lobby.ID, time.Since(mm.manager.ActiveLobbyStartTime))
-
 		if !config.GetFeatureFlags().EnableBotPlayers {
-			log.Printf("DEBUG: Bot spawning disabled by feature flag")
 			return // Leave open if bots disabled
 		}
 
 		botsNeeded := TargetPlayers - mm.manager.ActiveLobbyCount
 
 		if botsNeeded <= 0 {
-			log.Printf("DEBUG: No bots needed (count: %d, target: %d)", mm.manager.ActiveLobbyCount, TargetPlayers)
 			mm.manager.ActiveLobby = nil
 			mm.manager.ActiveLobbyCount = 0
 			return
@@ -80,7 +76,7 @@ func (mm *Matchmaker) CheckLobbyTimeout() {
 	} else {
 		// Log how much time is left
 		timeLeft := LobbyTimeout - time.Since(mm.manager.ActiveLobbyStartTime)
-		log.Printf("DEBUG: Lobby %s waiting for timeout (%v remaining, count: %d/%d)",
+		log.Printf("Lobby %s waiting for timeout (%v remaining, count: %d/%d)",
 			lobby.ID, timeLeft, mm.manager.ActiveLobbyCount, TargetPlayers)
 	}
 }
@@ -118,6 +114,7 @@ func (mm *Matchmaker) AttemptJoinActiveLobby(c *Client) {
 	if mm.manager.ActiveLobby == nil {
 		roomID := fmt.Sprintf("match_%d", time.Now().UnixNano())
 		room := NewRoom(roomID)
+		room.SetMaxPlayers(TargetPlayers) // Override default (10) with matchmaking target (5)
 		mm.manager.Rooms[roomID] = room
 
 		go room.Run() // Start the room loop
@@ -126,7 +123,7 @@ func (mm *Matchmaker) AttemptJoinActiveLobby(c *Client) {
 		mm.manager.ActiveLobbyCount = 0
 		mm.manager.ActiveLobbyStartTime = time.Now()
 		room.CreationTime = mm.manager.ActiveLobbyStartTime.Unix()
-		log.Printf("Created New Active Lobby: %s", roomID)
+		log.Printf("Created New Active Lobby: %s (max: %d)", roomID, TargetPlayers)
 	}
 
 	// Join - Increment sync counter immediately to reserve the slot
