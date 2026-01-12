@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'package:flutter/foundation.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import '../../../../core/engine/engine.dart' as engine;
 import 'session_event.dart';
@@ -211,14 +212,26 @@ class SessionBloc extends Bloc<SessionEvent, SessionBlocState> {
 
     if (rankToPlay == null || state.selectedUnitIds.isEmpty) return;
 
-    _handler.playCards(state.selectedUnitIds, rankToPlay);
+    // OPTIMISTIC UPDATE: Remove cards from local hand immediately
+    final playedIds = List<String>.from(state.selectedUnitIds);
+    final currentHand = List<engine.Unit>.from(state.engineState.myHand);
+    final updatedHand = currentHand
+        .where((u) => !playedIds.contains(u.id))
+        .toList();
+
     emit(
       state.copyWith(
+        engineState: state.engineState.copyWith(myHand: updatedHand),
         selectedUnitIds: const [],
         clearStagedRank: true,
         isSelectingRank: false,
       ),
     );
+
+    debugPrint('🎯 Optimistic UI: Removed ${playedIds.length} cards locally');
+
+    // Trigger server action
+    _handler.playCards(playedIds, rankToPlay);
   }
 
   void _onTurnPassRequested(
@@ -314,6 +327,8 @@ class SessionBloc extends Bloc<SessionEvent, SessionBlocState> {
     Emitter<SessionBlocState> emit,
   ) {
     emit(state.copyWith(failure: event.error));
+    // Rollback for optimistic updates: force re-sync with handler
+    add(const HandlerSyncRequested());
   }
 
   void _onErrorCleared(

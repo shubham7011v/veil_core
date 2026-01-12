@@ -1,7 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
-import 'package:flutter/foundation.dart';
+import 'package:flutter/widgets.dart';
 import 'package:web_socket_channel/web_socket_channel.dart';
 
 import '../../domain/handlers/game_session_handler.dart';
@@ -30,8 +30,9 @@ enum ConnectionStatus {
   failed,
 }
 
-class WebSocketSessionHandler
-    implements GameSessionHandler, VoiceSessionHandler {
+class WebSocketSessionHandler extends GameSessionHandler
+    with WidgetsBindingObserver
+    implements VoiceSessionHandler {
   WebSocketChannel? _channel;
 
   final _stateController = StreamController<SessionState>.broadcast();
@@ -58,6 +59,40 @@ class WebSocketSessionHandler
   static const _baseReconnectDelay = Duration(seconds: 2);
   String? _lastUrl;
   String? _fcmToken;
+
+  // Heartbeat & Watchdog
+  Timer? _heartbeatTimer;
+  DateTime _lastMessageTime = DateTime.now();
+  static const _heartbeatInterval = Duration(seconds: 10);
+  static const _watchdogTimeout = Duration(seconds: 20);
+
+  void _startHeartbeat() {
+    _heartbeatTimer?.cancel();
+    _lastMessageTime = DateTime.now();
+
+    _heartbeatTimer = Timer.periodic(_heartbeatInterval, (timer) {
+      if (_isDisposed) {
+        timer.cancel();
+        return;
+      }
+
+      // 1. Send Heartbeat
+      if (_connectionStatus == ConnectionStatus.connected) {
+        _send({'type': 'PING'});
+      }
+
+      // 2. Watchdog: check if we've heard from server recently
+      final idleTime = DateTime.now().difference(_lastMessageTime);
+      if (idleTime > _watchdogTimeout &&
+          _connectionStatus == ConnectionStatus.connected) {
+        debugPrint(
+          '⚠️ Watchdog: No server activity for ${idleTime.inSeconds}s. Reconnecting...',
+        );
+        _channel?.sink.close(1006, 'Watchdog timeout');
+        // Reconnection will be handled by _channel.stream.onDone -> _handleConnectionFailure
+      }
+    });
+  }
 
   void setFcmToken(String token) {
     _fcmToken = token;
@@ -107,6 +142,61 @@ class WebSocketSessionHandler
   bool _isRevealingBluff = false;
   final Map<String, String> _pNames = {};
   String? _lastProcessedEventId;
+
+  WebSocketSessionHandler() {
+    _currentState = SessionState.initial();
+    // Register lifecycle observer
+    WidgetsBinding.instance.addObserver(this);
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    debugPrint('🔄 App lifecycle changed: $state');
+
+    switch (state) {
+      case AppLifecycleState.paused:
+      case AppLifecycleState.inactive:
+        // App backgrounded - close connection gracefully
+        if (_connectionStatus == ConnectionStatus.connected) {
+          debugPrint('📱 App backgrounded, disconnecting WebSocket');
+          _channel?.sink.close(1000, 'App backgrounded');
+        }
+        break;
+
+      case AppLifecycleState.resumed:
+        // App foregrounded - attempt reconnection
+        debugPrint('📱 App resumed, checking connection');
+        if (_connectionStatus != ConnectionStatus.connected) {
+          _attemptAutoReconnect();
+        }
+        break;
+
+      case AppLifecycleState.detached:
+        // App being terminated
+        dispose();
+        break;
+
+      default:
+        break;
+    }
+  }
+
+  Future<void> _attemptAutoReconnect() async {
+    try {
+      final user = sl.authRepository.currentUser;
+      final token = await user?.getIdToken();
+      final displayName = user?.displayName;
+
+      if (token != null && !_isDisposed && _lastUrl != null) {
+        debugPrint('🔄 Auto-reconnecting after app resume...');
+        // Reset attempts to 0 for a fresh start on resume
+        _reconnectAttempts = 0;
+        await connect(_lastUrl!, token, displayName: displayName);
+      }
+    } catch (e) {
+      debugPrint('❌ Auto-reconnect failed: $e');
+    }
+  }
 
   // Cached Data
   UserStats? _lastStats;
@@ -308,14 +398,21 @@ class WebSocketSessionHandler
   }
 
   void _handleMessage(dynamic data) {
+    _lastMessageTime = DateTime.now(); // Reset watchdog
+
     try {
       final msg = jsonDecode(data as String) as Map<String, dynamic>;
       final type = msg['type'] as String;
+
+      if (type == 'PONG') {
+        return; // Heartbeat response
+      }
 
       switch (type) {
         case 'AUTH_OK':
           debugPrint('Auth successful: ${msg['data']}');
           _updateConnectionStatus(ConnectionStatus.connected);
+          _startHeartbeat(); // Start keep-alive and watchdog
 
           // Parse stats from AUTH_OK response
           final authData = msg['data'] as Map<String, dynamic>;
@@ -754,68 +851,73 @@ class WebSocketSessionHandler
 
   /// HYBRID SYSTEM: Handle lightweight action events from server
   void _handleGameAction(Map<String, dynamic> actionData) {
-    final action = actionData['action'] as String?;
-    final data = actionData['data'] as Map<String, dynamic>? ?? {};
+    if (_isDisposed) return;
 
-    if (action == null) return;
+    try {
+      final action = actionData['action'] as String?;
+      final data = actionData['data'] as Map<String, dynamic>? ?? {};
 
-    debugPrint('Game Action: $action');
+      if (action == null) return;
 
-    final myId = sl.authRepository.currentUser?.uid;
+      debugPrint('Game Action: $action');
 
-    switch (action) {
-      case 'PLAY_CARDS':
-        // Patch state with lightweight update
-        final playerId = data['playerId'] as String?;
-        final count = data['count'] as int? ?? 0;
-        final declaredRank = data['declaredRank'] as String?;
-        final newPileCount = data['newPileCount'] as int? ?? 0;
-        final nextPlayerId = data['nextPlayerId'] as String?;
+      final myId = sl.authRepository.currentUser?.uid;
 
-        // Update current state
-        _currentState = _currentState.copyWith(
-          pileCount: newPileCount,
-          activeParticipantId: nextPlayerId == myId ? 'me' : nextPlayerId,
-          currentPhase: SessionPhase.challenging,
-        );
+      switch (action) {
+        case 'PLAY_CARDS':
+          // Patch state with lightweight update
+          final playerId = data['playerId'] as String?;
+          final count = data['count'] as int? ?? 0;
+          final newPileCount = data['newPileCount'] as int? ?? 0;
+          final nextPlayerId = data['nextPlayerId'] as String?;
 
-        // Emit state update
-        if (!_isDisposed && !_stateController.isClosed) {
-          _stateController.add(_currentState);
-        }
+          // Update current state
+          _currentState = _currentState.copyWith(
+            pileCount: newPileCount,
+            activeParticipantId: nextPlayerId == myId ? 'me' : nextPlayerId,
+            currentPhase: SessionPhase.challenging,
+          );
 
-        // Emit event for animations
-        _activeEventActorId = playerId == myId ? 'me' : playerId;
-        _lastCountClaimed = count;
+          // Emit state update
+          if (!_isDisposed && !_stateController.isClosed) {
+            _stateController.add(_currentState);
+          }
 
-        if (!_isDisposed && !_eventController.isClosed) {
-          _eventController.add(SessionEventType.cardsPlayed);
-        }
-        break;
+          // Emit event for animations
+          _activeEventActorId = playerId == myId ? 'me' : playerId;
+          _lastCountClaimed = count;
 
-      case 'PASS':
-        // Patch state with turn advance
-        final nextPlayerId = data['nextPlayerId'] as String?;
+          if (!_isDisposed && !_eventController.isClosed) {
+            _eventController.add(SessionEventType.cardsPlayed);
+          }
+          break;
 
-        _currentState = _currentState.copyWith(
-          activeParticipantId: nextPlayerId == myId ? 'me' : nextPlayerId,
-        );
+        case 'PASS':
+          // Patch state with turn advance
+          final nextPlayerId = data['nextPlayerId'] as String?;
 
-        if (!_isDisposed && !_stateController.isClosed) {
-          _stateController.add(_currentState);
-        }
+          _currentState = _currentState.copyWith(
+            activeParticipantId: nextPlayerId == myId ? 'me' : nextPlayerId,
+          );
 
-        // Emit pass event
-        final playerId = data['playerId'] as String?;
-        _activeEventActorId = playerId == myId ? 'me' : playerId;
+          if (!_isDisposed && !_stateController.isClosed) {
+            _stateController.add(_currentState);
+          }
 
-        if (!_isDisposed && !_eventController.isClosed) {
-          _eventController.add(SessionEventType.passed);
-        }
-        break;
+          // Emit pass event
+          final playerId = data['playerId'] as String?;
+          _activeEventActorId = playerId == myId ? 'me' : playerId;
 
-      default:
-        debugPrint('Unknown game action: $action');
+          if (!_isDisposed && !_eventController.isClosed) {
+            _eventController.add(SessionEventType.passed);
+          }
+          break;
+
+        default:
+          debugPrint('Unknown game action: $action');
+      }
+    } catch (e) {
+      debugPrint('❌ Error patching game action: $e');
     }
   }
 

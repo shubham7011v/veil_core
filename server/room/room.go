@@ -213,10 +213,24 @@ func (r *Room) Run() {
 	ticker := time.NewTicker(200 * time.Millisecond)
 	tickCount := 0
 	defer func() {
+		// NOTIFY CLIENTS: Room is shutting down
+		msg := protocol.NewMessage(protocol.MsgTypeError, map[string]interface{}{
+			"code":    "ROOM_CLOSED",
+			"message": "The game room has been closed.",
+		})
+		bytes, _ := json.Marshal(msg)
+		for client := range r.clients {
+			select {
+			case client.Send <- bytes:
+			default:
+			}
+		}
+
 		ticker.Stop()
 		close(r.register)
 		close(r.unregister)
 		close(r.actions)
+		log.Printf("Room %s Run loop stopped", r.ID)
 	}()
 
 	for {

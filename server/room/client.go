@@ -11,7 +11,7 @@ import (
 
 const (
 	writeWait      = 10 * time.Second
-	pongWait       = 60 * time.Second
+	pongWait       = 20 * time.Second // Reduced from 60s for faster disconnect detection
 	pingPeriod     = (pongWait * 9) / 10
 	maxMessageSize = 8192
 )
