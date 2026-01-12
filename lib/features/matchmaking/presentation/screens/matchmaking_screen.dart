@@ -38,8 +38,10 @@ class _MatchmakingScreenState extends State<MatchmakingScreen>
   Timer? _waitTimer; // Restore this
   int _lobbyCreatedAt = 0; // Unix timestamp for lobby start
   int _secondsRemaining = 60; // Default count
+
   bool _hasShownTimeoutDialog = false;
   ConnectionStatus _connectionStatus = ConnectionStatus.disconnected;
+  bool _isManualPop = false; // Track if user manually pressed back
 
   @override
   void initState() {
@@ -87,6 +89,8 @@ class _MatchmakingScreenState extends State<MatchmakingScreen>
       handler.resetGameSession();
       if (mounted) {
         context.read<SessionBloc>().add(SessionHandlerSwapped(handler));
+      } else {
+        return; // Exit if unmounted after async
       }
 
       _handler = handler;
@@ -367,8 +371,8 @@ class _MatchmakingScreenState extends State<MatchmakingScreen>
   @override
   void dispose() {
     _waitTimer?.cancel();
-    // Only leave room if we haven't found a match yet (i.e., we are manually cancelling)
-    if (!_isMatchFound) {
+    // If we haven't found a match OR if we manually popped (aborting match found state)
+    if (!_isMatchFound || _isManualPop) {
       _handler?.leaveRoom('');
     }
     _controller.dispose();
@@ -386,26 +390,34 @@ class _MatchmakingScreenState extends State<MatchmakingScreen>
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: Colors.black,
-      body: Stack(
-        children: [
-          _buildBackground(),
-          SafeArea(
-            child: Column(
-              children: [
-                _buildHeader(),
-                if (_connectionStatus != ConnectionStatus.connected)
-                  _buildConnectionBanner(), // New Banner
-                const SizedBox(height: 24),
-                _buildStatusInfo(),
-                const SizedBox(height: 32),
-                SizedBox(height: 140, child: _buildAnimatedCards()),
-                const SizedBox(height: 32),
-                Expanded(child: _buildParticipantsList()),
-                const SizedBox(height: 32),
-              ],
+      body: PopScope(
+        canPop: true,
+        onPopInvokedWithResult: (didPop, result) {
+          if (didPop) {
+            _isManualPop = true;
+          }
+        },
+        child: Stack(
+          children: [
+            _buildBackground(),
+            SafeArea(
+              child: Column(
+                children: [
+                  _buildHeader(),
+                  if (_connectionStatus != ConnectionStatus.connected)
+                    _buildConnectionBanner(), // New Banner
+                  const SizedBox(height: 24),
+                  _buildStatusInfo(),
+                  const SizedBox(height: 32),
+                  SizedBox(height: 140, child: _buildAnimatedCards()),
+                  const SizedBox(height: 32),
+                  Expanded(child: _buildParticipantsList()),
+                  const SizedBox(height: 32),
+                ],
+              ),
             ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }
@@ -569,7 +581,7 @@ class _MatchmakingScreenState extends State<MatchmakingScreen>
       mainAxisSpacing: 12,
       crossAxisSpacing: 12,
       padding: const EdgeInsets.symmetric(horizontal: 24),
-      childAspectRatio: 0.75,
+      childAspectRatio: 0.70, // Adjusted from 0.75 to prevent overflow
       children: slots,
     );
   }

@@ -4,6 +4,7 @@ import '../../../../core/engine/engine.dart' as engine;
 import 'session_event.dart';
 import 'session_state.dart';
 import '../../../../core/di/service_locator.dart' as di;
+import '../../../../core/engine/data/handlers/websocket_session_handler.dart';
 
 class SessionBloc extends Bloc<SessionEvent, SessionBlocState> {
   engine.GameSessionHandler _handler;
@@ -256,7 +257,11 @@ class SessionBloc extends Bloc<SessionEvent, SessionBlocState> {
     _stateSub?.cancel();
     _eventSub?.cancel();
     _chatSub?.cancel();
-    _handler.dispose();
+
+    // Only dispose if it's NOT the singleton WebSocket handler
+    if (_handler is! WebSocketSessionHandler) {
+      _handler.dispose();
+    }
 
     // 2. Set new handler
     _handler = event.newHandler;
@@ -294,7 +299,13 @@ class SessionBloc extends Bloc<SessionEvent, SessionBlocState> {
     _eventSub?.cancel();
     _chatSub?.cancel();
     _errorSub?.cancel();
-    _handler.dispose();
+    _eventSub?.cancel();
+    _chatSub?.cancel();
+    _errorSub?.cancel();
+    // Only dispose if it's NOT the singleton WebSocket handler
+    if (_handler is! WebSocketSessionHandler) {
+      _handler.dispose();
+    }
     return super.close();
   }
 

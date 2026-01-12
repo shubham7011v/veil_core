@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
+	"math/rand"
 	"sync"
 	"time"
 
@@ -831,9 +832,19 @@ func (r *Room) ForceBroadcastState() {
 }
 
 func (r *Room) addBots(count int) {
+	botNames := []string{
+		"Shubham", "Julie", "Shivam", "Sandhya", "Sabhya",
+		"Sanchit", "Satyam", "Sarvottam", "Dipesh", "Divyam",
+		"Rashmi", "Gaurav", "Saurav", "Nitish", "Nishu",
+		"Aarush", "Arman", "Riya", "Angel", "Mushkan",
+	}
+
 	for i := 0; i < count; i++ {
 		botID := fmt.Sprintf("bot_%d_%d", time.Now().UnixNano(), i)
-		botName := fmt.Sprintf("Bot %d", i+1)
+		// Pick random name
+		nameIdx := rand.Intn(len(botNames))
+		botName := botNames[nameIdx]
+
 		// Random avatar if you like, or default
 		if err := r.game.AddPlayer(botID, botName, ""); err != nil {
 			log.Printf("Failed to add bot: %v", err)
