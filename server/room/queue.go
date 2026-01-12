@@ -46,40 +46,35 @@ func (q *MatchmakingQueue) Remove(c *Client) {
 }
 
 // Tick checks for matches or timeouts.
-// Returns a list of Clients to be matched into a room, or nil.
-// If hasBot is true, the last client in the returned list is a Bot that needs to be created.
 func (q *MatchmakingQueue) Tick() (clients []*Client, matchType string) {
 	if len(q.items) == 0 {
 		return nil, ""
 	}
 
-	// 1. Check Head Timeout
-	head := q.items[0]
-	if time.Since(head.EntryTime) < 10*time.Second {
-		// Wait for more players to accumulate
-		return nil, ""
-	}
-
-	// 2. Timeout Reached
-	// Gather all clients currently in queue (Limit to 5)
-	matchClients := make([]*Client, 0)
-	limit := 5
-	if len(q.items) < limit {
-		limit = len(q.items)
-	}
-
-	for i := 0; i < limit; i++ {
-		matchClients = append(matchClients, q.items[i].Client)
-	}
-	q.items = q.items[limit:]
-
-	if len(matchClients) >= 2 {
-		log.Printf("Queue: Matched %d humans after timeout.", len(matchClients))
+	// 1. Check for immediate full match (5 players)
+	if len(q.items) >= 5 {
+		matchClients := make([]*Client, 0)
+		for i := 0; i < 5; i++ {
+			matchClients = append(matchClients, q.items[i].Client)
+		}
+		q.items = q.items[5:]
 		return matchClients, "MATCH"
 	}
 
-	// Single player timeout -> Request Bots
-	log.Printf("Queue: Timeout for single player %s, requesting Bot.", matchClients[0].ID)
-	return matchClients, "BOT"
+	// 2. Check Head Timeout (10 seconds)
+	head := q.items[0]
+	if time.Since(head.EntryTime) < 10*time.Second {
+		return nil, ""
+	}
 
+	// 3. Timeout Reached
+	// Gather all clients currently in queue
+	matchClients := make([]*Client, 0)
+	for _, item := range q.items {
+		matchClients = append(matchClients, item.Client)
+	}
+	q.items = nil // Clear queue
+
+	log.Printf("Queue: Timeout reached. Starting match with %d players.", len(matchClients))
+	return matchClients, "MATCH"
 }

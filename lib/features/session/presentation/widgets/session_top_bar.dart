@@ -208,7 +208,7 @@ class SessionTopBar extends StatelessWidget {
     return StreamBuilder<int>(
       stream: Stream.periodic(const Duration(seconds: 1), (i) => i),
       builder: (context, snapshot) {
-        final now = DateTime.now().millisecondsSinceEpoch ~/ 1000;
+        final now = DateTime.now().toUtc().millisecondsSinceEpoch ~/ 1000;
         final elapsed = now - state.engineState.turnStartTime!;
         final remaining = (25 - elapsed).clamp(0, 25);
 

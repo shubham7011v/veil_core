@@ -88,23 +88,21 @@ func (m *Manager) Run() {
 			// Process Matchmaking Queue safely in this thread
 			// Use a loop to clear the entire queue in one go if multiple people are waiting
 			for {
-				clients, matchType := m.Queue.Tick()
+				clients, _ := m.Queue.Tick()
 				if clients == nil {
 					break
 				}
 
-				if matchType == "BOT" && config.GetFeatureFlags().EnableBotPlayers {
-					// Only spawn Bots if specifically requested (single player timeout)
-					targetCount := 5
-					currentCount := len(clients)
-
-					if currentCount < targetCount {
-						for i := 0; i < targetCount-currentCount; i++ {
-							bot := NewBot(m)
-							clients = append(clients, bot.Client)
-						}
-						log.Printf("Spawning %d Bots to fill single-player timeout match", targetCount-currentCount)
+				// If only 1 human, add bots to reach a minimum of 2 players
+				// If 2+ humans, don't fill remaining slots (respecting user request)
+				minPlayers := 2
+				if len(clients) < minPlayers && config.GetFeatureFlags().EnableBotPlayers {
+					botsNeeded := minPlayers - len(clients)
+					for i := 0; i < botsNeeded; i++ {
+						bot := NewBot(m)
+						clients = append(clients, bot.Client)
 					}
+					log.Printf("Spawning %d Bots to reach minimum player count (2)", botsNeeded)
 				}
 
 				m.createMatchRoom(clients)

@@ -161,7 +161,7 @@ class _MatchmakingScreenState extends State<MatchmakingScreen>
 
     _countdownTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
       if (mounted) {
-        final now = DateTime.now().millisecondsSinceEpoch ~/ 1000;
+        final now = DateTime.now().toUtc().millisecondsSinceEpoch ~/ 1000;
         final remaining = startTimeUnix - now;
 
         if (remaining <= 0) {
@@ -315,24 +315,29 @@ class _MatchmakingScreenState extends State<MatchmakingScreen>
     const int maxPlayers = 5;
     final List<Widget> slots = [];
 
-    // Filter out self - only show other players
-    final others = _participants.where((p) => !p.isMe).toList();
+    // Sort participants to show 'me' first if available
+    final List<Participant> sortedParticipants = List.from(_participants);
+    sortedParticipants.sort((a, b) {
+      if (a.isMe) return -1;
+      if (b.isMe) return 1;
+      return 0;
+    });
 
-    // Add actual participants (excluding self)
-    for (int i = 0; i < others.length; i++) {
+    // Add actual participants
+    for (int i = 0; i < sortedParticipants.length; i++) {
       slots.add(
         AnimatedOpacity(
           opacity: 1.0,
           duration: const Duration(milliseconds: 500),
-          child: _buildParticipantCard(others[i]),
+          child: _buildParticipantCard(sortedParticipants[i]),
         ),
       );
     }
 
-    // Add empty slots for remaining spots (4 others max since you're player 5)
-    final remainingSlots = (maxPlayers - 1) - others.length;
+    // Add empty slots for remaining spots
+    final remainingSlots = maxPlayers - sortedParticipants.length;
     for (int i = 0; i < remainingSlots; i++) {
-      slots.add(_buildEmptySlot(others.length + i + 1));
+      slots.add(_buildEmptySlot(sortedParticipants.length + i + 1));
     }
 
     return GridView.count(
