@@ -181,10 +181,9 @@ func (r *Room) handleTurnTimeout() {
 	log.Printf("Turn timeout for player %s in room %s", activeID, r.ID)
 
 	// Auto-action based on phase
-	if r.game.Phase == game.PhaseThinking {
+	switch r.game.Phase {
+	case game.PhaseThinking, game.PhaseChallenging:
 		r.game.Pass(activeID)
-	} else if r.game.Phase == game.PhaseChallenging {
-		r.game.Pass(activeID) // Auto-pass challenge
 	}
 
 	r.broadcastState()
