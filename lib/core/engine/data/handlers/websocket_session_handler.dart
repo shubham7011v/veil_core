@@ -52,7 +52,8 @@ class WebSocketSessionHandler extends GameSessionHandler
 
   // Connection state
   ConnectionStatus _connectionStatus = ConnectionStatus.disconnected;
-  bool _isDisposed = false;
+  // bool _isDisposed was removed to support Singleton reuse.
+
   Timer? _reconnectTimer;
   int _reconnectAttempts = 0;
   static const _maxReconnectAttempts = 5;
@@ -71,7 +72,7 @@ class WebSocketSessionHandler extends GameSessionHandler
     _lastMessageTime = DateTime.now();
 
     _heartbeatTimer = Timer.periodic(_heartbeatInterval, (timer) {
-      if (_isDisposed) {
+      if (_connectionStatus == ConnectionStatus.disconnected) {
         timer.cancel();
         return;
       }
@@ -86,13 +87,14 @@ class WebSocketSessionHandler extends GameSessionHandler
       if (idleTime > _watchdogTimeout &&
           _connectionStatus == ConnectionStatus.connected) {
         debugPrint(
-          '⚠️ Watchdog: No server activity for ${idleTime.inSeconds}s. Reconnecting...',
+          '! Watchdog: No server activity for ${idleTime.inSeconds}s. Reconnecting...',
         );
         // Stop heartbeat BEFORE closing to prevent send-after-close errors
         timer.cancel();
         _heartbeatTimer = null;
         _updateConnectionStatus(ConnectionStatus.reconnecting);
         _channel?.sink.close(1006, 'Watchdog timeout');
+        _channel = null;
         // Reconnection will be handled by _channel.stream.onDone -> _handleConnectionFailure
       }
     });
@@ -186,12 +188,19 @@ class WebSocketSessionHandler extends GameSessionHandler
   }
 
   Future<void> _attemptAutoReconnect() async {
+    // Don't auto-reconnect if we are already connected or connecting
+    if (_connectionStatus == ConnectionStatus.connected ||
+        _connectionStatus == ConnectionStatus.connecting) {
+      debugPrint('⚠️ Auto-reconnect skipped: Already connected/connecting');
+      return;
+    }
+
     try {
       final user = sl.authRepository.currentUser;
       final token = await user?.getIdToken();
       final displayName = user?.displayName;
 
-      if (token != null && !_isDisposed && _lastUrl != null) {
+      if (token != null && _lastUrl != null) {
         debugPrint('🔄 Auto-reconnecting after app resume...');
         // Reset attempts to 0 for a fresh start on resume
         _reconnectAttempts = 0;
@@ -287,7 +296,6 @@ class WebSocketSessionHandler extends GameSessionHandler
     String firebaseToken, {
     String? displayName,
   }) async {
-    if (_isDisposed) return;
     if (_connectionStatus == ConnectionStatus.connecting) return;
 
     _updateConnectionStatus(
@@ -321,8 +329,7 @@ class WebSocketSessionHandler extends GameSessionHandler
     }
   }
 
-  void _setupMessageListener(String firebaseToken, {String? displayName}) {
-    // Send auth message
+  void _setupAuth(String firebaseToken, {String? displayName}) {
     final photoURL = sl.authRepository.currentUser?.photoURL;
     _send({
       'type': 'AUTH',
@@ -334,18 +341,21 @@ class WebSocketSessionHandler extends GameSessionHandler
         'version': '1.0.0',
         'fcmToken': _fcmToken,
       },
-    });
+    }, force: true);
+  }
+
+  void _setupMessageListener(String firebaseToken, {String? displayName}) {
+    // Send auth message
+    _setupAuth(firebaseToken, displayName: displayName);
 
     // Listen for messages
     _channel!.stream.listen(
       _handleMessage,
       onError: (error) {
-        if (_isDisposed) return;
         debugPrint('🚨 WebSocket Error: $error');
         _handleConnectionFailure(firebaseToken, displayName: displayName);
       },
       onDone: () {
-        if (_isDisposed) return;
         debugPrint('🚨 WebSocket connection closed.');
         if (_channel?.closeCode != null) {
           debugPrint('🚨 Close Code: ${_channel?.closeCode}');
@@ -363,7 +373,6 @@ class WebSocketSessionHandler extends GameSessionHandler
   }
 
   void _handleConnectionFailure(String firebaseToken, {String? displayName}) {
-    if (_isDisposed) return;
     // Stop heartbeat immediately to prevent send-after-close errors
     _heartbeatTimer?.cancel();
     _heartbeatTimer = null;
@@ -389,29 +398,26 @@ class WebSocketSessionHandler extends GameSessionHandler
     } else {
       debugPrint('Max reconnection attempts reached');
       _updateConnectionStatus(ConnectionStatus.failed);
-      if (!_isDisposed && !_eventController.isClosed) {
+      if (!_eventController.isClosed) {
         _eventController.add(SessionEventType.connectionFailed);
       }
     }
   }
 
   void _updateConnectionStatus(ConnectionStatus status) {
-    if (_isDisposed) return;
     _connectionStatus = status;
     if (!_connectionStatusController.isClosed) {
       _connectionStatusController.add(status);
     }
   }
 
-  void _send(Map<String, dynamic> message) {
+  void _send(Map<String, dynamic> message, {bool force = false}) {
     if (_channel != null &&
-        (_connectionStatus == ConnectionStatus.connected ||
-            _connectionStatus == ConnectionStatus.connecting ||
-            _connectionStatus == ConnectionStatus.reconnecting)) {
+        (force || _connectionStatus == ConnectionStatus.connected)) {
       try {
         _channel!.sink.add(jsonEncode(message));
       } catch (e) {
-        debugPrint('⚠️ Failed to send message: $e');
+        debugPrint('! Failed to send message: $e');
         // Channel is likely closed, trigger reconnection
         _heartbeatTimer?.cancel();
         _heartbeatTimer = null;
@@ -420,7 +426,6 @@ class WebSocketSessionHandler extends GameSessionHandler
   }
 
   void _handleMessage(dynamic data) {
-    if (_isDisposed) return;
     _lastMessageTime = DateTime.now(); // Reset watchdog
 
     try {
@@ -453,7 +458,7 @@ class WebSocketSessionHandler extends GameSessionHandler
                 authData['stats'] as Map<String, dynamic>,
               );
               _lastStats = stats; // Cache stats
-              if (!_isDisposed && !_statsController.isClosed) {
+              if (!_statsController.isClosed) {
                 _statsController.add(stats);
               }
               debugPrint(
@@ -483,7 +488,7 @@ class WebSocketSessionHandler extends GameSessionHandler
               msg['data'] as Map<String, dynamic>,
             );
             _lastStats = stats; // Cache stats
-            if (!_isDisposed && !_statsController.isClosed) {
+            if (!_statsController.isClosed) {
               _statsController.add(stats);
             }
             debugPrint('Stats updated: ${stats.wins} wins, ${stats.rank} rank');
@@ -495,7 +500,7 @@ class WebSocketSessionHandler extends GameSessionHandler
         case 'AUTH_FAIL':
           // Notify user via error stream
           debugPrint('Auth failed: ${msg['data']}');
-          if (!_isDisposed && !_errorController.isClosed) {
+          if (!_errorController.isClosed) {
             _errorController.add(
               AuthFailure(
                 msg['data']['message'] ?? 'Authentication failed',
@@ -517,7 +522,7 @@ class WebSocketSessionHandler extends GameSessionHandler
           final errorData = msg['data'] as Map<String, dynamic>;
           // Propagate server errors to the UI
           debugPrint('Server Error: ${errorData['message']}');
-          if (!_isDisposed && !_errorController.isClosed) {
+          if (!_errorController.isClosed) {
             _errorController.add(
               ServerFailure(
                 errorData['message'] ?? 'Unknown server error',
@@ -533,7 +538,7 @@ class WebSocketSessionHandler extends GameSessionHandler
             final leaderboard = data
                 .map((u) => UserStats.fromJson(u as Map<String, dynamic>))
                 .toList();
-            if (!_isDisposed && !_leaderboardController.isClosed) {
+            if (!_leaderboardController.isClosed) {
               _leaderboardController.add(leaderboard);
             }
           } catch (e) {
@@ -548,7 +553,7 @@ class WebSocketSessionHandler extends GameSessionHandler
                 .map((f) => FriendRecord.fromJson(f as Map<String, dynamic>))
                 .toList();
             _friends = friends; // Cache friends
-            if (!_isDisposed && !_friendsController.isClosed) {
+            if (!_friendsController.isClosed) {
               _friendsController.add(friends);
             }
           } catch (e) {
@@ -561,7 +566,7 @@ class WebSocketSessionHandler extends GameSessionHandler
             final evt = RoomCreated.fromJson(
               msg['data'] as Map<String, dynamic>,
             );
-            if (!_isDisposed && !_roomEventController.isClosed) {
+            if (!_roomEventController.isClosed) {
               _roomEventController.add(evt);
             }
           } catch (e) {
@@ -574,7 +579,7 @@ class WebSocketSessionHandler extends GameSessionHandler
             final evt = RoomJoined.fromJson(
               msg['data'] as Map<String, dynamic>,
             );
-            if (!_isDisposed && !_roomEventController.isClosed) {
+            if (!_roomEventController.isClosed) {
               _roomEventController.add(evt);
             }
           } catch (e) {
@@ -589,7 +594,7 @@ class WebSocketSessionHandler extends GameSessionHandler
               msg['data'] as Map<String, dynamic>,
               currentUserId: currentUserId,
             );
-            if (!_isDisposed && !_roomEventController.isClosed) {
+            if (!_roomEventController.isClosed) {
               _roomEventController.add(evt);
             }
           } catch (e) {
@@ -615,7 +620,7 @@ class WebSocketSessionHandler extends GameSessionHandler
             final challenges = data
                 .map((c) => DailyChallenge.fromJson(c as Map<String, dynamic>))
                 .toList();
-            if (!_isDisposed && !_challengesController.isClosed) {
+            if (!_challengesController.isClosed) {
               _challengesController.add(challenges);
             }
           } catch (e) {
@@ -626,7 +631,7 @@ class WebSocketSessionHandler extends GameSessionHandler
         case 'CHALLENGE_CLAIM_OK':
           try {
             final data = msg['data'] as Map<String, dynamic>;
-            if (!_isDisposed && !_challengeClaimResultController.isClosed) {
+            if (!_challengeClaimResultController.isClosed) {
               _challengeClaimResultController.add(data);
             }
             // Play a special reward sound
@@ -641,7 +646,7 @@ class WebSocketSessionHandler extends GameSessionHandler
             final data = msg['data'] as Map<String, dynamic>;
             // Add message type so UI knows it is chat
             data['type'] = 'chat';
-            if (!_isDisposed && !_chatController.isClosed) {
+            if (!_chatController.isClosed) {
               _chatController.add(data);
             }
           } catch (e) {
@@ -654,7 +659,7 @@ class WebSocketSessionHandler extends GameSessionHandler
             final data = msg['data'] as Map<String, dynamic>;
             // Add message type so UI knows it is emoji
             data['type'] = 'emoji';
-            if (!_isDisposed && !_chatController.isClosed) {
+            if (!_chatController.isClosed) {
               _chatController.add(data);
             }
 
@@ -820,7 +825,7 @@ class WebSocketSessionHandler extends GameSessionHandler
     );
 
     _currentState = newState;
-    if (!_isDisposed && !_stateController.isClosed) {
+    if (!_stateController.isClosed) {
       _stateController.add(newState);
     }
 
@@ -829,7 +834,7 @@ class WebSocketSessionHandler extends GameSessionHandler
     // NEW: Use lastEventId to deduplicate events (prevents multiple animations)
     final lastEventId = stateData['lastEventId'] as String?;
 
-    if (lastEvent != null && !_isDisposed && !_eventController.isClosed) {
+    if (lastEvent != null && !_eventController.isClosed) {
       // If server provides an ID, check if we already processed it
       if (lastEventId != null && lastEventId == _lastProcessedEventId) {
         // Duplicate event, ignore
@@ -865,7 +870,7 @@ class WebSocketSessionHandler extends GameSessionHandler
     // fallback for phase changes if lastEvent is missing
     if (lastEvent == null) {
       if (phase == SessionPhase.thinking) {
-        if (!_isDisposed && !_eventController.isClosed) {
+        if (!_eventController.isClosed) {
           _eventController.add(SessionEventType.turnChanged);
         }
       }
@@ -874,8 +879,6 @@ class WebSocketSessionHandler extends GameSessionHandler
 
   /// HYBRID SYSTEM: Handle lightweight action events from server
   void _handleGameAction(Map<String, dynamic> actionData) {
-    if (_isDisposed) return;
-
     try {
       final action = actionData['action'] as String?;
       final data = actionData['data'] as Map<String, dynamic>? ?? {};
@@ -902,7 +905,7 @@ class WebSocketSessionHandler extends GameSessionHandler
           );
 
           // Emit state update
-          if (!_isDisposed && !_stateController.isClosed) {
+          if (!_stateController.isClosed) {
             _stateController.add(_currentState);
           }
 
@@ -910,7 +913,7 @@ class WebSocketSessionHandler extends GameSessionHandler
           _activeEventActorId = playerId == myId ? 'me' : playerId;
           _lastCountClaimed = count;
 
-          if (!_isDisposed && !_eventController.isClosed) {
+          if (!_eventController.isClosed) {
             _eventController.add(SessionEventType.cardsPlayed);
           }
           break;
@@ -923,7 +926,7 @@ class WebSocketSessionHandler extends GameSessionHandler
             activeParticipantId: nextPlayerId == myId ? 'me' : nextPlayerId,
           );
 
-          if (!_isDisposed && !_stateController.isClosed) {
+          if (!_stateController.isClosed) {
             _stateController.add(_currentState);
           }
 
@@ -931,7 +934,7 @@ class WebSocketSessionHandler extends GameSessionHandler
           final playerId = data['playerId'] as String?;
           _activeEventActorId = playerId == myId ? 'me' : playerId;
 
-          if (!_isDisposed && !_eventController.isClosed) {
+          if (!_eventController.isClosed) {
             _eventController.add(SessionEventType.passed);
           }
           break;
@@ -1005,7 +1008,7 @@ class WebSocketSessionHandler extends GameSessionHandler
 
     final newState = _currentState.copyWith(myHand: sortedHand);
     _currentState = newState;
-    if (!_isDisposed && !_stateController.isClosed) {
+    if (!_stateController.isClosed) {
       _stateController.add(newState);
     }
   }
@@ -1019,7 +1022,7 @@ class WebSocketSessionHandler extends GameSessionHandler
 
     final newState = _currentState.copyWith(myHand: hand);
     _currentState = newState;
-    if (!_isDisposed && !_stateController.isClosed) {
+    if (!_stateController.isClosed) {
       _stateController.add(newState);
     }
   }
@@ -1147,43 +1150,42 @@ class WebSocketSessionHandler extends GameSessionHandler
 
   @override
   void resetGameSession() {
-    _currentState = SessionState.initial();
+    _friends = [];
+    _gameLog.clear();
     _activeEventActorId = null;
     _lastRankClaimed = null;
     _lastCountClaimed = 0;
-    _gameLog.clear();
     _lastBluffWinnerId = null;
     _lastBluffLoserId = null;
     _isBluffSuccessful = null;
     _lastMove = null;
     _isRevealingBluff = false;
     _pNames.clear();
+    _typingStatus.clear();
     _lastProcessedEventId = null;
 
-    // Add initial state to stream to clear UI
-    if (!_isDisposed && !_stateController.isClosed) {
+    // Reset state to Initial
+    _currentState = SessionState.initial();
+    if (!_stateController.isClosed) {
       _stateController.add(_currentState);
     }
   }
 
   @override
   Future<void> dispose() async {
-    if (_isDisposed) return;
-    _isDisposed = true;
+    // NOTE: For Singleton usage, we do NOT close StreamControllers.
+    // We only reset the connection state.
 
+    _heartbeatTimer?.cancel();
     _reconnectTimer?.cancel();
+
     await _channel?.sink.close();
-    await _connectionStatusController.close();
-    await _stateController.close();
-    await _eventController.close();
-    await _statsController.close();
-    await _leaderboardController.close();
-    await _friendsController.close();
-    await _roomEventController.close();
-    await _challengesController.close();
-    await _challengeClaimResultController.close();
-    await _chatController.close();
-    await _errorController.close();
+    _channel = null;
+
+    _updateConnectionStatus(ConnectionStatus.disconnected);
+
+    // Verify voice manager disposal, might need to be kept alive too?
+    // Usually voice depends on active session, so disposing it is fine.
     await _voiceManager?.dispose();
   }
 }

@@ -211,13 +211,18 @@ func (r *Room) handleTurnTimeout() {
 		r.game.Pass(activeID)
 	}
 
-	r.broadcastState()
+	r.broadcaster.BroadcastStateLocked()
 }
 
 func (r *Room) Run() {
 	ticker := time.NewTicker(200 * time.Millisecond)
 	tickCount := 0
 	defer func() {
+		if rec := recover(); rec != nil {
+			log.Printf("CRITICAL: Room %s panicked: %v", r.ID, rec)
+			// Optional: Try to restart or notify users of crash
+		}
+
 		// NOTIFY CLIENTS: Room is shutting down
 		msg := protocol.NewMessage(protocol.MsgTypeError, map[string]interface{}{
 			"code":    "ROOM_CLOSED",
@@ -305,9 +310,9 @@ func (r *Room) Run() {
 
 			// Broadcast Update
 			if r.isPrivate {
-				r.broadcastRoomInfo()
+				r.broadcaster.BroadcastRoomInfoLocked()
 			} else {
-				r.broadcaster.BroadcastState()
+				r.broadcaster.BroadcastStateLocked()
 			}
 			r.mu.Unlock()
 
@@ -341,9 +346,9 @@ func (r *Room) Run() {
 				}
 
 				if r.isPrivate {
-					r.broadcastRoomInfo()
+					r.broadcaster.BroadcastRoomInfoLocked()
 				} else {
-					r.broadcaster.BroadcastState()
+					r.broadcaster.BroadcastStateLocked()
 				}
 			}
 			r.mu.Unlock()
@@ -379,7 +384,7 @@ func (r *Room) Run() {
 			// Voice updates
 			if r.voice.Tick() {
 				r.webRTC.SetSpeaker(r.voice.CurrentSpeakerID)
-				r.broadcastVoiceState()
+				r.broadcaster.BroadcastVoiceStateLocked()
 			}
 
 			// Check Countdown Start
@@ -390,7 +395,7 @@ func (r *Room) Run() {
 						log.Printf("Failed to start game after countdown: %v", err)
 						r.game.Phase = game.PhaseLobby
 					}
-					r.broadcaster.BroadcastState()
+					r.broadcaster.BroadcastStateLocked()
 				}
 			}
 
@@ -411,7 +416,7 @@ func (r *Room) Run() {
 					log.Printf("Player %s grace period expired in room %s. Removing permanently.", pid, r.ID)
 					r.game.RemovePlayer(pid)
 					delete(r.disconnectTimes, pid)
-					r.broadcastRoomInfo()
+					r.broadcaster.BroadcastRoomInfoLocked()
 				}
 			}
 
@@ -419,7 +424,7 @@ func (r *Room) Run() {
 			if r.game.Phase != game.PhaseLobby && r.game.Phase != game.PhaseFinished {
 				if now.Sub(r.lastFullSync) >= 30*time.Second {
 					r.lastFullSync = now
-					r.broadcaster.BroadcastState() // Full state resync to prevent drift
+					r.broadcaster.BroadcastStateLocked() // Full state resync to prevent drift
 					log.Printf("Room %s: Periodic full state sync", r.ID)
 				}
 			}
@@ -463,7 +468,7 @@ func (r *Room) processAction(action GameAction) {
 			if err == nil {
 				// HYBRID: Send lightweight event instead of full state
 				p := r.game.PlayerMap[client.ID]
-				r.broadcaster.BroadcastAction("PLAY_CARDS", map[string]interface{}{
+				r.broadcaster.BroadcastActionLocked("PLAY_CARDS", map[string]interface{}{
 					"playerId":           client.ID,
 					"count":              len(payload.CardIDs),
 					"declaredRank":       payload.DeclaredRank,
@@ -481,10 +486,10 @@ func (r *Room) processAction(action GameAction) {
 			// Check if pile was discarded (all passed)
 			if r.game.LastEvent == "pileDiscarded" {
 				// Send full state for round reset
-				r.broadcaster.BroadcastState()
+				r.broadcaster.BroadcastStateLocked()
 			} else {
 				// HYBRID: Send lightweight pass event
-				r.broadcaster.BroadcastAction("PASS", map[string]interface{}{
+				r.broadcaster.BroadcastActionLocked("PASS", map[string]interface{}{
 					"playerId":     client.ID,
 					"nextPlayerId": r.game.ActivePlayerID(),
 				})
@@ -496,7 +501,7 @@ func (r *Room) processAction(action GameAction) {
 		_, err = r.game.Challenge(client.ID)
 		if err == nil {
 			// Broadcast the "Revealing" state immediately
-			r.broadcaster.BroadcastState()
+			r.broadcaster.BroadcastStateLocked()
 
 			// Schedule resolution after 2 seconds (animation time)
 			time.AfterFunc(2*time.Second, func() {
@@ -508,7 +513,7 @@ func (r *Room) processAction(action GameAction) {
 				log.Printf("Challenge Resolved in Room %s: %s", r.ID, msg)
 
 				// Broadcast the final result state
-				r.broadcaster.BroadcastState()
+				r.broadcaster.BroadcastStateLocked()
 			})
 			return // skip r.broadcastState() below to avoid double call
 		}
@@ -538,7 +543,7 @@ func (r *Room) processAction(action GameAction) {
 			} else {
 				r.voice.RequestMic(client.ID)
 			}
-			r.broadcastVoiceState()
+			r.broadcaster.BroadcastVoiceStateLocked()
 
 		case protocol.MsgTypeVoiceSDP:
 			var offer webrtc.SessionDescription
@@ -664,7 +669,7 @@ func (r *Room) processAction(action GameAction) {
 			}(matchID, playerIDs, winnerID, potAmount)
 
 			// 3. Broadcast Updated Stats
-			r.broadcastStats()
+			r.broadcaster.BroadcastStatsLocked()
 		}
 	}
 }
@@ -698,179 +703,7 @@ func (r *Room) sendErrorToClient(client *Client, code, message string) {
 	}
 }
 
-// HYBRID APPROACH: Lightweight event broadcasting
-// Sends ~150 bytes instead of ~1200 bytes for most actions
-func (r *Room) broadcastAction(action string, data map[string]interface{}) {
-	// Generate monotonic sequence number (thread-safe due to room.mu lock)
-	r.eventSequence++
-
-	msg := protocol.NewMessage(protocol.MsgTypeGameAction, map[string]interface{}{
-		"action":    action,
-		"data":      data,
-		"timestamp": time.Now().Unix(),
-		"sequence":  r.eventSequence, // Prevents race condition
-	})
-	bytes, _ := json.Marshal(msg)
-	r.broadcast <- bytes
-}
-
-func (r *Room) broadcastStats() {
-	// 1. Get client snapshot and release lock quickly
-	r.mu.RLock()
-	var clients []*Client
-	for c := range r.clients {
-		clients = append(clients, c)
-	}
-	r.mu.RUnlock()
-
-	// 2. Perform DB lookups and sends outside the room lock
-	for _, client := range clients {
-		go func(c *Client) {
-			stats, err := db.GetOrCreateUser(c.ID, "") // Name ignored on fetch
-			if err == nil {
-				msg := protocol.NewMessage("STATS_UPDATE", stats)
-				bytes, _ := json.Marshal(msg)
-				select {
-				case c.Send <- bytes:
-				default:
-				}
-			}
-		}(client)
-	}
-}
-
-func (r *Room) broadcastVoiceState() {
-	msg := protocol.NewMessage(protocol.MsgTypeVoiceState, r.voice)
-	bytes, _ := json.Marshal(msg)
-
-	for client := range r.clients {
-		select {
-		case client.Send <- bytes:
-		default:
-			log.Printf("Skip send voice to %s", client.ID)
-		}
-	}
-}
-
-func (r *Room) broadcastState() {
-	defer func() {
-		if err := recover(); err != nil {
-			log.Printf("Recovered from panic in BroadcastState: %v", err)
-		}
-	}()
-
-	// OPTIMIZATION: Build shared state once instead of per-client
-	sharedState := map[string]interface{}{
-		"phase":              r.game.Phase,
-		"startTime":          r.game.StartTime,
-		"participants":       r.game.Participants,
-		"pileCount":          r.game.PileCount,
-		"activePlayerId":     r.game.ActivePlayerID(),
-		"declaredRank":       r.game.DeclaredRank,
-		"lastEvent":          r.game.LastEvent,
-		"lastEventId":        r.game.LastEventID,
-		"lastEventActorId":   r.game.LastEventActorID,
-		"lastEventCardCount": r.game.LastEventCardCount,
-		"isBluffSuccessful":  r.game.IsBluffSuccessful,
-		"gameLog":            r.game.GameLog,
-		"createdAt":          r.CreationTime,
-	}
-
-	// Add lastMove if exists
-	if r.game.LastMove != nil {
-		sharedState["lastMove"] = map[string]interface{}{
-			"playerId":     r.game.LastMove.PlayerID,
-			"declaredRank": r.game.LastMove.DeclaredRank,
-		}
-	}
-
-	for client := range r.clients {
-		if client.IsSpectator {
-			// Spectators get shared state + empty hand
-			view := make(map[string]interface{})
-			for k, v := range sharedState {
-				view[k] = v
-			}
-			view["myHand"] = []interface{}{}
-			view["isSpectator"] = true
-
-			msg := protocol.NewMessage(protocol.MsgTypeGameState, view)
-			bytes, _ := json.Marshal(msg)
-			select {
-			case client.Send <- bytes:
-			default:
-			}
-			continue
-		}
-
-		p := r.game.PlayerMap[client.ID]
-		if p == nil {
-			continue
-		}
-
-		r.game.SyncParticipants(client.ID) // Generate personalized view with masked IDs
-
-		// Clone shared state and add personal data
-		view := make(map[string]interface{})
-		for k, v := range sharedState {
-			view[k] = v
-		}
-		view["myHand"] = p.Hand
-
-		msg := protocol.NewMessage(protocol.MsgTypeGameState, view)
-		bytes, _ := json.Marshal(msg)
-
-		select {
-		case client.Send <- bytes:
-		default:
-			log.Printf("Skip send to %s (buffer full/closed)", client.ID)
-		}
-	}
-}
-
-func (r *Room) broadcastRoomInfo() {
-	// Build participants list
-	var participants []map[string]interface{}
-	for client := range r.clients {
-		p := map[string]interface{}{
-			"id":       client.ID,
-			"name":     "Player " + client.ID,
-			"isActive": true,
-		}
-		if r.game.PlayerMap[client.ID] != nil {
-			p["name"] = r.game.PlayerMap[client.ID].Name
-		}
-		participants = append(participants, p)
-	}
-
-	roomInfo := map[string]interface{}{
-		"roomCode":      r.code,
-		"roomName":      r.name,
-		"hostId":        r.hostID,
-		"maxPlayers":    r.maxPlayers,
-		"bootAmount":    r.bootAmount,
-		"playerCount":   len(r.clients),
-		"createdAt":     r.CreationTime,
-		"participants":  participants,
-		"isGameStarted": r.game.Phase != game.PhaseLobby,
-	}
-
-	// OPTIMIZATION: Serialize once
-	msg := protocol.NewMessage(protocol.MsgTypeRoomUpdate, roomInfo)
-	bytes, _ := json.Marshal(msg)
-
-	// Broadcast to all clients
-	for client := range r.clients {
-		select {
-		case client.Send <- bytes:
-		default:
-		}
-	}
-}
-
 // ForceBroadcastState allows external triggers (e.g. from Manager) to safely broadcast state.
 func (r *Room) ForceBroadcastState() {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	r.broadcastState()
+	r.broadcaster.BroadcastState()
 }

@@ -10,6 +10,7 @@ class LocalBotSessionHandler extends BaseAuthoritativeHandler {
   final Map<String, BotPersonality> _botPersonalities = {};
   int _botThinkingTimeS = 2;
   final _chatController = StreamController<Map<String, dynamic>>.broadcast();
+  String _currentSessionId = '';
 
   LocalBotSessionHandler({BotBrain? brain})
     : _brain = brain ?? DefaultBotBrain();
@@ -48,6 +49,7 @@ class LocalBotSessionHandler extends BaseAuthoritativeHandler {
 
   @override
   Future<void> startGame({int playerCount = 5, int thinkingTimeS = 10}) async {
+    _currentSessionId = DateTime.now().millisecondsSinceEpoch.toString();
     _botThinkingTimeS = thinkingTimeS;
     _botPersonalities.clear();
 
@@ -83,10 +85,14 @@ class LocalBotSessionHandler extends BaseAuthoritativeHandler {
   }
 
   void _scheduleBotTurn(String botId) async {
+    final sessionId = _currentSessionId;
     await Future.delayed(Duration(seconds: _botThinkingTimeS));
 
-    // Check if game ended or phase changed while waiting
-    if (currentState.activeParticipantId != botId) return;
+    // Check if game ended or session changed while waiting
+    if (_currentSessionId != sessionId ||
+        currentState.activeParticipantId != botId) {
+      return;
+    }
 
     final personality = _botPersonalities[botId] ?? BotPersonality.balanced;
     final botHand = getHand(botId);
@@ -111,6 +117,12 @@ class LocalBotSessionHandler extends BaseAuthoritativeHandler {
         raiseChallenge();
         break;
     }
+  }
+
+  @override
+  void resetGameSession() {
+    _currentSessionId = 'reset_${DateTime.now().millisecondsSinceEpoch}';
+    super.resetGameSession();
   }
 
   @override

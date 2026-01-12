@@ -31,7 +31,8 @@ class _MatchmakingScreenState extends State<MatchmakingScreen>
   StreamSubscription? _statsSubscription;
   StreamSubscription? _sessionStateSubscription;
   StreamSubscription? _connectionStatusSubscription;
-  StreamSubscription? _errorSubscription; // New error listener
+  StreamSubscription? _errorSubscription;
+  StreamSubscription? _roomEventSubscription;
   List<Participant> _participants = [];
   Timer? _countdownTimer;
   Timer? _timeoutTimer;
@@ -176,7 +177,7 @@ class _MatchmakingScreenState extends State<MatchmakingScreen>
         });
 
         // Room Event Listener (for createdAt sync)
-        handler.roomEventStream.listen((evt) {
+        _roomEventSubscription = handler.roomEventStream.listen((evt) {
           if (!mounted) return;
 
           int? newCreatedAt;
@@ -200,12 +201,20 @@ class _MatchmakingScreenState extends State<MatchmakingScreen>
             }
           }
 
-          if (newCreatedAt != null && _lobbyCreatedAt != newCreatedAt) {
-            setState(() {
-              _lobbyCreatedAt = newCreatedAt!;
-              _hasShownTimeoutDialog = false; // RESET FLAG FOR NEW LOBBY
-              _syncLobbyTimer();
-            });
+          if (newCreatedAt != null) {
+            // Normalize: If it's in milliseconds (> 2000000000), convert to seconds
+            // Threshold: 2 billion (Year 2033) is safe for current epoch seconds
+            final normalized = newCreatedAt > 2000000000
+                ? newCreatedAt ~/ 1000
+                : newCreatedAt;
+
+            if (_lobbyCreatedAt != normalized) {
+              setState(() {
+                _lobbyCreatedAt = normalized;
+                _hasShownTimeoutDialog = false;
+                _syncLobbyTimer();
+              });
+            }
           }
 
           // Optimistically add "Me" if list is empty upon joining
@@ -269,10 +278,11 @@ class _MatchmakingScreenState extends State<MatchmakingScreen>
 
       final now = DateTime.now().toUtc().millisecondsSinceEpoch ~/ 1000;
       final elapsed = now - _lobbyCreatedAt;
-      final remaining = 60 - elapsed;
+      int remaining = 60 - elapsed;
+      if (remaining < 0) remaining = 0;
 
       setState(() {
-        _secondsRemaining = remaining > 0 ? remaining : 0;
+        _secondsRemaining = remaining;
       });
 
       // Show Popup at 15 seconds remaining
@@ -381,6 +391,7 @@ class _MatchmakingScreenState extends State<MatchmakingScreen>
     _sessionStateSubscription?.cancel();
     _connectionStatusSubscription?.cancel();
     _errorSubscription?.cancel();
+    _roomEventSubscription?.cancel();
     _countdownTimer?.cancel();
     _timeoutTimer?.cancel();
     super.dispose();

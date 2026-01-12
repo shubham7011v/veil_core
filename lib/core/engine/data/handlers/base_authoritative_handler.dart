@@ -322,10 +322,11 @@ abstract class BaseAuthoritativeHandler implements GameSessionHandler {
 
   @override
   void dispose() {
+    // NOTE: For handler reuse, we do NOT close the StreamControllers here.
+    // Instead, we stop timers and reset internal state.
     stopTurnTimer();
-    _disposed = true;
-    _stateController.close();
-    _eventController.close();
+    resetGameSession();
+    _disposed = true; // This flag can be used to indicate 'dormant' state
   }
 
   // --- Protected Methods for Subclasses ---

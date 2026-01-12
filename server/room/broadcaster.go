@@ -25,9 +25,9 @@ func NewBroadcaster(r *Room) *Broadcaster {
 	}
 }
 
-// BroadcastAction sends a lightweight action event to all clients
-// HYBRID APPROACH: Sends ~150 bytes instead of ~1200 bytes for most actions
-func (b *Broadcaster) BroadcastAction(action string, data map[string]interface{}) {
+// BroadcastActionLocked sends a lightweight action event to all clients
+// Caller must hold room.mu
+func (b *Broadcaster) BroadcastActionLocked(action string, data map[string]interface{}) {
 	// Generate monotonic sequence number (thread-safe due to room.mu lock)
 	b.room.eventSequence++
 
@@ -35,7 +35,7 @@ func (b *Broadcaster) BroadcastAction(action string, data map[string]interface{}
 		"action":    action,
 		"data":      data,
 		"timestamp": time.Now().Unix(),
-		"sequence":  b.room.eventSequence, // Prevents race condition
+		"sequence":  b.room.eventSequence,
 	})
 	bytes, _ := json.Marshal(msg)
 	b.room.broadcast <- bytes
@@ -43,37 +43,48 @@ func (b *Broadcaster) BroadcastAction(action string, data map[string]interface{}
 
 // BroadcastStats sends updated player statistics to all clients
 func (b *Broadcaster) BroadcastStats() {
-	// 1. Get client snapshot and release lock quickly
 	b.mu.RLock()
+	defer b.mu.RUnlock()
+	b.BroadcastStatsLocked()
+}
+
+// BroadcastStatsLocked sends updated player statistics to all clients
+// Caller must hold room.mu
+func (b *Broadcaster) BroadcastStatsLocked() {
 	var clients []*Client
 	for c := range b.room.clients {
 		clients = append(clients, c)
 	}
-	b.mu.RUnlock()
 
-	// 2. Perform DB lookups and sends outside the room lock
-	for _, client := range clients {
-		go func(c *Client) {
-			stats, err := db.GetOrCreateUser(c.ID, "") // Name ignored on fetch
+	// Perform DB lookups and sends in goroutine to avoid blocking
+	// Note: We copy clients slice so we don't need lock during iteration
+	go func(clients []*Client) {
+		for _, client := range clients {
+			stats, err := db.GetOrCreateUser(client.ID, "") // Name ignored on fetch
 			if err == nil {
 				msg := protocol.NewMessage("STATS_UPDATE", stats)
 				bytes, _ := json.Marshal(msg)
 				select {
-				case c.Send <- bytes:
+				case client.Send <- bytes:
 				default:
 				}
 			}
-		}(client)
-	}
+		}
+	}(clients)
 }
 
 // BroadcastVoiceState sends current voice chat state to all clients
 func (b *Broadcaster) BroadcastVoiceState() {
-	msg := protocol.NewMessage(protocol.MsgTypeVoiceState, b.room.voice)
-	bytes, _ := json.Marshal(msg)
-
 	b.mu.RLock()
 	defer b.mu.RUnlock()
+	b.BroadcastVoiceStateLocked()
+}
+
+// BroadcastVoiceStateLocked sends current voice chat state to all clients
+// Caller must hold room.mu
+func (b *Broadcaster) BroadcastVoiceStateLocked() {
+	msg := protocol.NewMessage(protocol.MsgTypeVoiceState, b.room.voice)
+	bytes, _ := json.Marshal(msg)
 
 	for client := range b.room.clients {
 		select {
@@ -86,14 +97,19 @@ func (b *Broadcaster) BroadcastVoiceState() {
 
 // BroadcastState sends the complete game state to all clients
 func (b *Broadcaster) BroadcastState() {
+	b.mu.RLock()
+	defer b.mu.RUnlock()
+	b.BroadcastStateLocked()
+}
+
+// BroadcastStateLocked sends the complete game state to all clients
+// Caller must hold room.mu
+func (b *Broadcaster) BroadcastStateLocked() {
 	defer func() {
 		if err := recover(); err != nil {
 			log.Printf("Recovered from panic in BroadcastState: %v", err)
 		}
 	}()
-
-	b.mu.RLock()
-	defer b.mu.RUnlock()
 
 	// OPTIMIZATION: Build shared state once instead of per-client
 	sharedState := map[string]interface{}{
@@ -166,7 +182,12 @@ func (b *Broadcaster) BroadcastState() {
 func (b *Broadcaster) BroadcastRoomInfo() {
 	b.mu.RLock()
 	defer b.mu.RUnlock()
+	b.BroadcastRoomInfoLocked()
+}
 
+// BroadcastRoomInfoLocked sends private room information to all clients
+// Caller must hold room.mu
+func (b *Broadcaster) BroadcastRoomInfoLocked() {
 	info := map[string]interface{}{
 		"roomCode":     b.room.code,
 		"roomName":     b.room.name,

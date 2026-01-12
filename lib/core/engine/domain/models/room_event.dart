@@ -94,11 +94,13 @@ class RoomUpdated extends RoomEvent {
     final participants = participantsList.map((p) {
       final pMap = p as Map<String, dynamic>;
       final pId = pMap['id'] as String;
+      final isMe = currentUserId != null && pId == currentUserId;
       return Participant(
-        id: pId,
+        id: isMe ? 'me' : pId,
         name: pMap['name'] as String,
+        avatarUrl: pMap['avatarUrl'] as String?,
         unitCount: pMap['cardCount'] as int? ?? 0,
-        isMe: currentUserId != null && pId == currentUserId,
+        isMe: isMe,
         isActive: pMap['isActive'] as bool? ?? false,
       );
     }).toList();
