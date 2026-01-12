@@ -44,6 +44,10 @@ type Manager struct {
 	ActiveLobbyStartTime time.Time
 
 	AuthClient *auth.Client
+
+	// Modular handlers (extracted for single-responsibility)
+	authHandler *AuthHandler
+	matchmaker  *Matchmaker
 }
 
 func NewManager(authClient *auth.Client) *Manager {
@@ -54,7 +58,9 @@ func NewManager(authClient *auth.Client) *Manager {
 		Rooms:      make(map[string]*Room),
 		AuthClient: authClient,
 	}
-	// No more Queue initialization
+	// Initialize modular handlers
+	m.authHandler = NewAuthHandler(m)
+	m.matchmaker = NewMatchmaker(m)
 	return m
 }
 
