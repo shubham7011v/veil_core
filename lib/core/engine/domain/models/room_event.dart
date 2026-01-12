@@ -13,12 +13,14 @@ class RoomCreated extends RoomEvent {
   final String roomId;
   final String roomName;
   final String hostId;
+  final int? createdAt;
 
   const RoomCreated({
     required this.roomCode,
     required this.roomId,
     required this.roomName,
     required this.hostId,
+    this.createdAt,
   });
 
   factory RoomCreated.fromJson(Map<String, dynamic> json) {
@@ -27,22 +29,25 @@ class RoomCreated extends RoomEvent {
       roomId: json['roomId'] as String,
       roomName: json['roomName'] as String,
       hostId: json['hostId'] as String,
+      createdAt: json['createdAt'] as int?,
     );
   }
 
   @override
-  List<Object?> get props => [roomCode, roomId, roomName, hostId];
+  List<Object?> get props => [roomCode, roomId, roomName, hostId, createdAt];
 }
 
 class RoomJoined extends RoomEvent {
   final String roomCode;
   final String roomName;
   final String hostId;
+  final int? createdAt;
 
   const RoomJoined({
     required this.roomCode,
     required this.roomName,
     required this.hostId,
+    this.createdAt,
   });
 
   factory RoomJoined.fromJson(Map<String, dynamic> json) {
@@ -50,11 +55,12 @@ class RoomJoined extends RoomEvent {
       roomCode: json['roomCode'] as String,
       roomName: json['roomName'] as String,
       hostId: json['hostId'] as String,
+      createdAt: json['createdAt'] as int?,
     );
   }
 
   @override
-  List<Object?> get props => [roomCode, roomName, hostId];
+  List<Object?> get props => [roomCode, roomName, hostId, createdAt];
 }
 
 class RoomUpdated extends RoomEvent {

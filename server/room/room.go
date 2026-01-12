@@ -57,8 +57,9 @@ type GameAction struct {
 }
 
 func NewRoom(id string) *Room {
-	return &Room{
+	r := &Room{
 		ID:              id,
+		CreationTime:    time.Now().Unix(),
 		broadcast:       make(chan []byte, 32),
 		register:        make(chan *Client, 10),
 		unregister:      make(chan *Client, 10),
@@ -73,6 +74,7 @@ func NewRoom(id string) *Room {
 		gracePeriod:     30 * time.Second,
 		disconnectTimes: make(map[string]time.Time),
 	}
+	return r
 }
 
 func NewPrivateRoom(id, name, code, password, hostID string, maxPlayers int, bootAmount float64) *Room {
@@ -151,6 +153,7 @@ func (r *Room) GetInfo() map[string]interface{} {
 		"bootAmount":  r.bootAmount,
 		"playerCount": len(r.game.Participants),
 		"isPrivate":   r.isPrivate,
+		"createdAt":   r.CreationTime,
 	}
 }
 
@@ -697,6 +700,7 @@ func (r *Room) broadcastState() {
 				"lastEventCardCount": r.game.LastEventCardCount,
 				"isBluffSuccessful":  r.game.IsBluffSuccessful,
 				"gameLog":            r.game.GameLog,
+				"createdAt":          r.CreationTime,
 			}
 			// Add lastMove if exists
 			if r.game.LastMove != nil {
@@ -735,6 +739,7 @@ func (r *Room) broadcastState() {
 			"lastEventCardCount": r.game.LastEventCardCount,
 			"isBluffSuccessful":  r.game.IsBluffSuccessful,
 			"gameLog":            r.game.GameLog,
+			"createdAt":          r.CreationTime,
 		}
 		// Add lastMove if exists
 		if r.game.LastMove != nil {

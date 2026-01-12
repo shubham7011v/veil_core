@@ -488,10 +488,11 @@ func (m *Manager) createPrivateRoom(c *Client, data protocol.CreatePrivateRoomMe
 	log.Printf("Created Private Room %s (%s)", data.RoomName, code)
 
 	response := map[string]interface{}{
-		"roomCode": code,
-		"roomId":   roomID,
-		"roomName": data.RoomName,
-		"hostId":   c.ID,
+		"roomCode":  code,
+		"roomId":    roomID,
+		"roomName":  data.RoomName,
+		"hostId":    c.ID,
+		"createdAt": r.CreationTime,
 	}
 	bytes, _ := json.Marshal(protocol.NewMessage(protocol.MsgTypeRoomCreated, response))
 	c.Send <- bytes
@@ -528,9 +529,10 @@ func (m *Manager) joinPrivateRoom(c *Client, data protocol.JoinPrivateRoomMessag
 
 	info := r.GetInfo()
 	response := map[string]interface{}{
-		"roomCode": info["roomCode"],
-		"roomName": info["roomName"],
-		"hostId":   info["hostId"],
+		"roomCode":  info["roomCode"],
+		"roomName":  info["roomName"],
+		"hostId":    info["hostId"],
+		"createdAt": info["createdAt"],
 	}
 	bytes, _ := json.Marshal(protocol.NewMessage(protocol.MsgTypeRoomJoined, response))
 	c.Send <- bytes

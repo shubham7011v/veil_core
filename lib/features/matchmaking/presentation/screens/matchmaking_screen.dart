@@ -171,16 +171,23 @@ class _MatchmakingScreenState extends State<MatchmakingScreen>
 
         // Room Event Listener (for createdAt sync)
         handler.roomEventStream.listen((evt) {
-          if (mounted && evt is RoomUpdated) {
-            if (evt.createdAt != null) {
-              if (_lobbyCreatedAt != evt.createdAt) {
-                setState(() {
-                  _lobbyCreatedAt = evt.createdAt!;
-                  _hasShownTimeoutDialog = false; // RESET FLAG FOR NEW LOBBY
-                  _syncLobbyTimer();
-                });
-              }
-            }
+          if (!mounted) return;
+
+          int? newCreatedAt;
+          if (evt is RoomCreated) {
+            newCreatedAt = evt.createdAt;
+          } else if (evt is RoomJoined) {
+            newCreatedAt = evt.createdAt;
+          } else if (evt is RoomUpdated) {
+            newCreatedAt = evt.createdAt;
+          }
+
+          if (newCreatedAt != null && _lobbyCreatedAt != newCreatedAt) {
+            setState(() {
+              _lobbyCreatedAt = newCreatedAt!;
+              _hasShownTimeoutDialog = false; // RESET FLAG FOR NEW LOBBY
+              _syncLobbyTimer();
+            });
           }
         });
 
@@ -350,7 +357,10 @@ class _MatchmakingScreenState extends State<MatchmakingScreen>
   @override
   void dispose() {
     _waitTimer?.cancel();
-    _handler?.leaveRoom('');
+    // Only leave room if we haven't found a match yet (i.e., we are manually cancelling)
+    if (!_isMatchFound) {
+      _handler?.leaveRoom('');
+    }
     _controller.dispose();
     _pulseController.dispose();
     _statsSubscription?.cancel();
@@ -586,7 +596,7 @@ class _MatchmakingScreenState extends State<MatchmakingScreen>
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
           Container(
-            width: 60,
+            width: 100,
             height: 60,
             decoration: BoxDecoration(
               shape: BoxShape.circle,
@@ -677,7 +687,7 @@ class _MatchmakingScreenState extends State<MatchmakingScreen>
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
           Container(
-            width: 60,
+            width: 100,
             height: 60,
             decoration: BoxDecoration(
               shape: BoxShape.circle,
