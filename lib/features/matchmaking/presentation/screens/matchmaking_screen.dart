@@ -357,11 +357,11 @@ class _MatchmakingScreenState extends State<MatchmakingScreen>
     }
 
     return GridView.count(
-      crossAxisCount: 2,
-      mainAxisSpacing: 16,
-      crossAxisSpacing: 16,
+      crossAxisCount: 3,
+      mainAxisSpacing: 12,
+      crossAxisSpacing: 12,
       padding: const EdgeInsets.symmetric(horizontal: 24),
-      childAspectRatio: 0.85,
+      childAspectRatio: 0.75,
       children: slots,
     );
   }

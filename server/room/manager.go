@@ -40,6 +40,7 @@ type Manager struct {
 
 	// Active Lobby State
 	ActiveLobby          *Room
+	ActiveLobbyCount     int
 	ActiveLobbyStartTime time.Time
 
 	AuthClient *auth.Client
@@ -80,6 +81,16 @@ func (m *Manager) Run() {
 				// No need to remove from Queue.
 				// The client is always in a Room now (ActiveLobby or GameRoom).
 				if client.CurrentRoom != nil {
+					// If they are leaving the currently filling lobby, free up a slot
+					m.mu.Lock()
+					if m.ActiveLobby != nil && client.CurrentRoom == m.ActiveLobby {
+						m.ActiveLobbyCount--
+						if m.ActiveLobbyCount < 0 {
+							m.ActiveLobbyCount = 0
+						}
+					}
+					m.mu.Unlock()
+
 					client.CurrentRoom.Leave(client)
 				}
 				if !client.IsBot {
@@ -101,20 +112,23 @@ func (m *Manager) checkLobbyTimeout() {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
+	// Constants
+	const LobbyTimeout = 10 * time.Second
+	const TargetPlayers = 5
+
 	lobby := m.ActiveLobby
 	if lobby == nil {
 		return
 	}
 
 	// Check if lobby is still valid/open (sanity check)
-	if lobby.GetGamePhase() != "Lobby" || lobby.IsFull() {
+	// We use our synchronous count as the primary source of truth for "fullness"
+	// to avoid race conditions with the async room loop.
+	if lobby.GetGamePhase() != "Lobby" || m.ActiveLobbyCount >= TargetPlayers {
 		m.ActiveLobby = nil
+		m.ActiveLobbyCount = 0
 		return
 	}
-
-	// Constants
-	const LobbyTimeout = 10 * time.Second
-	const TargetPlayers = 5
 
 	if time.Since(m.ActiveLobbyStartTime) > LobbyTimeout {
 		// Timeout Reached! Fill with Bots.
@@ -125,12 +139,13 @@ func (m *Manager) checkLobbyTimeout() {
 			return
 		}
 
-		currentCount := lobby.GetClientCount()
-		botsNeeded := TargetPlayers - currentCount
+		// Use the synchronous count
+		botsNeeded := TargetPlayers - m.ActiveLobbyCount
 
 		// Don't spawn if full (should use IsFull check above, but double check)
 		if botsNeeded <= 0 {
 			m.ActiveLobby = nil
+			m.ActiveLobbyCount = 0
 			return // Should have auto-started
 		}
 
@@ -139,12 +154,13 @@ func (m *Manager) checkLobbyTimeout() {
 		// Spawn Bots
 		for i := 0; i < botsNeeded; i++ {
 			bot := NewBot(m)
-			bot.CurrentRoom = lobby
+			bot.Client.CurrentRoom = lobby
 			lobby.Join(bot.Client)
 		}
 
 		// Seal the lobby so no new humans join this bot-filled game
 		m.ActiveLobby = nil
+		m.ActiveLobbyCount = 0
 	}
 }
 
@@ -153,11 +169,20 @@ func (m *Manager) AttemptJoinActiveLobby(c *Client) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
+	const MaxPlayers = 5
+
 	// 1. Validate if we have a valid ActiveLobby
 	if m.ActiveLobby != nil {
-		// Check if it is actually full or started (dirty read protection)
-		if m.ActiveLobby.IsFull() || m.ActiveLobby.GetGamePhase() != "Lobby" {
+		// Check if it is actually full via our synchronous counter
+		if m.ActiveLobbyCount >= MaxPlayers {
 			m.ActiveLobby = nil
+			m.ActiveLobbyCount = 0
+		} else {
+			// Also check the room's actual state in case it started/closed via other means
+			if m.ActiveLobby.GetGamePhase() != "Lobby" {
+				m.ActiveLobby = nil
+				m.ActiveLobbyCount = 0
+			}
 		}
 	}
 
@@ -170,23 +195,24 @@ func (m *Manager) AttemptJoinActiveLobby(c *Client) {
 		go room.Run() // Start the room loop
 
 		m.ActiveLobby = room
+		m.ActiveLobbyCount = 0
 		m.ActiveLobbyStartTime = time.Now()
 		log.Printf("Created New Active Lobby: %s", roomID)
 	}
 
 	// 3. Join
+	// Increment sync counter immediately to reserve the slot
+	m.ActiveLobbyCount++
+
 	c.CurrentRoom = m.ActiveLobby
 	m.ActiveLobby.Join(c)
 
-	// 4. Check if we just filled it
-	// Note: We need a direct check here because the room loop runs async.
-	// But based on our "IsFull" logic which locks the room, we can check it.
-	// However, simplistically, we can just check if client count reached max.
-	// We'll leave it to the next joining attempt or ticker to clear 'ActiveLobby'
-	// if it became full, OR we can preemptively clear it if we know we hit 5.
-	// Let's rely on the check at step 1 for the next joiner, or the Ticker,
-	// unless we want to be super strict.
-	// Optimistic approach: Stick to step 1 check.
+	// Post-Validation: If we just hit max, we can optionally clear ActiveLobby now
+	// or let the next AttemptJoin clear it.
+	if m.ActiveLobbyCount >= MaxPlayers {
+		m.ActiveLobby = nil
+		m.ActiveLobbyCount = 0
+	}
 }
 
 // HandleMessage routes incoming messages from clients
