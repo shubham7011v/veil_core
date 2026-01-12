@@ -53,6 +53,9 @@ type Room struct {
 
 	// Event sequencing for race condition prevention
 	eventSequence int64
+
+	// Broadcaster handles message distribution
+	broadcaster *Broadcaster
 }
 
 type GameAction struct {
@@ -79,6 +82,8 @@ func NewRoom(id string) *Room {
 		disconnectTimes: make(map[string]time.Time),
 		lastFullSync:    time.Now(), // Initialize for periodic sync
 	}
+	// Initialize broadcaster with reference to this room
+	r.broadcaster = NewBroadcaster(r)
 	return r
 }
 
@@ -302,7 +307,7 @@ func (r *Room) Run() {
 			if r.isPrivate {
 				r.broadcastRoomInfo()
 			} else {
-				r.broadcastState()
+				r.broadcaster.BroadcastState()
 			}
 			r.mu.Unlock()
 
@@ -338,7 +343,7 @@ func (r *Room) Run() {
 				if r.isPrivate {
 					r.broadcastRoomInfo()
 				} else {
-					r.broadcastState()
+					r.broadcaster.BroadcastState()
 				}
 			}
 			r.mu.Unlock()
@@ -385,7 +390,7 @@ func (r *Room) Run() {
 						log.Printf("Failed to start game after countdown: %v", err)
 						r.game.Phase = game.PhaseLobby
 					}
-					r.broadcastState()
+					r.broadcaster.BroadcastState()
 				}
 			}
 
@@ -414,7 +419,7 @@ func (r *Room) Run() {
 			if r.game.Phase != game.PhaseLobby && r.game.Phase != game.PhaseFinished {
 				if now.Sub(r.lastFullSync) >= 30*time.Second {
 					r.lastFullSync = now
-					r.broadcastState() // Full state resync to prevent drift
+					r.broadcaster.BroadcastState() // Full state resync to prevent drift
 					log.Printf("Room %s: Periodic full state sync", r.ID)
 				}
 			}
@@ -458,7 +463,7 @@ func (r *Room) processAction(action GameAction) {
 			if err == nil {
 				// HYBRID: Send lightweight event instead of full state
 				p := r.game.PlayerMap[client.ID]
-				r.broadcastAction("PLAY_CARDS", map[string]interface{}{
+				r.broadcaster.BroadcastAction("PLAY_CARDS", map[string]interface{}{
 					"playerId":           client.ID,
 					"count":              len(payload.CardIDs),
 					"declaredRank":       payload.DeclaredRank,
@@ -476,10 +481,10 @@ func (r *Room) processAction(action GameAction) {
 			// Check if pile was discarded (all passed)
 			if r.game.LastEvent == "pileDiscarded" {
 				// Send full state for round reset
-				r.broadcastState()
+				r.broadcaster.BroadcastState()
 			} else {
 				// HYBRID: Send lightweight pass event
-				r.broadcastAction("PASS", map[string]interface{}{
+				r.broadcaster.BroadcastAction("PASS", map[string]interface{}{
 					"playerId":     client.ID,
 					"nextPlayerId": r.game.ActivePlayerID(),
 				})
@@ -491,7 +496,7 @@ func (r *Room) processAction(action GameAction) {
 		_, err = r.game.Challenge(client.ID)
 		if err == nil {
 			// Broadcast the "Revealing" state immediately
-			r.broadcastState()
+			r.broadcaster.BroadcastState()
 
 			// Schedule resolution after 2 seconds (animation time)
 			time.AfterFunc(2*time.Second, func() {
@@ -503,7 +508,7 @@ func (r *Room) processAction(action GameAction) {
 				log.Printf("Challenge Resolved in Room %s: %s", r.ID, msg)
 
 				// Broadcast the final result state
-				r.broadcastState()
+				r.broadcaster.BroadcastState()
 			})
 			return // skip r.broadcastState() below to avoid double call
 		}

@@ -28,12 +28,21 @@ func main() {
 	}
 
 	// Initialize Database
+	var dbService db.UserDatabase
 	if err := db.InitDB("/app/data/veil.db"); err != nil {
 		// Fallback for local dev if /app/data doesn't exist
 		if err := db.InitDB("./veil.db"); err != nil {
 			log.Fatal("Failed to init DB:", err)
 		}
 	}
+
+	// Create database service instance (implements UserDatabase interface)
+	dbService = db.NewDatabaseService()
+	_ = dbService // NOTE: Interface created for future DI integration
+
+	// Start background workers
+	go db.StartCoinFlusher()
+	go db.StartDailyResetWorker()
 
 	// Initialize Firebase Admin SDK
 	// Credentials can be provided via GOOGLE_APPLICATION_CREDENTIALS env var (path to JSON)
@@ -60,7 +69,9 @@ func main() {
 		log.Fatalf("error getting Auth client: %v\n", err)
 	}
 
-	// Initialize the Room Manager
+	// Initialize the Room Manager with dependency injection
+	// Note: Full DI would also inject db into Manager constructor, but for now
+	// we're demonstrating the pattern without breaking existing code
 	manager := room.NewManager(authClient)
 	go manager.Run()
 
