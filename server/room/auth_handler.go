@@ -43,6 +43,8 @@ func (ah *AuthHandler) HandleAuth(c *Client, authData protocol.AuthMessage) {
 			}
 		} else {
 			log.Printf("Token verify failed: %v", err)
+			ah.manager.sendError(c, "AUTH_FAILED", "Invalid authentication token")
+			return
 		}
 	}
 

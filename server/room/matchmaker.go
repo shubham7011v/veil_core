@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"veil_server/config"
+	"veil_server/db"
 )
 
 // Matchmaker handles lobby management and matchmaking operations
@@ -76,6 +77,14 @@ func (mm *Matchmaker) CheckLobbyTimeout() {
 
 // AttemptJoinActiveLobby handles robust locking to put a client in the current open room
 func (mm *Matchmaker) AttemptJoinActiveLobby(c *Client) {
+	// 1. Pre-Check: Validate coins BEFORE locking or assigning slot
+	// This prevents "Ghost Slots" where a user takes a slot but is later rejected by the room.
+	stats, err := db.GetOrCreateUser(c.ID, "")
+	if err != nil || stats.Coins < 100 {
+		mm.manager.sendError(c, "INSUFFICIENT_FUNDS", "You need 100 coins to play online")
+		return
+	}
+
 	mm.manager.mu.Lock()
 	defer mm.manager.mu.Unlock()
 
