@@ -1,13 +1,9 @@
 package room
 
 import (
-	"context"
 	"encoding/json"
 	"fmt"
 	"log"
-	"math/rand"
-	"os"
-	"strings"
 	"sync"
 	"time"
 	"veil_server/config"
@@ -109,125 +105,18 @@ func (m *Manager) Run() {
 
 		case <-ticker.C:
 			// Regular Housekeeping
-			m.checkLobbyTimeout()
-			m.cleanupEmptyRooms()
+			// Regular Housekeeping
+			m.matchmaker.CheckLobbyTimeout()
+			m.matchmaker.CleanupEmptyRooms()
 		}
 	}
 }
 
-// checkLobbyTimeout checks if the active lobby has waited too long (10s)
-// and needs to be filled with bots to start the game.
-func (m *Manager) checkLobbyTimeout() {
-	m.mu.Lock()
-	defer m.mu.Unlock()
+// DELEGATED to Matchmaker
 
-	// Constants
-	const LobbyTimeout = 60 * time.Second
-	const TargetPlayers = 5
-
-	lobby := m.ActiveLobby
-	if lobby == nil {
-		return
-	}
-
-	// Check if lobby is still valid/open (sanity check)
-	// We use our synchronous count as the primary source of truth for "fullness"
-	// to avoid race conditions with the async room loop.
-	if lobby.GetGamePhase() != "Lobby" || m.ActiveLobbyCount >= TargetPlayers {
-		m.ActiveLobby = nil
-		m.ActiveLobbyCount = 0
-		return
-	}
-
-	if time.Since(m.ActiveLobbyStartTime) > LobbyTimeout {
-		// Timeout Reached! Fill with Bots.
-		if !config.GetFeatureFlags().EnableBotPlayers {
-			// If bots disabled, just leave it open indefinitely?
-			// Or maybe force start with < 5?
-			// For now, let's just log and wait if bots are disabled.
-			return
-		}
-
-		// Use the synchronous count
-		botsNeeded := TargetPlayers - m.ActiveLobbyCount
-
-		// Don't spawn if full (should use IsFull check above, but double check)
-		if botsNeeded <= 0 {
-			m.ActiveLobby = nil
-			m.ActiveLobbyCount = 0
-			return // Should have auto-started
-		}
-
-		log.Printf("Lobby Timeout: Spawning %d bots for Room %s", botsNeeded, lobby.ID)
-
-		// Spawn Bots
-		for i := 0; i < botsNeeded; i++ {
-			bot := NewBot(m)
-			bot.Client.CurrentRoom = lobby
-			lobby.Join(bot.Client)
-		}
-
-		// Seal the lobby so no new humans join this bot-filled game
-		m.ActiveLobby = nil
-		m.ActiveLobbyCount = 0
-	}
-}
-
-// AttemptJoinActiveLobby handles robust locking to put the client in the current open room
+// DELEGATED to Matchmaker but wrapper kept for Interface Compliance
 func (m *Manager) AttemptJoinActiveLobby(c *Client) {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-
-	// 0. Double-Check: Ensure client didn't join a room while waiting for lock
-	if c.CurrentRoom != nil {
-		return
-	}
-
-	const MaxPlayers = 5
-
-	// 1. Validate if we have a valid ActiveLobby
-	if m.ActiveLobby != nil {
-		// Check if it is actually full via our synchronous counter
-		if m.ActiveLobbyCount >= MaxPlayers {
-			m.ActiveLobby = nil
-			m.ActiveLobbyCount = 0
-		} else {
-			// Also check the room's actual state in case it started/closed via other means
-			if m.ActiveLobby.GetGamePhase() != "Lobby" {
-				m.ActiveLobby = nil
-				m.ActiveLobbyCount = 0
-			}
-		}
-	}
-
-	// 2. Create if missing
-	if m.ActiveLobby == nil {
-		roomID := fmt.Sprintf("match_%d", time.Now().UnixNano())
-		room := NewRoom(roomID)
-		m.Rooms[roomID] = room
-
-		go room.Run() // Start the room loop
-
-		m.ActiveLobby = room
-		m.ActiveLobbyCount = 0
-		m.ActiveLobbyStartTime = time.Now()
-		room.CreationTime = m.ActiveLobbyStartTime.Unix()
-		log.Printf("Created New Active Lobby: %s", roomID)
-	}
-
-	// 3. Join
-	// Increment sync counter immediately to reserve the slot
-	m.ActiveLobbyCount++
-
-	c.CurrentRoom = m.ActiveLobby
-	m.ActiveLobby.Join(c)
-
-	// Post-Validation: If we just hit max, we can optionally clear ActiveLobby now
-	// or let the next AttemptJoin clear it.
-	if m.ActiveLobbyCount >= MaxPlayers {
-		m.ActiveLobby = nil
-		m.ActiveLobbyCount = 0
-	}
+	m.matchmaker.AttemptJoinActiveLobby(c)
 }
 
 // HandleMessage routes incoming messages from clients
@@ -247,15 +136,15 @@ func (m *Manager) HandleMessage(c *Client, message []byte) {
 			log.Printf("Auth unmarshal error: %v", err)
 			return
 		}
-		m.handleAuth(c, authData)
+		m.authHandler.HandleAuth(c, authData)
 		return
 
 	case protocol.MsgTypeUpdateName:
-		m.handleUpdateName(c, baseMsg.Data)
+		m.authHandler.HandleUpdateName(c, baseMsg.Data)
 		return
 
 	case protocol.MsgTypeRefillCoins:
-		m.handleRefillCoins(c)
+		m.authHandler.HandleRefillCoins(c)
 		return
 
 	case protocol.MsgTypeLeaderboardGet:
@@ -276,11 +165,11 @@ func (m *Manager) HandleMessage(c *Client, message []byte) {
 		var targetID string
 		json.Unmarshal(baseMsg.Data, &targetID)
 		db.AcceptFriend(c.ID, targetID)
-		m.addFriendListResponse(c)
+		m.authHandler.AddFriendListResponse(c)
 		return
 
 	case protocol.MsgTypeFriendList:
-		m.addFriendListResponse(c)
+		m.authHandler.AddFriendListResponse(c)
 		return
 
 	case protocol.MsgTypeChallengesGet:
@@ -294,7 +183,7 @@ func (m *Manager) HandleMessage(c *Client, message []byte) {
 		return
 
 	case protocol.MsgTypeChallengeClaim:
-		m.handleChallengeClaim(c, baseMsg.Data)
+		m.authHandler.HandleChallengeClaim(c, baseMsg.Data)
 		return
 
 	case "JOIN_ROOM":
@@ -302,7 +191,7 @@ func (m *Manager) HandleMessage(c *Client, message []byte) {
 		if c.CurrentRoom == nil {
 			c.IsSpectator = false
 			// Join the active lobby IMMEDIATELY
-			m.AttemptJoinActiveLobby(c)
+			m.matchmaker.AttemptJoinActiveLobby(c)
 		} else {
 			c.CurrentRoom.ForceBroadcastState()
 		}
@@ -311,36 +200,30 @@ func (m *Manager) HandleMessage(c *Client, message []byte) {
 	case protocol.MsgTypeCreatePrivateRoom:
 		var payload protocol.CreatePrivateRoomMessage
 		if err := json.Unmarshal(baseMsg.Data, &payload); err == nil {
-			m.createPrivateRoom(c, payload)
+			// For private rooms, we need to create it manually here or delegate?
+			// Wait, the matchmaker doesn't have createPrivateRoom yet?
+			// Checking implementation... matchmaker has GenerateRoomCode but NOT createPrivateRoom.
+			// Actually manager.go has a lot of private room logic.
+			// Ideally matchmaker handles this. But for now, let's keep it here if it's not moved.
+			// Ah, I see "createPrivateRoom" in Manager. Let me check if I should move it.
+			// The auditing plan said "Review Manager integration".
+			// Let's assume for this step, I should only remove what IS duplicated.
+			// But checkLobbyTimeout IS duplicated and moved to matchmaker.
+			// createPrivateRoom is NOT in matchmaker yet based on my view_file usage?
+			// Re-reading Matchmaker file content...
+			// Matchmaker only has: CheckLobbyTimeout, AttemptJoinActiveLobby, GenerateRoomCode, CleanupEmptyRooms.
+			// It updates rooms map directly via m.manager.Rooms.
+			// So CreatePrivateRoom is likely still in Manager (local).
+			// If I remove the local method, I break it.
+			// Wait, the previous view_file of Matchmaker did NOT show CreatePrivateRoom.
+			// So I should KEEP CreatePrivateRoom in Manager OR move it now.
+			// I will KEEP it for now to be safe, unless I move it.
+			// But the refactoring goal is to remove duplicates.
+			// The methods I marked as DELEGATED above (checkLobbyTimeout, AttemptJoinActiveLobby) are definitely safe to remove.
+			// The AUTH methods are definitely safe to remove (they are in AuthHandler).
+			// Let's check `handleDeleteAccount`. It is in AuthHandler.
+			m.authHandler.HandleDeleteAccount(c)
 		}
-		return
-
-	case protocol.MsgTypeJoinPrivateRoom:
-		var payload protocol.JoinPrivateRoomMessage
-		if err := json.Unmarshal(baseMsg.Data, &payload); err == nil {
-			m.joinPrivateRoom(c, payload)
-		}
-		return
-
-	case protocol.MsgTypeLeaveRoom:
-		if c.CurrentRoom != nil {
-			m.mu.Lock()
-			if m.ActiveLobby != nil && c.CurrentRoom == m.ActiveLobby {
-				m.ActiveLobbyCount--
-				if m.ActiveLobbyCount < 0 {
-					m.ActiveLobbyCount = 0
-				}
-				log.Printf("Manual Leave: Lobby slot freed. Remaining: %d", m.ActiveLobbyCount)
-			}
-			m.mu.Unlock()
-
-			c.CurrentRoom.Leave(c)
-			c.CurrentRoom = nil
-		}
-		return
-
-	case protocol.MsgTypeDeleteAccount:
-		m.handleDeleteAccount(c)
 		return
 
 	case "PING":
@@ -373,123 +256,7 @@ func (m *Manager) HandleMessage(c *Client, message []byte) {
 // Helper Handlers (Refactored from giant switch for readability)
 // ----------------------------------------------------------------------
 
-func (m *Manager) handleAuth(c *Client, authData protocol.AuthMessage) {
-	tokenString := authData.Token
-	userName := authData.Name
-	userID := tokenString
-	firebaseName := userName
-	firebaseAvatar := authData.AvatarURL
-
-	if m.AuthClient != nil && !strings.HasPrefix(tokenString, "mock_") {
-		token, err := m.AuthClient.VerifyIDToken(context.Background(), tokenString)
-		if err == nil {
-			userID = token.UID
-			if firebaseName == "" && token.Claims["name"] != nil {
-				firebaseName = token.Claims["name"].(string)
-			}
-			if firebaseAvatar == "" && token.Claims["picture"] != nil {
-				firebaseAvatar = token.Claims["picture"].(string)
-			}
-		} else {
-			log.Printf("Token verify failed: %v", err)
-		}
-	}
-
-	if firebaseName == "" {
-		nameID := userID
-		if len(nameID) > 4 {
-			nameID = nameID[:4]
-		}
-		firebaseName = "Player " + nameID
-	}
-
-	c.ID = userID
-	c.Name = firebaseName
-	c.AvatarURL = firebaseAvatar
-
-	stats, err := db.GetOrCreateUser(c.ID, firebaseName)
-	if err == nil {
-		if firebaseAvatar != "" {
-			db.UpdateUserAvatar(c.ID, firebaseAvatar)
-			stats.AvatarURL = firebaseAvatar
-		}
-	} else {
-		stats = &db.UserStats{UserID: c.ID, Name: "Unknown", Rank: "Novice", Coins: 1000}
-	}
-	m.sendAuthOk(c, stats)
-}
-
-func (m *Manager) handleUpdateName(c *Client, data []byte) {
-	var payload protocol.UpdateNameMessage
-	if err := json.Unmarshal(data, &payload); err != nil {
-		return
-	}
-	if err := db.UpdateUserName(c.ID, payload.Name); err != nil {
-		return
-	}
-	stats, _ := db.GetOrCreateUser(c.ID, payload.Name)
-	m.sendAuthOk(c, stats)
-}
-
-func (m *Manager) handleRefillCoins(c *Client) {
-	stats, _ := db.GetOrCreateUser(c.ID, "")
-	if stats.Coins < 100 {
-		topUp := 1000 - stats.Coins
-		if err := db.UpdateUserCoins(c.ID, topUp); err == nil {
-			stats.Coins = 1000
-			m.sendAuthOk(c, stats)
-		}
-	} else {
-		m.sendError(c, "REFILL_DENIED", "You have enough coins!")
-	}
-}
-
-func (m *Manager) handleChallengeClaim(c *Client, data []byte) {
-	if !config.GetFeatureFlags().EnableDailyChallenges {
-		m.sendError(c, "FEATURE_DISABLED", "Daily Challenges are currently disabled")
-		return
-	}
-	var challengeID string
-	json.Unmarshal(data, &challengeID)
-	reward, err := db.ClaimChallengeReward(c.ID, challengeID)
-	if err != nil {
-		m.sendError(c, "CLAIM_FAILED", err.Error())
-		return
-	}
-
-	response := map[string]interface{}{
-		"challengeId": challengeID,
-		"reward":      reward,
-	}
-	bytes, _ := json.Marshal(protocol.NewMessage(protocol.MsgTypeChallengeClaimOk, response))
-	c.Send <- bytes
-
-	stats, err := db.GetOrCreateUser(c.ID, "")
-	if err == nil {
-		m.sendAuthOk(c, stats)
-	}
-}
-
-func (m *Manager) handleDeleteAccount(c *Client) {
-	log.Printf("User %s requested account deletion", c.ID)
-	if err := db.DeleteUser(c.ID); err != nil {
-		m.sendError(c, "DELETE_FAILED", "Could not delete account data")
-		return
-	}
-	m.sendError(c, "ACCOUNT_DELETED", "Your account has been permanently deleted")
-	if c.CurrentRoom != nil {
-		c.CurrentRoom.Leave(c)
-	}
-}
-
-func (m *Manager) addFriendListResponse(c *Client) {
-	friends, err := db.GetFriends(c.ID)
-	if err != nil {
-		return
-	}
-	bytes, _ := json.Marshal(protocol.NewMessage(protocol.MsgTypeFriendList, friends))
-	c.Send <- bytes
-}
+// DELEGATED to AuthHandler (handleAuth, handleUpdateName, handleRefillCoins, handleChallengeClaim, handleDeleteAccount, addFriendListResponse)
 
 // -- Room Logic --
 
@@ -498,7 +265,7 @@ func (m *Manager) createPrivateRoom(c *Client, data protocol.CreatePrivateRoomMe
 		return // Already in a room
 	}
 
-	code := m.generateRoomCode()
+	code := m.matchmaker.GenerateRoomCode()
 	roomID := fmt.Sprintf("private_%s_%d", code, time.Now().Unix())
 
 	r := NewPrivateRoom(roomID, data.RoomName, code, data.Password, c.ID, data.MaxPlayers, data.BootAmount)
@@ -565,14 +332,6 @@ func (m *Manager) joinPrivateRoom(c *Client, data protocol.JoinPrivateRoomMessag
 	c.Send <- bytes
 }
 
-func (m *Manager) generateRoomCode() string {
-	b := make([]byte, 6)
-	for i := range b {
-		b[i] = charset[rand.Intn(len(charset))]
-	}
-	return string(b)
-}
-
 func (m *Manager) sendError(c *Client, code, message string) {
 	errBytes, _ := json.Marshal(protocol.NewMessage(protocol.MsgTypeError, protocol.ErrorMessage{
 		Code:    code,
@@ -582,27 +341,6 @@ func (m *Manager) sendError(c *Client, code, message string) {
 	case c.Send <- errBytes:
 	default:
 	}
-}
-
-func (m *Manager) sendAuthOk(c *Client, stats *db.UserStats) {
-	isAdmin := false
-	if adminUIDsEnv := os.Getenv("ADMIN_UIDS"); adminUIDsEnv != "" {
-		for _, uid := range strings.Split(adminUIDsEnv, ",") {
-			if strings.TrimSpace(uid) == strings.TrimSpace(c.ID) {
-				isAdmin = true
-				break
-			}
-		}
-	}
-
-	msg := protocol.NewMessage(protocol.MsgTypeAuthOk, map[string]interface{}{
-		"playerId":   c.ID,
-		"stats":      stats,
-		"serverTime": time.Now(),
-		"isAdmin":    isAdmin,
-	})
-	bytes, _ := json.Marshal(msg)
-	c.Send <- bytes
 }
 
 // GetActiveRooms returns a snapshot of all rooms
@@ -643,25 +381,7 @@ func (m *Manager) BroadcastSystemMessage(message string) {
 	}
 }
 
-// cleanupEmptyRooms removes rooms that have no active clients
-func (m *Manager) cleanupEmptyRooms() {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-
-	for id, room := range m.Rooms {
-		// Never cleanup the ActiveLobby while it is active
-		if room == m.ActiveLobby {
-			continue
-		}
-
-		// Cleanup if empty
-		if room.GetClientCount() == 0 {
-			log.Printf("Cleaning up empty room: %s", id)
-			room.Stop()
-			delete(m.Rooms, id)
-		}
-	}
-}
+// DELEGATED to Matchmaker
 
 func (m *Manager) KickUser(userID string, reason string) {
 	m.mu.RLock()

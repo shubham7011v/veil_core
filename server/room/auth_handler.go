@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	"veil_server/config"
 	"veil_server/db"
 	"veil_server/protocol"
 )
@@ -99,6 +100,33 @@ func (ah *AuthHandler) HandleRefillCoins(c *Client) {
 	}
 }
 
+// HandleChallengeClaim processes checking and rewarding daily challenges
+func (ah *AuthHandler) HandleChallengeClaim(c *Client, data []byte) {
+	if !config.GetFeatureFlags().EnableDailyChallenges {
+		ah.manager.sendError(c, "FEATURE_DISABLED", "Daily Challenges are currently disabled")
+		return
+	}
+	var challengeID string
+	json.Unmarshal(data, &challengeID)
+	reward, err := db.ClaimChallengeReward(c.ID, challengeID)
+	if err != nil {
+		ah.manager.sendError(c, "CLAIM_FAILED", err.Error())
+		return
+	}
+
+	response := map[string]interface{}{
+		"challengeId": challengeID,
+		"reward":      reward,
+	}
+	bytes, _ := json.Marshal(protocol.NewMessage(protocol.MsgTypeChallengeClaimOk, response))
+	c.Send <- bytes
+
+	stats, err := db.GetOrCreateUser(c.ID, "")
+	if err == nil {
+		ah.SendAuthOk(c, stats)
+	}
+}
+
 // HandleDeleteAccount processes account deletion requests
 func (ah *AuthHandler) HandleDeleteAccount(c *Client) {
 	log.Printf("User %s requested account deletion", c.ID)
@@ -110,6 +138,16 @@ func (ah *AuthHandler) HandleDeleteAccount(c *Client) {
 	if c.CurrentRoom != nil {
 		c.CurrentRoom.Leave(c)
 	}
+}
+
+// AddFriendListResponse fetches and sends friend list
+func (ah *AuthHandler) AddFriendListResponse(c *Client) {
+	friends, err := db.GetFriends(c.ID)
+	if err != nil {
+		return
+	}
+	bytes, _ := json.Marshal(protocol.NewMessage(protocol.MsgTypeFriendList, friends))
+	c.Send <- bytes
 }
 
 // SendAuthOk sends successful authentication response with user stats

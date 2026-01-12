@@ -23,7 +23,7 @@ func NewMatchmaker(m *Manager) *Matchmaker {
 
 // Constants for matchmaking
 const (
-	LobbyTimeout  = 60 * time.Second
+	LobbyTimeout  = 10 * time.Second
 	TargetPlayers = 5
 	RoomCodeChars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789" // Excludes I, O, 0, 1
 )
