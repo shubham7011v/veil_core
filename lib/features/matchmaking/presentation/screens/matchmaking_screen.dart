@@ -33,7 +33,6 @@ class _MatchmakingScreenState extends State<MatchmakingScreen>
   StreamSubscription? _connectionStatusSubscription;
   StreamSubscription? _errorSubscription; // New error listener
   List<Participant> _participants = [];
-  int _countdown = 10;
   Timer? _countdownTimer;
   Timer? _timeoutTimer;
   Timer? _waitTimer; // Restore this
@@ -142,19 +141,22 @@ class _MatchmakingScreenState extends State<MatchmakingScreen>
             setState(() {
               _playersFound = state.participants.length;
               _participants = state.participants;
+              if (state.createdAt != null &&
+                  _lobbyCreatedAt != state.createdAt) {
+                _lobbyCreatedAt = state.createdAt!;
+                _hasShownTimeoutDialog = false;
+                _syncLobbyTimer();
+              }
             });
 
             if (_playersFound > prevCount) {
               HapticFeedback.mediumImpact();
             }
 
-            if (state.startTime != null) {
-              _syncCountdown(state.startTime!);
-            } else {
+            if (state.startTime == null) {
               if (_countdownTimer != null) {
                 _countdownTimer!.cancel();
                 _countdownTimer = null;
-                setState(() => _countdown = 0);
               }
             }
           }
@@ -180,6 +182,18 @@ class _MatchmakingScreenState extends State<MatchmakingScreen>
             newCreatedAt = evt.createdAt;
           } else if (evt is RoomUpdated) {
             newCreatedAt = evt.createdAt;
+
+            // Sync participants from RoomUpdated event
+            if (evt.participants.isNotEmpty) {
+              final prevCount = _playersFound;
+              setState(() {
+                _participants = evt.participants;
+                _playersFound = evt.participants.length;
+              });
+              if (_playersFound > prevCount) {
+                HapticFeedback.mediumImpact();
+              }
+            }
           }
 
           if (newCreatedAt != null && _lobbyCreatedAt != newCreatedAt) {
@@ -188,6 +202,26 @@ class _MatchmakingScreenState extends State<MatchmakingScreen>
               _hasShownTimeoutDialog = false; // RESET FLAG FOR NEW LOBBY
               _syncLobbyTimer();
             });
+          }
+
+          // Optimistically add "Me" if list is empty upon joining
+          if ((evt is RoomJoined || evt is RoomCreated) &&
+              _participants.isEmpty) {
+            final authState = context.read<AuthBloc>().state;
+            if (authState is Authenticated) {
+              final me = Participant(
+                id: authState.user.uid,
+                name: authState.user.displayName ?? 'Me',
+                avatarUrl: authState.user.photoURL,
+                unitCount: 5, // Default start count
+                isMe: true,
+                isActive: true,
+              );
+              setState(() {
+                _participants = [me];
+                _playersFound = 1;
+              });
+            }
           }
         });
 
@@ -310,30 +344,6 @@ class _MatchmakingScreenState extends State<MatchmakingScreen>
     ).then((_) {
       isDialogActive = false;
       autoDismissTimer?.cancel();
-    });
-  }
-
-  void _syncCountdown(int startTimeUnix) {
-    if (_countdownTimer != null && _countdownTimer!.isActive) return;
-
-    _countdownTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
-      if (mounted) {
-        final now = DateTime.now().toUtc().millisecondsSinceEpoch ~/ 1000;
-        final remaining = startTimeUnix - now;
-
-        if (remaining <= 0) {
-          timer.cancel();
-          setState(() {
-            _countdown = 0;
-          });
-        } else {
-          setState(() {
-            _countdown = remaining;
-          });
-        }
-      } else {
-        timer.cancel();
-      }
     });
   }
 
@@ -476,7 +486,7 @@ class _MatchmakingScreenState extends State<MatchmakingScreen>
                     Text(
                       'Starting in: $_secondsRemaining seconds',
                       style: GoogleFonts.inter(
-                        color: _secondsRemaining < 10
+                        color: _secondsRemaining <= 10
                             ? Colors.redAccent
                             : const Color(0xFFE5A043),
                         fontSize: 14,
@@ -517,17 +527,6 @@ class _MatchmakingScreenState extends State<MatchmakingScreen>
             fontWeight: FontWeight.w500,
           ),
         ),
-        if (_countdownTimer != null && _countdown > 0) ...[
-          const SizedBox(height: 12),
-          Text(
-            'Starting in $_countdown seconds...',
-            style: GoogleFonts.inter(
-              color: Colors.greenAccent,
-              fontSize: 14,
-              fontWeight: FontWeight.w600,
-            ),
-          ),
-        ],
       ],
     );
   }

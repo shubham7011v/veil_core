@@ -24,11 +24,10 @@ class SessionState extends Equatable {
   final UnitRank? currentRank;
   final int? startTime; // For lobby countdown
   final int? turnStartTime; // For turn timer
-
   final int? turnTimerS; // Local countdown if any
-
   final bool isSpectator;
   final SessionError? error;
+  final int? createdAt;
 
   const SessionState({
     required this.roomId,
@@ -45,6 +44,7 @@ class SessionState extends Equatable {
     this.turnStartTime,
     this.isSpectator = false,
     this.error,
+    this.createdAt,
   });
 
   @override
@@ -63,6 +63,7 @@ class SessionState extends Equatable {
     turnStartTime,
     isSpectator,
     error,
+    createdAt,
   ];
 
   // Factory for initial/empty state
@@ -91,6 +92,7 @@ class SessionState extends Equatable {
     int? turnStartTime,
     bool? isSpectator,
     SessionError? error,
+    int? createdAt,
     bool clearTimer = false,
     bool clearError = false,
   }) {
@@ -109,6 +111,7 @@ class SessionState extends Equatable {
       turnStartTime: turnStartTime ?? this.turnStartTime,
       isSpectator: isSpectator ?? this.isSpectator,
       error: clearError ? null : (error ?? this.error),
+      createdAt: createdAt ?? this.createdAt,
     );
   }
 }

@@ -692,6 +692,7 @@ class WebSocketSessionHandler
           : null,
       turnTimerS: null, // Timer logic handled via turnStartTime
       isSpectator: stateData['isSpectator'] as bool? ?? false,
+      createdAt: stateData['createdAt'] as int?,
     );
 
     _currentState = newState;
