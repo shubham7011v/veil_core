@@ -520,6 +520,17 @@ class _SessionScreenState extends State<SessionScreen>
                       winnerName: state.getPlayerName(
                         state.engineState.winnerId!,
                       ),
+                      coinsEarned: state.engineState.winnerId == 'me'
+                          ? 400 // Winner gets pot (5 players × 100 - their boot)
+                          : -100, // Loser paid boot
+                      gameLog: state.gameLog,
+                      matchStats: state.gameStartTime != null
+                          ? state.matchStats.copyWith(
+                              matchDuration: DateTime.now().difference(
+                                state.gameStartTime!,
+                              ),
+                            )
+                          : state.matchStats,
                       onBackToHome: () {
                         context.read<SessionBloc>().add(
                           const SessionResetRequested(),
@@ -527,6 +538,16 @@ class _SessionScreenState extends State<SessionScreen>
                         Navigator.of(
                           context,
                         ).pushNamedAndRemoveUntil('/home', (route) => false);
+                      },
+                      onPlayAgain: () {
+                        // Reset and navigate back to matchmaking
+                        context.read<SessionBloc>().add(
+                          const SessionResetRequested(),
+                        );
+                        Navigator.of(context).pushNamedAndRemoveUntil(
+                          '/matchmaking',
+                          (route) => false,
+                        );
                       },
                     ),
 

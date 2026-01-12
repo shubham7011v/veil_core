@@ -1,6 +1,7 @@
 import 'package:equatable/equatable.dart';
 import '../../../../core/engine/engine.dart' as engine;
 import '../../../../core/error/failure.dart';
+import '../../domain/models/match_stats.dart';
 
 class SessionBlocState extends Equatable {
   final engine.SessionState engineState;
@@ -27,6 +28,10 @@ class SessionBlocState extends Equatable {
   final List<Map<String, dynamic>> chatMessages;
   final Map<String, bool> typingStatus;
 
+  // -- Match Statistics --
+  final MatchStats matchStats;
+  final DateTime? gameStartTime;
+
   // -- Error State --
   final Failure? failure;
 
@@ -45,6 +50,8 @@ class SessionBlocState extends Equatable {
     required this.gameLog,
     required this.chatMessages,
     required this.typingStatus,
+    required this.matchStats,
+    this.gameStartTime,
     this.failure,
   });
 
@@ -59,6 +66,7 @@ class SessionBlocState extends Equatable {
     gameLog: const [],
     chatMessages: const [],
     typingStatus: const {},
+    matchStats: const MatchStats(),
   );
 
   SessionBlocState copyWith({
@@ -76,10 +84,13 @@ class SessionBlocState extends Equatable {
     List<String>? gameLog,
     List<Map<String, dynamic>>? chatMessages,
     Map<String, bool>? typingStatus,
+    MatchStats? matchStats,
+    DateTime? gameStartTime,
     Failure? failure,
     bool clearStagedRank = false,
     bool clearLastMove = false,
     bool clearFailure = false,
+    bool clearGameStartTime = false,
   }) {
     return SessionBlocState(
       engineState: engineState ?? this.engineState,
@@ -96,6 +107,10 @@ class SessionBlocState extends Equatable {
       gameLog: gameLog ?? this.gameLog,
       chatMessages: chatMessages ?? this.chatMessages,
       typingStatus: typingStatus ?? this.typingStatus,
+      matchStats: matchStats ?? this.matchStats,
+      gameStartTime: clearGameStartTime
+          ? null
+          : (gameStartTime ?? this.gameStartTime),
       failure: clearFailure ? null : (failure ?? this.failure),
     );
   }
@@ -140,6 +155,8 @@ class SessionBlocState extends Equatable {
     gameLog,
     chatMessages,
     typingStatus,
+    matchStats,
+    gameStartTime,
     failure,
   ];
 }

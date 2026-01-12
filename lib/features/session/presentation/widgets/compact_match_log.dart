@@ -25,9 +25,11 @@ class _CompactMatchLogState extends State<CompactMatchLog> {
         maxWidth: 280,
       ),
       decoration: BoxDecoration(
-        color: Colors.black.withOpacity(0.7),
+        color: Colors.black.withValues(alpha: 0.7),
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: AppColors.textTertiary.withOpacity(0.3)),
+        border: Border.all(
+          color: AppColors.textTertiary.withValues(alpha: 0.3),
+        ),
       ),
       child: Column(
         mainAxisSize: MainAxisSize.min,

@@ -4,6 +4,7 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import '../../../../core/engine/engine.dart' as engine;
 import 'session_event.dart';
 import 'session_state.dart';
+import '../../domain/models/match_stats.dart';
 import '../../../../core/di/service_locator.dart' as di;
 import '../../../../core/engine/data/handlers/websocket_session_handler.dart';
 
@@ -83,6 +84,44 @@ class SessionBloc extends Bloc<SessionEvent, SessionBlocState> {
       // (wasInRound -> isNewRound) and trigger the rank selector auto-flip.
       final shouldSync = _handler.lastMove != null;
 
+      // Track match statistics
+      var updatedStats = state.matchStats;
+
+      switch (event.type) {
+        case engine.SessionEventType.cardsPlayed:
+          updatedStats = updatedStats.copyWith(
+            totalTurns: state.matchStats.totalTurns + 1,
+            totalCardsPlayed:
+                state.matchStats.totalCardsPlayed + event.cardCount,
+          );
+          break;
+        case engine.SessionEventType.bluffCalled:
+          updatedStats = updatedStats.copyWith(
+            totalChallenges: state.matchStats.totalChallenges + 1,
+          );
+          break;
+        case engine.SessionEventType.shuffling:
+          // Game started, reset stats and record start time
+          updatedStats = const MatchStats();
+          emit(
+            state.copyWith(
+              lastEvent: event.type,
+              lastEventActorId: event.actorId,
+              lastEventCardCount: event.cardCount,
+              lastEventTimestamp: DateTime.now().millisecondsSinceEpoch,
+              isRevealingBluff: _handler.isRevealingBluff,
+              gameLog: _handler.gameLog,
+              lastMove: shouldSync ? _handler.lastMove : state.lastMove,
+              clearLastMove: false,
+              matchStats: updatedStats,
+              gameStartTime: DateTime.now(),
+            ),
+          );
+          return;
+        default:
+          break;
+      }
+
       emit(
         state.copyWith(
           lastEvent: event.type,
@@ -97,6 +136,7 @@ class SessionBloc extends Bloc<SessionEvent, SessionBlocState> {
                     .lastMove, // Preserve existing lastMove instead of clearing
           // IMPORTANT: Never clearLastMove here. Let EngineStateUpdated do it.
           clearLastMove: false,
+          matchStats: updatedStats,
         ),
       );
     });
