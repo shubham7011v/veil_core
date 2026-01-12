@@ -4,10 +4,12 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"strings"
 	"testing"
 	"time"
 
+	"veil_server/db"
 	"veil_server/protocol"
 	"veil_server/room"
 
@@ -15,6 +17,12 @@ import (
 )
 
 func TestGameFlow(t *testing.T) {
+	// 0. Init DB for tests
+	dbPath := "test_veil.db"
+	os.Remove(dbPath)
+	defer os.Remove(dbPath)
+	db.InitDB(dbPath)
+
 	// 1. Setup Server
 	manager := room.NewManager(nil)
 	go manager.Run()

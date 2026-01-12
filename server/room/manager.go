@@ -158,11 +158,22 @@ func (m *Manager) HandleMessage(c *Client, message []byte) {
 
 		// Verify Token if possible
 		userID := tokenString
+		firebaseName := userName
+		firebaseAvatar := authData.AvatarURL
+
 		if m.AuthClient != nil && !strings.HasPrefix(tokenString, "mock_") {
 			token, err := m.AuthClient.VerifyIDToken(context.Background(), tokenString)
 			if err == nil {
 				userID = token.UID
 				log.Printf("Verified user: %s", userID)
+
+				// Optionally take name/avatar from token if client didn't send
+				if firebaseName == "" && token.Claims["name"] != nil {
+					firebaseName = token.Claims["name"].(string)
+				}
+				if firebaseAvatar == "" && token.Claims["picture"] != nil {
+					firebaseAvatar = token.Claims["picture"].(string)
+				}
 			} else {
 				// Use a truncated version for logging if it's a huge token
 				displayID := tokenString
@@ -173,15 +184,27 @@ func (m *Manager) HandleMessage(c *Client, message []byte) {
 			}
 		}
 
-		if userName == "" {
-			userName = "Player " + userID[:4]
+		if firebaseName == "" {
+			nameID := userID
+			if len(nameID) > 4 {
+				nameID = nameID[:4]
+			}
+			firebaseName = "Player " + nameID
 		}
 
 		c.ID = userID
+		c.Name = firebaseName
+		c.AvatarURL = firebaseAvatar
 
-		// Get Data from SQLite
-		stats, err := db.GetOrCreateUser(c.ID, userName)
-		if err != nil {
+		// Get Data from SQLite (Initial sync)
+		stats, err := db.GetOrCreateUser(c.ID, firebaseName)
+		if err == nil {
+			// Update avatar if provided and different
+			if firebaseAvatar != "" {
+				db.UpdateUserAvatar(c.ID, firebaseAvatar)
+				stats.AvatarURL = firebaseAvatar // Assuming field exists in db.UserStats
+			}
+		} else {
 			log.Printf("DB Error: %v", err)
 			stats = &db.UserStats{UserID: c.ID, Name: "Unknown", Rank: "Novice", Coins: 1000}
 		}

@@ -228,11 +228,13 @@ class WebSocketSessionHandler
 
   void _setupMessageListener(String firebaseToken, {String? displayName}) {
     // Send auth message
+    final photoURL = sl.authRepository.currentUser?.photoURL;
     _send({
       'type': 'AUTH',
       'data': {
         'token': firebaseToken,
         'name': displayName ?? 'Player',
+        'avatar_url': photoURL,
         'platform': Platform.isAndroid ? 'android' : 'ios',
         'version': '1.0.0',
         'fcmToken': _fcmToken,
@@ -601,15 +603,20 @@ class WebSocketSessionHandler
     final participantsList = stateData['participants'] as List<dynamic>? ?? [];
     final participants = participantsList.map((p) {
       final pMap = p as Map<String, dynamic>;
-      final pId = pMap['id'] as String;
-      final isMe = pId == myId;
+      final pId = pMap['id'] as String?; // Might be null for others
+      final sessionId = pMap['sessionId'] as String;
+      final isMe = (pId != null && pId == myId);
 
       return Participant(
-        id: isMe ? 'me' : pId,
+        id: isMe ? 'me' : (pId ?? sessionId),
+        sessionId: sessionId,
         name: pMap['name'] as String,
+        avatarUrl: pMap['avatarUrl'] as String?,
+        rank: pMap['rank'] as String?,
         unitCount: pMap['cardCount'] as int,
         isMe: isMe,
         isActive: pMap['isActive'] as bool? ?? false,
+        isDisconnected: pMap['isDisconnected'] as bool? ?? false,
       );
     }).toList();
 
@@ -680,7 +687,10 @@ class WebSocketSessionHandler
       startTime: stateData['startTime'] != null
           ? (stateData['startTime'] as int)
           : null,
-      turnTimerS: null, // Timer removed
+      turnStartTime: stateData['turnStartTime'] != null
+          ? (stateData['turnStartTime'] as int)
+          : null,
+      turnTimerS: null, // Timer logic handled via turnStartTime
       isSpectator: stateData['isSpectator'] as bool? ?? false,
     );
 

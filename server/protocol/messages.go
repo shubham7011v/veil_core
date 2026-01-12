@@ -11,6 +11,7 @@ const (
 	MsgTypeChallenge     = "CHALLENGE"
 	MsgTypeStartGame     = "START_GAME"
 	MsgTypeUpdateName    = "UPDATE_NAME"
+	MsgTypeUpdateAvatar  = "UPDATE_AVATAR"
 	MsgTypeRefillCoins   = "REFILL_COINS"
 	MsgTypeDeleteAccount = "DELETE_ACCOUNT"
 
@@ -72,8 +73,13 @@ type BaseMessage struct {
 // -- Client Messages --
 
 type AuthMessage struct {
-	Token string `json:"token"`
-	Name  string `json:"name,omitempty"`
+	Token     string `json:"token"`
+	Name      string `json:"name,omitempty"`
+	AvatarURL string `json:"avatar_url,omitempty"`
+}
+
+type UpdateAvatarMessage struct {
+	AvatarURL string `json:"avatar_url"`
 }
 
 type UpdateNameMessage struct {

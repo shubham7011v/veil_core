@@ -45,10 +45,12 @@ class _ParticipantAvatarState extends State<ParticipantAvatar>
   @override
   Widget build(BuildContext context) {
     final isActive = widget.participant.isActive;
+    final isMe = widget.participant.isMe;
+    final isDisconnected = widget.participant.isDisconnected;
     final double effectiveSize = isActive ? widget.size * 1.15 : widget.size;
 
     return Opacity(
-      opacity: isActive ? 1.0 : 0.7, // Dim inactive players
+      opacity: (isActive || isMe) ? 1.0 : (isDisconnected ? 0.4 : 0.7),
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
@@ -89,19 +91,25 @@ class _ParticipantAvatarState extends State<ParticipantAvatar>
                   shape: BoxShape.circle,
                   color: const Color(0xFF1E1E1E),
                   border: Border.all(
-                    color: isActive
-                        ? const Color(0xFFFFD700)
-                        : const Color(0xFF3E3E3E),
-                    width: isActive ? 2.5 : 1.5,
+                    color: isDisconnected
+                        ? Colors.red.withValues(alpha: 0.8)
+                        : (isActive
+                              ? const Color(0xFFFFD700)
+                              : const Color(0xFF3E3E3E)),
+                    width: (isActive || isDisconnected) ? 2.5 : 1.5,
                   ),
-                  image: widget.participant.avatarUrl.isNotEmpty
+                  image:
+                      (widget.participant.avatarUrl != null &&
+                          widget.participant.avatarUrl!.isNotEmpty)
                       ? DecorationImage(
-                          image: NetworkImage(widget.participant.avatarUrl),
+                          image: NetworkImage(widget.participant.avatarUrl!),
                           fit: BoxFit.cover,
                         )
                       : null,
                 ),
-                child: widget.participant.avatarUrl.isEmpty
+                child:
+                    (widget.participant.avatarUrl == null ||
+                        widget.participant.avatarUrl!.isEmpty)
                     ? Center(
                         child: Text(
                           widget.participant.name.isNotEmpty
@@ -153,7 +161,7 @@ class _ParticipantAvatarState extends State<ParticipantAvatar>
               ),
 
               // Status Pill (Premium Amber)
-              if (isActive || widget.statusText != null)
+              if (isActive || isDisconnected || widget.statusText != null)
                 Positioned(
                   bottom: -8,
                   child: Container(
@@ -176,11 +184,13 @@ class _ParticipantAvatarState extends State<ParticipantAvatar>
                     ),
                     child: Text(
                       widget.statusText ??
-                          (isActive
-                              ? (widget.participant.isMe
-                                    ? 'YOUR TURN'
-                                    : 'THINKING...')
-                              : 'WAITING'),
+                          (isDisconnected
+                              ? 'DISCONNECTED'
+                              : (isActive
+                                    ? (widget.participant.isMe
+                                          ? 'YOUR TURN'
+                                          : 'THINKING...')
+                                    : 'WAITING')),
                       style: const TextStyle(
                         color: Color(0xFF1A1A1A),
                         fontSize: 9,

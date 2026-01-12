@@ -3,17 +3,22 @@ package game
 type Player struct {
 	ID          string `json:"id"`
 	Name        string `json:"name"`
-	Hand        []Card `json:"-"` // Hidden from JSON output usually, sent privately
+	AvatarURL   string `json:"avatar_url"`
+	SessionID   string `json:"sessionId"` // Temporary ID for this match (p1...p5)
+	Hand        []Card `json:"-"`         // Hidden from JSON output usually, sent privately
 	IsConnected bool   `json:"isConnected"`
+	Wins        int    `json:"-"` // Server-only, used for rank display
 
 	// Game state flags
-	HasPassed bool `json:"hasPassed"` // Reset every round
+	HasPassed      bool `json:"hasPassed"`      // Reset every round
+	IsDisconnected bool `json:"isDisconnected"` // For grace period
 }
 
-func NewPlayer(id, name string) *Player {
+func NewPlayer(id, name, avatar string) *Player {
 	return &Player{
 		ID:          id,
 		Name:        name,
+		AvatarURL:   avatar,
 		Hand:        []Card{},
 		IsConnected: true,
 	}

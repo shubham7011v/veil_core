@@ -61,7 +61,7 @@ func (g *Game) PlayCards(playerID string, cardIDs []string, declaredRank Rank) e
 
 	g.AddToLog(fmt.Sprintf("%s claimed %d %s(s)", g.PlayerMap[playerID].Name, len(cardIDs), declaredRank))
 
-	g.SyncParticipants()
+	g.SyncParticipants("")
 
 	// Check for immediate win (0 cards) - NO, must survive challenge first?
 	// Rules say: "Winner: First player to reach 0 cards".
@@ -129,10 +129,10 @@ func (g *Game) ResolveChallenge(challengerID string) string {
 	pileCount := g.PileCount
 	g.GivePileTo(loserID)
 	g.ResetRound()
-	g.SyncParticipants()
+	g.SyncParticipants("")
 
 	g.ResetRound()
-	g.SyncParticipants()
+	g.SyncParticipants("")
 
 	g.SetTurnMessages(winnerID)
 
@@ -181,7 +181,7 @@ func (g *Game) Pass(playerID string) error {
 		g.AdvanceTurn()
 	}
 
-	g.SyncParticipants()
+	g.SyncParticipants("")
 	return nil
 }
 
@@ -189,6 +189,7 @@ func (g *Game) Pass(playerID string) error {
 
 func (g *Game) AdvanceTurn() {
 	g.ActiveIdx = (g.ActiveIdx + 1) % len(g.TurnOrder)
+	g.TurnStartTime = time.Now().Unix()
 
 	// If the active player is finished (0 cards), do they get skipped?
 	// For "First to 0 wins", game ends immediately.

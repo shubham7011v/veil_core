@@ -22,9 +22,10 @@ class SessionState extends Equatable {
   final String? lastActionText; // e.g. "Rahul played 2 Units"
   final String? winnerId;
   final UnitRank? currentRank;
-  final int? startTime; // Unix timestamp for starting phase
+  final int? startTime; // For lobby countdown
+  final int? turnStartTime; // For turn timer
 
-  final int? turnTimerS;
+  final int? turnTimerS; // Local countdown if any
 
   final bool isSpectator;
   final SessionError? error;
@@ -41,6 +42,7 @@ class SessionState extends Equatable {
     this.turnTimerS,
     this.currentRank,
     this.startTime,
+    this.turnStartTime,
     this.isSpectator = false,
     this.error,
   });
@@ -58,6 +60,7 @@ class SessionState extends Equatable {
     turnTimerS,
     currentRank,
     startTime,
+    turnStartTime,
     isSpectator,
     error,
   ];
@@ -85,6 +88,7 @@ class SessionState extends Equatable {
     int? turnTimerS,
     UnitRank? currentRank,
     int? startTime,
+    int? turnStartTime,
     bool? isSpectator,
     SessionError? error,
     bool clearTimer = false,
@@ -102,6 +106,7 @@ class SessionState extends Equatable {
       turnTimerS: clearTimer ? null : (turnTimerS ?? this.turnTimerS),
       currentRank: currentRank ?? this.currentRank,
       startTime: startTime ?? this.startTime,
+      turnStartTime: turnStartTime ?? this.turnStartTime,
       isSpectator: isSpectator ?? this.isSpectator,
       error: clearError ? null : (error ?? this.error),
     );

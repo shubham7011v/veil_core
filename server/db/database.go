@@ -111,6 +111,7 @@ type UserStats struct {
 	Losses      int    `json:"losses"`
 	Rank        string `json:"rank"`
 	Coins       int    `json:"coins"`
+	AvatarURL   string `json:"avatarUrl"`
 }
 
 type DailyChallenge struct {
@@ -173,6 +174,7 @@ func createTables() error {
 		user_id TEXT PRIMARY KEY,
 		name TEXT,
 		avatar TEXT,
+		nickname TEXT,
 		games_played INTEGER DEFAULT 0,
 		wins INTEGER DEFAULT 0,
 		losses INTEGER DEFAULT 0,
@@ -235,6 +237,7 @@ func createTables() error {
 
 	// Migration: Add is_banned if it doesn't exist (SQLite doesn't support IF NOT EXISTS on ALTER TABLE easily)
 	// We'll just try to add it and ignore error if it exists
+	DB.Exec("ALTER TABLE users ADD COLUMN nickname TEXT;")
 	DB.Exec("ALTER TABLE users ADD COLUMN is_banned BOOLEAN DEFAULT 0;")
 
 	if _, err := DB.Exec(queryChallenges); err != nil {
@@ -272,16 +275,17 @@ func GetOrCreateUser(userID string, name string) (*UserStats, error) {
 
 	var isBanned bool
 
-	row := DB.QueryRow("SELECT user_id, name, games_played, wins, losses, coins, is_banned FROM users WHERE user_id = ?", userID)
-	err := row.Scan(&user.UserID, &dbName, &user.GamesPlayed, &user.Wins, &user.Losses, &user.Coins, &isBanned)
+	row := DB.QueryRow("SELECT user_id, name, nickname, avatar, games_played, wins, losses, coins, is_banned FROM users WHERE user_id = ?", userID)
+	var dbNickname, dbAvatar sql.NullString
+	err := row.Scan(&user.UserID, &dbName, &dbNickname, &dbAvatar, &user.GamesPlayed, &user.Wins, &user.Losses, &user.Coins, &isBanned)
 
 	if isBanned {
 		return nil, fmt.Errorf("USER_BANNED")
 	}
 
 	if err == sql.ErrNoRows {
-		// Create new user
-		_, err := DB.Exec("INSERT INTO users (user_id, name, last_seen) VALUES (?, ?, ?)", userID, name, time.Now())
+		// Create new user (nickname defaults to name from fire auth)
+		_, err := DB.Exec("INSERT INTO users (user_id, name, nickname, last_seen) VALUES (?, ?, ?, ?)", userID, name, name, time.Now())
 		if err != nil {
 			return nil, err
 		}
@@ -290,7 +294,11 @@ func GetOrCreateUser(userID string, name string) (*UserStats, error) {
 		return nil, err
 	}
 
-	user.Name = dbName // return DB name in case it changed
+	if dbNickname.Valid && dbNickname.String != "" {
+		user.Name = dbNickname.String
+	} else {
+		user.Name = dbName
+	}
 	user.Rank = CalculateRank(user.Wins)
 
 	// Update last seen
@@ -328,9 +336,15 @@ func UpdateUserCoins(userID string, amount int) error {
 	return tx.Commit()
 }
 
-// UpdateUserName updates the display name for a user
+// UpdateUserName updates the nickname for a user
 func UpdateUserName(userID, newName string) error {
-	_, err := DB.Exec("UPDATE users SET name = ? WHERE user_id = ?", newName, userID)
+	_, err := DB.Exec("UPDATE users SET nickname = ? WHERE user_id = ?", newName, userID)
+	return err
+}
+
+// UpdateUserAvatar updates the profile picture for a user
+func UpdateUserAvatar(userID, newAvatar string) error {
+	_, err := DB.Exec("UPDATE users SET avatar = ? WHERE user_id = ?", newAvatar, userID)
 	return err
 }
 

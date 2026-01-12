@@ -30,6 +30,7 @@ type Client struct {
 	IsBot       bool   // True if this is a server-side bot
 	IsSpectator bool   // True if joining as a watcher
 	Name        string // Display name
+	AvatarURL   string // Profile picture URL
 
 	// Rate limiting
 	lastActionTime time.Time

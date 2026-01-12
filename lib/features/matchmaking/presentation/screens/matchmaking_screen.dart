@@ -370,29 +370,38 @@ class _MatchmakingScreenState extends State<MatchmakingScreen>
             height: 60,
             decoration: BoxDecoration(
               shape: BoxShape.circle,
-              gradient: LinearGradient(
-                colors: [
-                  participant.isMe
-                      ? const Color(0xFFE5A043)
-                      : const Color(0xFF4CAF50),
-                  participant.isMe
-                      ? const Color(0xFFD4941F)
-                      : const Color(0xFF2E7D32),
-                ],
+              color: const Color(0xFF2C2C2C),
+              image:
+                  (participant.avatarUrl != null &&
+                      participant.avatarUrl!.isNotEmpty)
+                  ? DecorationImage(
+                      image: NetworkImage(participant.avatarUrl!),
+                      fit: BoxFit.cover,
+                    )
+                  : null,
+              border: Border.all(
+                color: participant.isMe
+                    ? const Color(0xFFE5A043)
+                    : const Color(0xFF4CAF50),
+                width: 2,
               ),
             ),
-            child: Center(
-              child: Text(
-                participant.name.isNotEmpty
-                    ? participant.name[0].toUpperCase()
-                    : 'P',
-                style: GoogleFonts.cinzel(
-                  color: Colors.white,
-                  fontSize: 28,
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
-            ),
+            child:
+                (participant.avatarUrl == null ||
+                    participant.avatarUrl!.isEmpty)
+                ? Center(
+                    child: Text(
+                      participant.name.isNotEmpty
+                          ? participant.name[0].toUpperCase()
+                          : 'P',
+                      style: GoogleFonts.cinzel(
+                        color: Colors.white,
+                        fontSize: 28,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                  )
+                : null,
           ),
           const SizedBox(height: 12),
           Text(
@@ -405,6 +414,24 @@ class _MatchmakingScreenState extends State<MatchmakingScreen>
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
           ),
+          const SizedBox(height: 8),
+          if (participant.rank != null)
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+              decoration: BoxDecoration(
+                color: Colors.white10,
+                borderRadius: BorderRadius.circular(4),
+              ),
+              child: Text(
+                participant.rank!.toUpperCase(),
+                style: GoogleFonts.inter(
+                  color: const Color(0xFFE5A043),
+                  fontSize: 10,
+                  fontWeight: FontWeight.bold,
+                  letterSpacing: 1,
+                ),
+              ),
+            ),
           const SizedBox(height: 4),
           if (!participant.isMe)
             Text(

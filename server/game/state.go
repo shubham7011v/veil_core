@@ -2,6 +2,7 @@ package game
 
 import (
 	"errors"
+	"fmt"
 	"math/rand"
 	"time"
 )
@@ -22,7 +23,8 @@ type Game struct {
 	// Public View for Clients
 	Participants []PublicParticipant `json:"participants"`
 
-	StartTime int64 `json:"startTime,omitempty"` // Unix timestamp for PhaseStarting countdown
+	StartTime     int64 `json:"startTime,omitempty"`     // Unix timestamp for PhaseStarting countdown
+	TurnStartTime int64 `json:"turnStartTime,omitempty"` // For turn timer
 
 	TurnOrder []string `json:"turnOrder"`
 	ActiveIdx int      `json:"activeIdx"`
@@ -45,10 +47,14 @@ type Game struct {
 }
 
 type PublicParticipant struct {
-	ID        string `json:"id"`
-	Name      string `json:"name"`
-	CardCount int    `json:"cardCount"`
-	IsActive  bool   `json:"isActive"` // Is it their turn?
+	ID             string `json:"id,omitempty"` // ONLY sent to the owner, others see SessionID
+	SessionID      string `json:"sessionId"`
+	Name           string `json:"name"`
+	AvatarURL      string `json:"avatarUrl"`
+	Rank           string `json:"rank"`
+	IsDisconnected bool   `json:"isDisconnected"`
+	UnitCount      int    `json:"cardCount"`
+	IsActive       bool   `json:"isActive"` // Is it their turn?
 }
 
 func NewGame() *Game {
@@ -62,7 +68,7 @@ func NewGame() *Game {
 	}
 }
 
-func (g *Game) AddPlayer(id, name string) error {
+func (g *Game) AddPlayer(id, name, avatar string) error {
 	if g.Phase != PhaseLobby {
 		return errors.New("cannot join active game")
 	}
@@ -73,10 +79,10 @@ func (g *Game) AddPlayer(id, name string) error {
 		return errors.New("player already in game")
 	}
 
-	p := NewPlayer(id, name)
+	p := NewPlayer(id, name, avatar)
 	g.Players = append(g.Players, p)
 	g.PlayerMap[id] = p
-	g.SyncParticipants()
+	g.SyncParticipants("") // Public view initially
 	return nil
 }
 
@@ -93,7 +99,7 @@ func (g *Game) RemovePlayer(id string) {
 		}
 	}
 	g.Players = newPlayers
-	g.SyncParticipants()
+	g.SyncParticipants("")
 }
 
 func (g *Game) Start() error {
@@ -106,7 +112,12 @@ func (g *Game) Start() error {
 	perm := rand.Perm(len(g.Players))
 	g.TurnOrder = make([]string, len(g.Players))
 	for i, v := range perm {
-		g.TurnOrder[i] = g.Players[v].ID
+		pid := g.Players[v].ID
+		g.TurnOrder[i] = pid
+		// Assign SessionID (p1...p5) based on turn order for consistency
+		if p := g.PlayerMap[pid]; p != nil {
+			p.SessionID = fmt.Sprintf("p%d", i+1)
+		}
 	}
 	g.ActiveIdx = 0
 
@@ -132,30 +143,57 @@ func (g *Game) Start() error {
 
 	g.Phase = PhaseThinking
 	g.LastEvent = "shuffling"
-	g.SyncParticipants()
+	g.TurnStartTime = time.Now().Unix()
+	g.SyncParticipants("") // Refresh with new turn order
 
 	return nil
 }
 
-// SyncParticipants updates the public view struct
-func (g *Game) SyncParticipants() {
+// SyncParticipants updates the public view struct.
+// ownerID is the ID of the player this view is being generated for.
+// If empty, it's a generic public view (spectator).
+func (g *Game) SyncParticipants(ownerID string) {
 	g.Participants = make([]PublicParticipant, len(g.Players))
 	activeID := ""
 	if len(g.TurnOrder) > 0 {
 		activeID = g.TurnOrder[g.ActiveIdx]
 	}
 
-	// Maintain order based on TurnOrder if game started, else join order
-	// Actually, let's just use g.Players list order for display,
-	// but mark IsActive based on ID match.
-
 	for i, p := range g.Players {
-		g.Participants[i] = PublicParticipant{
-			ID:        p.ID,
-			Name:      p.Name,
-			CardCount: len(p.Hand),
-			IsActive:  (p.ID == activeID) && (g.Phase != PhaseFinished),
+		// Only include real ID if it's the owner's own data
+		var displayID string
+		if p.ID == ownerID {
+			displayID = p.ID
 		}
+
+		g.Participants[i] = PublicParticipant{
+			ID:             displayID,
+			SessionID:      p.SessionID,
+			Name:           p.Name,
+			AvatarURL:      p.AvatarURL,
+			Rank:           CalculateRank(p.Wins),
+			IsDisconnected: p.IsDisconnected,
+			UnitCount:      len(p.Hand),
+			IsActive:       (p.ID == activeID) && (g.Phase != PhaseFinished),
+		}
+	}
+}
+
+// Helper (Duplicate of db.CalculateRank to avoid package cycle if needed, or move to common)
+func CalculateRank(wins int) string {
+	switch {
+	case wins < 5:
+		return "Novice"
+	case wins < 20:
+		return "Apprentice"
+	case wins < 50:
+		return "Adept"
+	case wins < 100:
+		return "Expert"
+	case wins < 200:
+		return "Master"
+	default:
+		return "Legend"
 	}
 }
 

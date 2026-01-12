@@ -28,18 +28,7 @@ class SessionTopBar extends StatelessWidget {
           Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              Text(
-                state.engineState.turnTimerS != null
-                    ? "00:${state.engineState.turnTimerS!.toString().padLeft(2, '0')}"
-                    : "WAITING...",
-                style: const TextStyle(
-                  color: Colors.white,
-                  fontSize: 16,
-                  fontWeight: FontWeight.w900,
-                  letterSpacing: 1.5,
-                  fontFamily: 'Monospace',
-                ),
-              ),
+              _buildTimer(state),
               const Text(
                 "TIME REMAINING",
                 style: TextStyle(
@@ -199,6 +188,41 @@ class SessionTopBar extends StatelessWidget {
         content:
             "Core Rules:\n- Standard 52-card deck. Suits are ignored.\n- Play 1-4 cards or Pass.\n- Only the NEXT player can call a Bluff.\n- Bluff correct (Lie) -> Liar picks pile.\n- Bluff wrong (Truth) -> Caller picks pile.\n\nPass-Cycle Rule:\n- If everyone passes and turn comes back to the last player:\n1. Entire pile is DISCARDED.\n2. That player starts a NEW round.",
       ),
+    );
+  }
+
+  Widget _buildTimer(SessionBlocState state) {
+    if (state.engineState.turnStartTime == null) {
+      return const Text(
+        "WAITING...",
+        style: TextStyle(
+          color: Colors.white,
+          fontSize: 16,
+          fontWeight: FontWeight.w900,
+          letterSpacing: 1.5,
+          fontFamily: 'Monospace',
+        ),
+      );
+    }
+
+    return StreamBuilder<int>(
+      stream: Stream.periodic(const Duration(seconds: 1), (i) => i),
+      builder: (context, snapshot) {
+        final now = DateTime.now().millisecondsSinceEpoch ~/ 1000;
+        final elapsed = now - state.engineState.turnStartTime!;
+        final remaining = (25 - elapsed).clamp(0, 25);
+
+        return Text(
+          "00:${remaining.toString().padLeft(2, '0')}",
+          style: TextStyle(
+            color: remaining <= 5 ? Colors.redAccent : Colors.white,
+            fontSize: 16,
+            fontWeight: FontWeight.w900,
+            letterSpacing: 1.5,
+            fontFamily: 'Monospace',
+          ),
+        );
+      },
     );
   }
 }

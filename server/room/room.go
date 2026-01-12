@@ -28,6 +28,12 @@ type Room struct {
 	unregister chan *Client
 	actions    chan GameAction
 
+	// Timing
+	turnTimer       *time.Timer
+	turnDuration    time.Duration
+	gracePeriod     time.Duration
+	disconnectTimes map[string]time.Time // Track when each player disconnected
+
 	// Game State
 	game *game.Game
 
@@ -50,16 +56,19 @@ type GameAction struct {
 
 func NewRoom(id string) *Room {
 	return &Room{
-		ID:         id,
-		broadcast:  make(chan []byte),
-		register:   make(chan *Client),
-		unregister: make(chan *Client),
-		clients:    make(map[*Client]bool),
-		game:       game.NewGame(),
-		actions:    make(chan GameAction),
-		maxPlayers: game.MaxPlayers, // Default
-		voice:      game.NewVoiceState(),
-		webRTC:     game.NewWebRTCManager(),
+		ID:              id,
+		broadcast:       make(chan []byte),
+		register:        make(chan *Client),
+		unregister:      make(chan *Client),
+		clients:         make(map[*Client]bool),
+		game:            game.NewGame(),
+		actions:         make(chan GameAction),
+		maxPlayers:      game.MaxPlayers, // Default
+		voice:           game.NewVoiceState(),
+		webRTC:          game.NewWebRTCManager(),
+		turnDuration:    25 * time.Second, // 20s + buffer
+		gracePeriod:     30 * time.Second,
+		disconnectTimes: make(map[string]time.Time),
 	}
 }
 
@@ -160,6 +169,27 @@ func (r *Room) GetPlayerIDs() []string {
 	return ids
 }
 
+func (r *Room) handleTurnTimeout() {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	activeID := r.game.ActivePlayerID()
+	if activeID == "" {
+		return
+	}
+
+	log.Printf("Turn timeout for player %s in room %s", activeID, r.ID)
+
+	// Auto-action based on phase
+	if r.game.Phase == game.PhaseThinking {
+		r.game.Pass(activeID)
+	} else if r.game.Phase == game.PhaseChallenging {
+		r.game.Pass(activeID) // Auto-pass challenge
+	}
+
+	r.broadcastState()
+}
+
 func (r *Room) Run() {
 	ticker := time.NewTicker(200 * time.Millisecond)
 	tickCount := 0
@@ -180,17 +210,28 @@ func (r *Room) Run() {
 				boot = int(r.bootAmount)
 			}
 
-			if !client.IsSpectator && !client.IsBot {
-				joinErr = db.UpdateUserCoins(client.ID, -boot)
-				if joinErr != nil {
-					log.Printf("Cannot join room: Insufficient funds for %s: %v", client.ID, joinErr)
-					r.sendErrorToClient(client, "INSUFFICIENT_FUNDS", "Not enough coins to join")
-					continue // Drop this registration attempt
+			r.mu.Lock() // Lock early to check disconnectTimes
+			// If a player rejoins within the grace period, remove them from disconnectTimes
+			if _, disconnected := r.disconnectTimes[client.ID]; disconnected {
+				delete(r.disconnectTimes, client.ID)
+				log.Printf("Client %s rejoined room %s within grace period.", client.ID, r.ID)
+				// No coin deduction needed if rejoining
+			} else {
+				// Only deduct coins if not rejoining
+				if !client.IsSpectator && !client.IsBot {
+					r.mu.Unlock() // Unlock temporarily for DB call
+					joinErr = db.UpdateUserCoins(client.ID, -boot)
+					r.mu.Lock() // Relock
+					if joinErr != nil {
+						log.Printf("Cannot join room: Insufficient funds for %s: %v", client.ID, joinErr)
+						r.sendErrorToClient(client, "INSUFFICIENT_FUNDS", "Not enough coins to join")
+						r.mu.Unlock()
+						continue // Drop this registration attempt
+					}
 				}
 			}
 
 			// 2. Now take the lock for in-memory updates
-			r.mu.Lock()
 			r.clients[client] = true
 			log.Printf("Client joined Room %s (Spectator: %v)", r.ID, client.IsSpectator)
 
@@ -200,7 +241,8 @@ func (r *Room) Run() {
 				if name == "" {
 					name = "Player " + client.ID
 				}
-				if err := r.game.AddPlayer(client.ID, name); err != nil {
+				// Use client's stored name and avatar (synced during AUTH)
+				if err := r.game.AddPlayer(client.ID, client.Name, client.AvatarURL); err != nil {
 					log.Printf("Error adding player %s to game in room %s: %v", client.ID, r.ID, err)
 					// Refund if add fails (Note: This is still I/O inside a lock, but failing here is rare)
 					if !client.IsBot {
@@ -231,9 +273,22 @@ func (r *Room) Run() {
 			r.mu.Lock()
 			if _, ok := r.clients[client]; ok {
 				delete(r.clients, client)
-				r.game.RemovePlayer(client.ID)
 				r.voice.ReleaseMic(client.ID)
 				log.Printf("Client left Room %s", r.ID)
+
+				// If game is active, mark as disconnected, don't remove immediately
+				if r.game.Phase != game.PhaseLobby && r.game.Phase != game.PhaseFinished {
+					r.disconnectTimes[client.ID] = time.Now()
+					log.Printf("Player %s disconnected during active game. Grace period started.", client.ID)
+					// Update player status in game state
+					if p := r.game.PlayerMap[client.ID]; p != nil {
+						p.IsDisconnected = true
+					}
+				} else {
+					// If in lobby or game finished, remove player immediately
+					r.game.RemovePlayer(client.ID)
+					delete(r.disconnectTimes, client.ID) // Ensure they are not in disconnectTimes
+				}
 
 				// Host reassignment
 				if r.isPrivate && client.ID == r.hostID {
@@ -289,10 +344,30 @@ func (r *Room) Run() {
 					log.Printf("Countdown finished in Room %s. Starting game!", r.ID)
 					if err := r.game.Start(); err != nil {
 						log.Printf("Failed to start game after countdown: %v", err)
-						// Fallback: reset to lobby? or retry?
 						r.game.Phase = game.PhaseLobby
 					}
 					r.broadcastState()
+				}
+			}
+
+			// Turn Timeout Check (Every 1s)
+			if tickCount == 0 && (r.game.Phase == game.PhaseThinking || r.game.Phase == game.PhaseChallenging) {
+				if r.game.TurnStartTime > 0 {
+					elapsed := time.Now().Unix() - r.game.TurnStartTime
+					if elapsed > 25 { // 25s limit
+						r.handleTurnTimeout()
+					}
+				}
+			}
+
+			// Grace Period Check
+			now := time.Now()
+			for pid, disconnectTime := range r.disconnectTimes {
+				if now.Sub(disconnectTime) > r.gracePeriod {
+					log.Printf("Player %s grace period expired in room %s. Removing permanently.", pid, r.ID)
+					r.game.RemovePlayer(pid)
+					delete(r.disconnectTimes, pid)
+					r.broadcastRoomInfo()
 				}
 			}
 			r.mu.Unlock()
@@ -628,6 +703,8 @@ func (r *Room) broadcastState() {
 		if p == nil {
 			continue
 		}
+
+		r.game.SyncParticipants(client.ID) // Generate personalized view with masked IDs
 
 		view := map[string]interface{}{
 			"phase":              r.game.Phase,

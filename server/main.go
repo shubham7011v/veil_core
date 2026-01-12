@@ -69,6 +69,10 @@ func main() {
 		room.ServeWs(manager, w, r)
 	})
 
+	// User API
+	userHandler := api.NewUserHandler(authClient)
+	http.HandleFunc("/api/user/v1/avatar", userHandler.UploadAvatar)
+
 	// Admin API
 	adminHandler := api.NewAdminHandler(manager, authClient)
 	http.HandleFunc("/api/admin/ping", adminHandler.Ping)
@@ -77,6 +81,10 @@ func main() {
 	http.HandleFunc("/api/admin/rooms/close", adminHandler.AdminMiddleware(adminHandler.CloseRoom))
 	http.HandleFunc("/api/admin/broadcast", adminHandler.AdminMiddleware(adminHandler.Broadcast))
 	http.HandleFunc("/api/admin/users/ban", adminHandler.AdminMiddleware(adminHandler.BanUser))
+
+	// Static Files (Avatars, etc)
+	fs := http.FileServer(http.Dir("./uploads"))
+	http.Handle("/uploads/", http.StripPrefix("/uploads/", fs))
 
 	// Public Config
 	http.HandleFunc("/api/config", func(w http.ResponseWriter, r *http.Request) {
