@@ -27,6 +27,7 @@ class _MatchmakingScreenState extends State<MatchmakingScreen>
   WebSocketSessionHandler? _handler;
   StreamSubscription? _statsSubscription;
   StreamSubscription? _sessionStateSubscription;
+  StreamSubscription? _connectionStatusSubscription;
   List<Participant> _participants = [];
   int _countdown = 10;
   Timer? _countdownTimer;
@@ -138,6 +139,19 @@ class _MatchmakingScreenState extends State<MatchmakingScreen>
         } else {
           debugPrint('Connection not ready, waiting for reconnection...');
         }
+
+        // Listen for reconnection events to auto-rejoin
+        _connectionStatusSubscription?.cancel();
+        _connectionStatusSubscription = handler.connectionStatusStream.listen((
+          status,
+        ) {
+          if (mounted &&
+              status == ConnectionStatus.connected &&
+              !_isMatchFound) {
+            debugPrint('Reconnected: Re-joining matchmaking queue...');
+            handler.joinMatchmaking();
+          }
+        });
       }
     } catch (e) {
       if (mounted) {
@@ -203,6 +217,7 @@ class _MatchmakingScreenState extends State<MatchmakingScreen>
     _controller.dispose();
     _statsSubscription?.cancel();
     _sessionStateSubscription?.cancel();
+    _connectionStatusSubscription?.cancel();
     _countdownTimer?.cancel();
     super.dispose();
   }

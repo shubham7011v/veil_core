@@ -57,12 +57,12 @@ type GameAction struct {
 func NewRoom(id string) *Room {
 	return &Room{
 		ID:              id,
-		broadcast:       make(chan []byte),
-		register:        make(chan *Client),
-		unregister:      make(chan *Client),
+		broadcast:       make(chan []byte, 32),
+		register:        make(chan *Client, 10),
+		unregister:      make(chan *Client, 10),
 		clients:         make(map[*Client]bool),
 		game:            game.NewGame(),
-		actions:         make(chan GameAction),
+		actions:         make(chan GameAction, 32),
 		maxPlayers:      game.MaxPlayers, // Default
 		voice:           game.NewVoiceState(),
 		webRTC:          game.NewWebRTCManager(),

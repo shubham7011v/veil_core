@@ -102,13 +102,15 @@ func (m *Manager) Run() {
 					targetCount = 5
 				}
 
+				log.Printf("Process Queue: %d clients. Target: %d. Enabled: %v", len(clients), targetCount, config.GetFeatureFlags().EnableBotPlayers)
+
 				if len(clients) < targetCount && config.GetFeatureFlags().EnableBotPlayers {
 					botsNeeded := targetCount - len(clients)
 					for i := 0; i < botsNeeded; i++ {
 						bot := NewBot(m)
 						clients = append(clients, bot.Client)
 					}
-					log.Printf("Spawning %d Bots to reach target player count (%d)", botsNeeded, targetCount)
+					log.Printf("Spawning %d Bots. Final Client Count: %d", botsNeeded, len(clients))
 				}
 
 				m.createMatchRoom(clients)
