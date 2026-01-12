@@ -93,16 +93,22 @@ func (m *Manager) Run() {
 					break
 				}
 
-				// If only 1 human, add bots to reach a minimum of 2 players
-				// If 2+ humans, don't fill remaining slots (respecting user request)
-				minPlayers := 2
-				if len(clients) < minPlayers && config.GetFeatureFlags().EnableBotPlayers {
-					botsNeeded := minPlayers - len(clients)
+				// Bot Logic Refinement:
+				// 1. If only 1 human (timeout), fill to 5 players (4 Bots) for a full game.
+				// 2. If 2+ humans, start immediately with NO Bots (respecting user preference).
+
+				targetCount := len(clients)
+				if len(clients) == 1 {
+					targetCount = 5
+				}
+
+				if len(clients) < targetCount && config.GetFeatureFlags().EnableBotPlayers {
+					botsNeeded := targetCount - len(clients)
 					for i := 0; i < botsNeeded; i++ {
 						bot := NewBot(m)
 						clients = append(clients, bot.Client)
 					}
-					log.Printf("Spawning %d Bots to reach minimum player count (2)", botsNeeded)
+					log.Printf("Spawning %d Bots to reach target player count (%d)", botsNeeded, targetCount)
 				}
 
 				m.createMatchRoom(clients)
@@ -357,6 +363,7 @@ func (m *Manager) HandleMessage(c *Client, message []byte) {
 		m.joinPrivateRoom(c, payload)
 		return
 	case protocol.MsgTypeLeaveRoom:
+		m.Queue.Remove(c) // Ensure removal from matchmaking if they were in queue
 		if c.CurrentRoom != nil {
 			c.CurrentRoom.Leave(c)
 			c.CurrentRoom = nil

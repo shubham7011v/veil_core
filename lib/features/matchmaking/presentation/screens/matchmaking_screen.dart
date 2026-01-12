@@ -199,6 +199,7 @@ class _MatchmakingScreenState extends State<MatchmakingScreen>
 
   @override
   void dispose() {
+    _handler?.leaveRoom(''); // Explicitly leave matchmaking queue on server
     _controller.dispose();
     _statsSubscription?.cancel();
     _sessionStateSubscription?.cancel();

@@ -37,13 +37,28 @@ class _OpponentCarouselState extends State<OpponentCarousel> {
     _scrollToActive();
   }
 
+  List<dynamic> _getOrderedOpponents() {
+    final allParticipants = widget.state.engineState.participants;
+    final meIndex = allParticipants.indexWhere((p) => p.isMe);
+
+    if (meIndex == -1) {
+      // Spectator or error: just show everyone else
+      return allParticipants.where((p) => !p.isMe).toList();
+    }
+
+    // Circular sort: Start after 'Me', go to end, then wrap around to start
+    final afterMe = allParticipants.sublist(meIndex + 1);
+    final beforeMe = allParticipants.sublist(0, meIndex);
+    return [...afterMe, ...beforeMe];
+  }
+
   void _scrollToActive() {
-    final participants = widget.state.engineState.participants
-        .where((p) => p.id != 'me')
-        .toList();
+    final participants = _getOrderedOpponents();
 
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (_scrollController.hasClients) {
+        // Find index of active participant
+        // Note: participants list here is dynamic but contains Participant objects
         final activeIdx = participants.indexWhere((p) => p.isActive);
         if (activeIdx != -1) {
           const double itemWidth = 85.0; // 65 size + padding
@@ -63,9 +78,7 @@ class _OpponentCarouselState extends State<OpponentCarousel> {
 
   @override
   Widget build(BuildContext context) {
-    final participants = widget.state.engineState.participants
-        .where((p) => p.id != 'me')
-        .toList();
+    final participants = _getOrderedOpponents();
 
     return SizedBox(
       height: 100,
