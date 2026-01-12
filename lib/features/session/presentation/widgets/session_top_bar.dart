@@ -126,6 +126,13 @@ class SessionTopBar extends StatelessWidget {
               ),
             ),
             onTap: () {
+              // Close menu first
+              Navigator.pop(context);
+
+              // Reset session to clean up state
+              context.read<SessionBloc>().add(const SessionResetRequested());
+
+              // Navigate home
               Navigator.of(
                 context,
               ).pushNamedAndRemoveUntil('/home', (r) => false);
@@ -184,10 +191,112 @@ class SessionTopBar extends StatelessWidget {
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
       ),
-      builder: (context) => DocViewer(
-        title: "GAME RULES",
-        content:
-            "Core Rules:\n- Standard 52-card deck. Suits are ignored.\n- Play 1-4 cards or Pass.\n- Only the NEXT player can call a Bluff.\n- Bluff correct (Lie) -> Liar picks pile.\n- Bluff wrong (Truth) -> Caller picks pile.\n\nPass-Cycle Rule:\n- If everyone passes and turn comes back to the last player:\n1. Entire pile is DISCARDED.\n2. That player starts a NEW round.",
+      builder: (context) => DraggableScrollableSheet(
+        initialChildSize: 0.8,
+        minChildSize: 0.5,
+        maxChildSize: 0.95,
+        expand: false,
+        builder: (_, controller) => Column(
+          children: [
+            const SizedBox(height: 12),
+            Container(
+              width: 40,
+              height: 4,
+              decoration: BoxDecoration(
+                color: Colors.white24,
+                borderRadius: BorderRadius.circular(2),
+              ),
+            ),
+            const SizedBox(height: 16),
+            const Text(
+              "GAME RULES",
+              style: TextStyle(
+                color: Color(0xFFFFD700),
+                fontWeight: FontWeight.bold,
+                fontSize: 18,
+                letterSpacing: 1.5,
+              ),
+            ),
+            const SizedBox(height: 16),
+            Expanded(
+              child: SingleChildScrollView(
+                controller: controller,
+                padding: const EdgeInsets.all(20.0),
+                child: const DocViewer(
+                  title: "",
+                  content: """🎯 OBJECTIVE
+Win by being the first to play all your cards!
+
+📋 BASIC RULES
+• 2-10 players, standard 52-card deck
+• Suits ignored - only ranks matter
+• Play 1-4 cards face-down per turn
+• Declare a rank (can lie = bluff!)
+
+🎴 PLAYING CARDS
+1. First player chooses ANY rank
+2. All others MUST match that rank
+3. You can bluff (play different cards)
+4. Next player can CHALLENGE or PASS
+
+⚔️ CHALLENGING (CRITICAL!)
+⚠️ ONLY THE NEXT PLAYER CAN CHALLENGE
+• If bluff caught: Liar picks up pile
+• If false alarm: Challenger picks up pile
+• Winner of challenge starts next round
+
+🚫 PASSING
+• Can't/won't play or challenge? Pass!
+• If EVERYONE passes → Pile discarded
+• Last player starts new round
+
+🏆 WINNING
+• Play your last card to win
+• Opponents get 1 chance to challenge
+• If truth: You win!
+• If bluff: Pick up pile, keep playing
+
+⏱️ TURN TIMER (Online Only)
+• 25 seconds per turn
+• Auto-pass if time runs out
+
+💡 STRATEGY TIPS
+✅ Bluff when:
+  - Close to winning (3-4 cards left)
+  - Pile is small
+  - Against conservative players
+
+✅ Challenge when:
+  - Opponent near winning
+  - They played 3-4 cards
+  - Pile is manageable size
+
+✅ Pass when:
+  - No matching cards
+  - Don't want to bluff
+  - Force pile discard
+
+📊 EXAMPLE ROUND
+Player 1: "2 Queens" (starts round)
+Player 2: Must claim Queens or pass
+Player 3: Challenges Player 2!
+→ Cards revealed
+  • Bluff: P2 picks up pile
+  • Truth: P3 picks up pile
+Winner starts new round
+
+⚠️ REMEMBER
+• Only NEXT player challenges
+• Match round rank (or bluff)
+• All pass = pile discarded
+• First to 0 cards wins!
+
+Good luck! May your bluffs be bold! 🎴✨""",
+                ),
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
