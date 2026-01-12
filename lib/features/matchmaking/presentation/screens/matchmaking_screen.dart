@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:math' as math;
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:firebase_auth/firebase_auth.dart';
@@ -9,6 +10,7 @@ import '../../../auth/auth.dart';
 import '../../../../core/engine/engine.dart';
 import '../../../../core/di/service_locator.dart' as di;
 import '../../../../core/engine/data/handlers/websocket_session_handler.dart';
+import '../../../../core/engine/domain/models/room_event.dart'; // NEW
 import '../../../../core/config/app_config.dart';
 
 class MatchmakingScreen extends StatefulWidget {
@@ -19,12 +21,12 @@ class MatchmakingScreen extends StatefulWidget {
 }
 
 class _MatchmakingScreenState extends State<MatchmakingScreen>
-    with SingleTickerProviderStateMixin {
+    with TickerProviderStateMixin {
   late AnimationController _controller;
+  late AnimationController _pulseController;
   int _playersFound = 1;
   bool _isMatchFound = false;
   bool _isConnecting = false;
-  bool _isStartingMatch = false; // Add spam protection flag
   WebSocketSessionHandler? _handler;
   StreamSubscription? _statsSubscription;
   StreamSubscription? _sessionStateSubscription;
@@ -33,22 +35,25 @@ class _MatchmakingScreenState extends State<MatchmakingScreen>
   List<Participant> _participants = [];
   int _countdown = 10;
   Timer? _countdownTimer;
-  Timer? _timeoutTimer; // New timeout timer
-  Timer? _waitTimer; // Timer for the total wait duration
-  final Stopwatch _stopwatch = Stopwatch(); // Track total wait time
+  Timer? _timeoutTimer;
+  Timer? _waitTimer; // Restore this
+  int _lobbyCreatedAt = 0; // Unix timestamp for lobby start
+  int _secondsRemaining = 60; // Default count
+  bool _hasShownTimeoutDialog = false;
   ConnectionStatus _connectionStatus = ConnectionStatus.disconnected;
 
   @override
   void initState() {
     super.initState();
-    _stopwatch.start();
-    _waitTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
-      if (mounted) setState(() {});
-    });
     _controller = AnimationController(
       duration: const Duration(seconds: 4),
       vsync: this,
     )..repeat();
+
+    _pulseController = AnimationController(
+      duration: const Duration(milliseconds: 1500),
+      vsync: this,
+    )..repeat(reverse: true);
 
     // Delay slightly to allow UI to render before starting
     Future.delayed(Duration.zero, () {
@@ -133,10 +138,15 @@ class _MatchmakingScreenState extends State<MatchmakingScreen>
         // Session State Listener
         _sessionStateSubscription = handler.sessionStateStream.listen((state) {
           if (mounted) {
+            final prevCount = _playersFound;
             setState(() {
               _playersFound = state.participants.length;
               _participants = state.participants;
             });
+
+            if (_playersFound > prevCount) {
+              HapticFeedback.mediumImpact();
+            }
 
             if (state.startTime != null) {
               _syncCountdown(state.startTime!);
@@ -155,6 +165,21 @@ class _MatchmakingScreenState extends State<MatchmakingScreen>
                 _isMatchFound = true;
               });
               _onMatchFound();
+            }
+          }
+        });
+
+        // Room Event Listener (for createdAt sync)
+        handler.roomEventStream.listen((evt) {
+          if (mounted && evt is RoomUpdated) {
+            if (evt.createdAt != null) {
+              if (_lobbyCreatedAt != evt.createdAt) {
+                setState(() {
+                  _lobbyCreatedAt = evt.createdAt!;
+                  _hasShownTimeoutDialog = false; // RESET FLAG FOR NEW LOBBY
+                  _syncLobbyTimer();
+                });
+              }
             }
           }
         });
@@ -189,22 +214,71 @@ class _MatchmakingScreenState extends State<MatchmakingScreen>
     });
   }
 
+  void _syncLobbyTimer() {
+    _waitTimer?.cancel();
+    _waitTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
+      if (!mounted) {
+        timer.cancel();
+        return;
+      }
+
+      final now = DateTime.now().toUtc().millisecondsSinceEpoch ~/ 1000;
+      final elapsed = now - _lobbyCreatedAt;
+      final remaining = 60 - elapsed;
+
+      setState(() {
+        _secondsRemaining = remaining > 0 ? remaining : 0;
+      });
+
+      // Show Popup at 15 seconds remaining
+      if (remaining <= 15 && !_hasShownTimeoutDialog) {
+        _hasShownTimeoutDialog = true;
+        _showTimeoutDialog();
+      }
+
+      // Haptic countdown for last 5 seconds
+      if (remaining <= 5 && remaining > 0) {
+        HapticFeedback.selectionClick();
+      }
+
+      if (remaining <= 0) {
+        HapticFeedback.heavyImpact(); // Final trigger
+        timer.cancel();
+      }
+    });
+  }
+
   void _showTimeoutDialog() {
+    if (!mounted) return;
+
+    Timer? autoDismissTimer;
+    bool isDialogActive = true;
+
+    // Auto-dismiss after 5 seconds
+    autoDismissTimer = Timer(const Duration(seconds: 5), () {
+      if (isDialogActive && mounted) {
+        Navigator.of(context).pop();
+      }
+    });
+
     showDialog(
       context: context,
+      barrierDismissible: false,
       builder: (context) => AlertDialog(
-        backgroundColor: const Color(0xFF1E1E1E),
+        backgroundColor: const Color(0xFF2C2C2C),
         title: Text(
-          'Taking a while...',
-          style: GoogleFonts.cinzel(color: Colors.white),
+          '15 Seconds Remaining!',
+          style: GoogleFonts.cinzel(color: const Color(0xFFE5A043)),
         ),
         content: Text(
-          'Matchmaking is taking longer than usual. Do you want to keep waiting?',
+          'The lobby will auto-fill with bots soon. Do you want to keep waiting?',
           style: GoogleFonts.inter(color: Colors.white70),
         ),
         actions: [
           TextButton(
             onPressed: () {
+              isDialogActive = false;
+              autoDismissTimer?.cancel();
               Navigator.pop(context);
               Navigator.pop(context); // Leave screen
             },
@@ -215,8 +289,9 @@ class _MatchmakingScreenState extends State<MatchmakingScreen>
           ),
           TextButton(
             onPressed: () {
+              isDialogActive = false;
+              autoDismissTimer?.cancel();
               Navigator.pop(context);
-              _startTimeoutTimer(); // Restart timer
             },
             child: const Text(
               'Wait',
@@ -225,7 +300,10 @@ class _MatchmakingScreenState extends State<MatchmakingScreen>
           ),
         ],
       ),
-    );
+    ).then((_) {
+      isDialogActive = false;
+      autoDismissTimer?.cancel();
+    });
   }
 
   void _syncCountdown(int startTimeUnix) {
@@ -271,10 +349,10 @@ class _MatchmakingScreenState extends State<MatchmakingScreen>
 
   @override
   void dispose() {
-    _stopwatch.stop();
     _waitTimer?.cancel();
     _handler?.leaveRoom('');
     _controller.dispose();
+    _pulseController.dispose();
     _statsSubscription?.cancel();
     _sessionStateSubscription?.cancel();
     _connectionStatusSubscription?.cancel();
@@ -316,18 +394,33 @@ class _MatchmakingScreenState extends State<MatchmakingScreen>
     final isReconnecting =
         _connectionStatus == ConnectionStatus.reconnecting ||
         _connectionStatus == ConnectionStatus.connecting;
-    return Container(
-      width: double.infinity,
-      color: isReconnecting ? Colors.orangeAccent : Colors.redAccent,
-      padding: const EdgeInsets.symmetric(vertical: 8),
-      child: Center(
-        child: Text(
-          isReconnecting ? 'Reconnecting to server...' : 'Connection Lost',
-          style: GoogleFonts.inter(
-            color: Colors.black,
-            fontWeight: FontWeight.bold,
-            fontSize: 12,
-          ),
+
+    return FadeTransition(
+      opacity: Tween<double>(begin: 0.7, end: 1.0).animate(
+        CurvedAnimation(parent: _pulseController, curve: Curves.easeInOut),
+      ),
+      child: Container(
+        width: double.infinity,
+        color: isReconnecting ? Colors.orangeAccent : Colors.redAccent,
+        padding: const EdgeInsets.symmetric(vertical: 8),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(
+              isReconnecting ? Icons.sync : Icons.error_outline,
+              color: Colors.black,
+              size: 14,
+            ),
+            const SizedBox(width: 8),
+            Text(
+              isReconnecting ? 'Reconnecting to server...' : 'Connection Lost',
+              style: GoogleFonts.inter(
+                color: Colors.black,
+                fontWeight: FontWeight.bold,
+                fontSize: 12,
+              ),
+            ),
+          ],
         ),
       ),
     );
@@ -346,47 +439,50 @@ class _MatchmakingScreenState extends State<MatchmakingScreen>
   }
 
   Widget _buildHeader() {
-    final elapsed = _stopwatch.elapsed;
-    final minutes = elapsed.inMinutes.toString().padLeft(2, '0');
-    final seconds = (elapsed.inSeconds % 60).toString().padLeft(2, '0');
-
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
-      child: Column(
-        children: [
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    'Finding a Match',
-                    style: GoogleFonts.cinzel(
-                      color: Colors.white70,
-                      fontSize: 20,
-                      fontWeight: FontWeight.bold,
-                      letterSpacing: 1.2,
+    return ScaleTransition(
+      scale: Tween<double>(begin: 1.0, end: 1.05).animate(
+        CurvedAnimation(parent: _pulseController, curve: Curves.easeInOut),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
+        child: Column(
+          children: [
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Finding a Match',
+                      style: GoogleFonts.cinzel(
+                        color: Colors.white70,
+                        fontSize: 20,
+                        fontWeight: FontWeight.bold,
+                        letterSpacing: 1.2,
+                      ),
                     ),
-                  ),
-                  const SizedBox(height: 4),
-                  Text(
-                    'Time Elapsed: $minutes:$seconds',
-                    style: GoogleFonts.inter(
-                      color: Colors.white38,
-                      fontSize: 12,
-                      fontWeight: FontWeight.w500,
+                    const SizedBox(height: 4),
+                    Text(
+                      'Starting in: $_secondsRemaining seconds',
+                      style: GoogleFonts.inter(
+                        color: _secondsRemaining < 10
+                            ? Colors.redAccent
+                            : const Color(0xFFE5A043),
+                        fontSize: 14,
+                        fontWeight: FontWeight.w600,
+                      ),
                     ),
-                  ),
-                ],
-              ),
-              IconButton(
-                icon: const Icon(Icons.close, color: Colors.white54),
-                onPressed: () => Navigator.pop(context),
-              ),
-            ],
-          ),
-        ],
+                  ],
+                ),
+                IconButton(
+                  icon: const Icon(Icons.close, color: Colors.white54),
+                  onPressed: () => Navigator.pop(context),
+                ),
+              ],
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -441,8 +537,7 @@ class _MatchmakingScreenState extends State<MatchmakingScreen>
     // Add actual participants
     for (int i = 0; i < sortedParticipants.length; i++) {
       slots.add(
-        AnimatedOpacity(
-          opacity: 1.0,
+        AnimatedSwitcher(
           duration: const Duration(milliseconds: 500),
           child: _buildParticipantCard(sortedParticipants[i]),
         ),
@@ -452,7 +547,12 @@ class _MatchmakingScreenState extends State<MatchmakingScreen>
     // Add empty slots for remaining spots
     final remainingSlots = maxPlayers - sortedParticipants.length;
     for (int i = 0; i < remainingSlots; i++) {
-      slots.add(_buildEmptySlot(sortedParticipants.length + i + 1));
+      slots.add(
+        AnimatedSwitcher(
+          duration: const Duration(milliseconds: 500),
+          child: _buildEmptySlot(sortedParticipants.length + i + 1),
+        ),
+      );
     }
 
     return GridView.count(
@@ -661,75 +761,6 @@ class _MatchmakingScreenState extends State<MatchmakingScreen>
           ),
         ),
       ),
-    );
-  }
-
-  Widget _buildStartNowButton() {
-    return BlocBuilder<AuthBloc, AuthState>(
-      builder: (context, state) {
-        final int userCoins = state is Authenticated
-            ? (state.stats?.coins ?? 0)
-            : 0;
-        final bool canAfford = userCoins >= 100;
-
-        return Column(
-          children: [
-            Text(
-              'Entry Fee: 100 Coins',
-              style: GoogleFonts.inter(
-                color: canAfford ? Colors.white54 : Colors.redAccent,
-                fontSize: 12,
-                fontWeight: FontWeight.w500,
-              ),
-            ),
-            const SizedBox(height: 8),
-            InkWell(
-              onTap: (canAfford && !_isStartingMatch)
-                  ? () {
-                      setState(() => _isStartingMatch = true);
-                      _handler?.startGame();
-                    }
-                  : null,
-              child: Container(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 40,
-                  vertical: 16,
-                ),
-                decoration: BoxDecoration(
-                  color: (canAfford && !_isStartingMatch)
-                      ? const Color(0xFFE5A043)
-                      : Colors.grey.withValues(alpha: 0.3),
-                  borderRadius: BorderRadius.circular(30),
-                  boxShadow: (canAfford && !_isStartingMatch)
-                      ? [
-                          BoxShadow(
-                            color: const Color(
-                              0xFFE5A043,
-                            ).withValues(alpha: 0.3),
-                            blurRadius: 20,
-                            offset: const Offset(0, 4),
-                          ),
-                        ]
-                      : [],
-                ),
-                child: Text(
-                  !canAfford
-                      ? 'INSUFFICIENT COINS'
-                      : (_isStartingMatch ? 'STARTING...' : 'START MATCH'),
-                  style: GoogleFonts.cinzel(
-                    color: (canAfford && !_isStartingMatch)
-                        ? Colors.black
-                        : Colors.white38,
-                    fontSize: 16,
-                    fontWeight: FontWeight.bold,
-                    letterSpacing: 1.5,
-                  ),
-                ),
-              ),
-            ),
-          ],
-        );
-      },
     );
   }
 }

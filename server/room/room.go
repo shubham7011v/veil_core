@@ -19,8 +19,9 @@ import (
 type Room struct {
 	mu sync.RWMutex // Protects state access
 
-	ID      string
-	clients map[*Client]bool
+	ID           string
+	CreationTime int64 // Unix timestamp (seconds) of room creation
+	clients      map[*Client]bool
 
 	// Channels (internal use mostly, exposed via methods)
 	broadcast  chan []byte
@@ -762,6 +763,7 @@ func (r *Room) broadcastRoomInfo() {
 		"maxPlayers":  r.maxPlayers,
 		"bootAmount":  r.bootAmount,
 		"playerCount": len(r.clients),
+		"createdAt":   r.CreationTime,
 	}
 
 	// Participants List

@@ -205,6 +205,7 @@ func (m *Manager) AttemptJoinActiveLobby(c *Client) {
 		m.ActiveLobby = room
 		m.ActiveLobbyCount = 0
 		m.ActiveLobbyStartTime = time.Now()
+		room.CreationTime = m.ActiveLobbyStartTime.Unix()
 		log.Printf("Created New Active Lobby: %s", roomID)
 	}
 

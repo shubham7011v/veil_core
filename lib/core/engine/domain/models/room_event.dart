@@ -66,6 +66,7 @@ class RoomUpdated extends RoomEvent {
   final int maxPlayers;
   final double bootAmount;
   final bool isGameStarted;
+  final int? createdAt;
 
   const RoomUpdated({
     required this.roomCode,
@@ -76,6 +77,7 @@ class RoomUpdated extends RoomEvent {
     required this.maxPlayers,
     required this.bootAmount,
     required this.isGameStarted,
+    this.createdAt,
   });
 
   factory RoomUpdated.fromJson(
@@ -104,6 +106,7 @@ class RoomUpdated extends RoomEvent {
       maxPlayers: json['maxPlayers'] as int,
       bootAmount: (json['bootAmount'] as num).toDouble(),
       isGameStarted: json['isGameStarted'] as bool? ?? false,
+      createdAt: json['createdAt'] as int?,
     );
   }
 
