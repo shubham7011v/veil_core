@@ -351,6 +351,11 @@ func (m *Manager) HandleMessage(c *Client, message []byte) {
 		default:
 		}
 		return
+
+	case protocol.MsgTypeUpdateFCM:
+		// Just log it for now, or update DB if we had a field for it
+		// This prevents "You must join a room first" error
+		return
 	}
 
 	// 3. Room-scoped Handlers

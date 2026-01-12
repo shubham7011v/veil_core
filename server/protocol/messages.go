@@ -60,9 +60,10 @@ const (
 	MsgTypeChallengeClaim   = "CHALLENGE_CLAIM"
 	MsgTypeChallengeClaimOk = "CHALLENGE_CLAIM_OK"
 	// Social
-	MsgTypeChat   = "CHAT"
-	MsgTypeEmoji  = "EMOJI"
-	MsgTypeTyping = "TYPING"
+	MsgTypeChat      = "CHAT"
+	MsgTypeEmoji     = "EMOJI"
+	MsgTypeTyping    = "TYPING"
+	MsgTypeUpdateFCM = "UPDATE_FCM"
 )
 
 // BaseMessage structure for all WebSocket messages

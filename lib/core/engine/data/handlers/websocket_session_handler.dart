@@ -287,6 +287,7 @@ class WebSocketSessionHandler extends GameSessionHandler
     String firebaseToken, {
     String? displayName,
   }) async {
+    if (_isDisposed) return;
     if (_connectionStatus == ConnectionStatus.connecting) return;
 
     _updateConnectionStatus(
@@ -339,10 +340,12 @@ class WebSocketSessionHandler extends GameSessionHandler
     _channel!.stream.listen(
       _handleMessage,
       onError: (error) {
+        if (_isDisposed) return;
         debugPrint('🚨 WebSocket Error: $error');
         _handleConnectionFailure(firebaseToken, displayName: displayName);
       },
       onDone: () {
+        if (_isDisposed) return;
         debugPrint('🚨 WebSocket connection closed.');
         if (_channel?.closeCode != null) {
           debugPrint('🚨 Close Code: ${_channel?.closeCode}');
@@ -360,6 +363,7 @@ class WebSocketSessionHandler extends GameSessionHandler
   }
 
   void _handleConnectionFailure(String firebaseToken, {String? displayName}) {
+    if (_isDisposed) return;
     // Stop heartbeat immediately to prevent send-after-close errors
     _heartbeatTimer?.cancel();
     _heartbeatTimer = null;
@@ -416,6 +420,7 @@ class WebSocketSessionHandler extends GameSessionHandler
   }
 
   void _handleMessage(dynamic data) {
+    if (_isDisposed) return;
     _lastMessageTime = DateTime.now(); // Reset watchdog
 
     try {
