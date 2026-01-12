@@ -24,17 +24,27 @@ class _MatchmakingScreenState extends State<MatchmakingScreen>
   int _playersFound = 1;
   bool _isMatchFound = false;
   bool _isConnecting = false;
+  bool _isStartingMatch = false; // Add spam protection flag
   WebSocketSessionHandler? _handler;
   StreamSubscription? _statsSubscription;
   StreamSubscription? _sessionStateSubscription;
   StreamSubscription? _connectionStatusSubscription;
+  StreamSubscription? _errorSubscription; // New error listener
   List<Participant> _participants = [];
   int _countdown = 10;
   Timer? _countdownTimer;
+  Timer? _timeoutTimer; // New timeout timer
+  Timer? _waitTimer; // Timer for the total wait duration
+  final Stopwatch _stopwatch = Stopwatch(); // Track total wait time
+  ConnectionStatus _connectionStatus = ConnectionStatus.disconnected;
 
   @override
   void initState() {
     super.initState();
+    _stopwatch.start();
+    _waitTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
+      if (mounted) setState(() {});
+    });
     _controller = AnimationController(
       duration: const Duration(seconds: 4),
       vsync: this,
@@ -51,45 +61,34 @@ class _MatchmakingScreenState extends State<MatchmakingScreen>
     setState(() => _isConnecting = true);
 
     try {
-      // Always use the singleton WebSocket handler
       final handler = di.sl.webSocketSessionHandler;
 
-      debugPrint('Singleton handler status: ${handler.connectionStatus}');
+      // Update local status immediately
+      setState(() => _connectionStatus = handler.connectionStatus);
 
-      // Only connect if not already connected
       if (handler.connectionStatus != ConnectionStatus.connected) {
-        debugPrint('Not connected, initiating connection...');
         final user = FirebaseAuth.instance.currentUser;
         final token = user != null
             ? await user.getIdToken()
             : 'mock_token_${DateTime.now().millisecondsSinceEpoch}';
 
-        if (token == null) throw Exception('Failed to get token');
-
         await handler.connect(
           AppConfig.instance.serverUrl,
-          token,
+          token!,
           displayName: user?.displayName,
         );
-
-        // Wait for connection to stabilize
         await Future.delayed(const Duration(milliseconds: 500));
-      } else {
-        debugPrint('Already connected, reusing connection');
       }
 
-      // RESET GAME STATE: Clear any data from previous sessions
       handler.resetGameSession();
-
-      // Update SessionBloc with the handler
       if (mounted) {
         context.read<SessionBloc>().add(SessionHandlerSwapped(handler));
       }
 
       _handler = handler;
 
-      // Set up listeners (only if not already listening)
       if (mounted) {
+        // Stats Listener
         _statsSubscription = handler.statsStream.listen((stats) {
           if (mounted) {
             final authState = context.read<AuthBloc>().state;
@@ -99,6 +98,39 @@ class _MatchmakingScreenState extends State<MatchmakingScreen>
           }
         });
 
+        // Error Listener (NEW)
+        _errorSubscription = handler.errorStream.listen((failure) {
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text('Error: ${failure.message}'),
+                backgroundColor: Colors.red,
+                behavior: SnackBarBehavior.floating,
+              ),
+            );
+
+            // If critical error (like auth fail or funds), maybe pop?
+            if (failure.message.contains('Funds')) {
+              Navigator.pop(context);
+            }
+          }
+        });
+
+        // Connection Status Listener (NEW)
+        _connectionStatusSubscription = handler.connectionStatusStream.listen((
+          status,
+        ) {
+          if (mounted) {
+            setState(() => _connectionStatus = status);
+
+            if (status == ConnectionStatus.connected && !_isMatchFound) {
+              // Auto-rejoin if we were disconnected
+              handler.joinMatchmaking();
+            }
+          }
+        });
+
+        // Session State Listener
         _sessionStateSubscription = handler.sessionStateStream.listen((state) {
           if (mounted) {
             setState(() {
@@ -106,11 +138,9 @@ class _MatchmakingScreenState extends State<MatchmakingScreen>
               _participants = state.participants;
             });
 
-            // Check for server-side provided start time
             if (state.startTime != null) {
               _syncCountdown(state.startTime!);
             } else {
-              // Reset if no start time (e.g. player left)
               if (_countdownTimer != null) {
                 _countdownTimer!.cancel();
                 _countdownTimer = null;
@@ -129,29 +159,12 @@ class _MatchmakingScreenState extends State<MatchmakingScreen>
           }
         });
 
-        // Wait for connection to be fully established before joining matchmaking
         await Future.delayed(const Duration(milliseconds: 500));
 
-        // NOW send JOIN_ROOM to enter matchmaking queue
         if (mounted && handler.connectionStatus == ConnectionStatus.connected) {
           handler.joinMatchmaking();
-          debugPrint('Joined matchmaking queue');
-        } else {
-          debugPrint('Connection not ready, waiting for reconnection...');
+          _startTimeoutTimer(); // Start the "taking too long" timer
         }
-
-        // Listen for reconnection events to auto-rejoin
-        _connectionStatusSubscription?.cancel();
-        _connectionStatusSubscription = handler.connectionStatusStream.listen((
-          status,
-        ) {
-          if (mounted &&
-              status == ConnectionStatus.connected &&
-              !_isMatchFound) {
-            debugPrint('Reconnected: Re-joining matchmaking queue...');
-            handler.joinMatchmaking();
-          }
-        });
       }
     } catch (e) {
       if (mounted) {
@@ -159,18 +172,63 @@ class _MatchmakingScreenState extends State<MatchmakingScreen>
           SnackBar(
             content: Text('Connection Error: $e'),
             backgroundColor: Colors.red,
-            duration: const Duration(seconds: 5),
           ),
         );
       }
+    } finally {
       if (mounted) setState(() => _isConnecting = false);
     }
   }
 
+  void _startTimeoutTimer() {
+    _timeoutTimer?.cancel();
+    _timeoutTimer = Timer(const Duration(seconds: 45), () {
+      if (mounted && !_isMatchFound) {
+        _showTimeoutDialog();
+      }
+    });
+  }
+
+  void _showTimeoutDialog() {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        backgroundColor: const Color(0xFF1E1E1E),
+        title: Text(
+          'Taking a while...',
+          style: GoogleFonts.cinzel(color: Colors.white),
+        ),
+        content: Text(
+          'Matchmaking is taking longer than usual. Do you want to keep waiting?',
+          style: GoogleFonts.inter(color: Colors.white70),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () {
+              Navigator.pop(context);
+              Navigator.pop(context); // Leave screen
+            },
+            child: const Text(
+              'Leave',
+              style: TextStyle(color: Colors.redAccent),
+            ),
+          ),
+          TextButton(
+            onPressed: () {
+              Navigator.pop(context);
+              _startTimeoutTimer(); // Restart timer
+            },
+            child: const Text(
+              'Wait',
+              style: TextStyle(color: Color(0xFFE5A043)),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   void _syncCountdown(int startTimeUnix) {
-    // If timer already running for this start time, do nothing
-    // We can check if existing timer is close to target?
-    // Simply restart it to be safe or check if running.
     if (_countdownTimer != null && _countdownTimer!.isActive) return;
 
     _countdownTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
@@ -182,7 +240,6 @@ class _MatchmakingScreenState extends State<MatchmakingScreen>
           timer.cancel();
           setState(() {
             _countdown = 0;
-            // Don't manually trigger match found - wait for server Phase switch
           });
         } else {
           setState(() {
@@ -196,6 +253,7 @@ class _MatchmakingScreenState extends State<MatchmakingScreen>
   }
 
   void _onMatchFound() {
+    _timeoutTimer?.cancel();
     _countdownTimer?.cancel();
     Future.delayed(
       Duration(seconds: AppConfig.instance.matchmakingDelaySeconds),
@@ -213,12 +271,16 @@ class _MatchmakingScreenState extends State<MatchmakingScreen>
 
   @override
   void dispose() {
-    _handler?.leaveRoom(''); // Explicitly leave matchmaking queue on server
+    _stopwatch.stop();
+    _waitTimer?.cancel();
+    _handler?.leaveRoom('');
     _controller.dispose();
     _statsSubscription?.cancel();
     _sessionStateSubscription?.cancel();
     _connectionStatusSubscription?.cancel();
+    _errorSubscription?.cancel();
     _countdownTimer?.cancel();
+    _timeoutTimer?.cancel();
     super.dispose();
   }
 
@@ -233,21 +295,40 @@ class _MatchmakingScreenState extends State<MatchmakingScreen>
             child: Column(
               children: [
                 _buildHeader(),
+                if (_connectionStatus != ConnectionStatus.connected)
+                  _buildConnectionBanner(), // New Banner
                 const SizedBox(height: 24),
                 _buildStatusInfo(),
                 const SizedBox(height: 32),
                 SizedBox(height: 140, child: _buildAnimatedCards()),
                 const SizedBox(height: 32),
                 Expanded(child: _buildParticipantsList()),
-                if (_playersFound >= 2 && !_isMatchFound) ...[
-                  const SizedBox(height: 24),
-                  _buildStartNowButton(),
-                ],
                 const SizedBox(height: 32),
               ],
             ),
           ),
         ],
+      ),
+    );
+  }
+
+  Widget _buildConnectionBanner() {
+    final isReconnecting =
+        _connectionStatus == ConnectionStatus.reconnecting ||
+        _connectionStatus == ConnectionStatus.connecting;
+    return Container(
+      width: double.infinity,
+      color: isReconnecting ? Colors.orangeAccent : Colors.redAccent,
+      padding: const EdgeInsets.symmetric(vertical: 8),
+      child: Center(
+        child: Text(
+          isReconnecting ? 'Reconnecting to server...' : 'Connection Lost',
+          style: GoogleFonts.inter(
+            color: Colors.black,
+            fontWeight: FontWeight.bold,
+            fontSize: 12,
+          ),
+        ),
       ),
     );
   }
@@ -265,6 +346,10 @@ class _MatchmakingScreenState extends State<MatchmakingScreen>
   }
 
   Widget _buildHeader() {
+    final elapsed = _stopwatch.elapsed;
+    final minutes = elapsed.inMinutes.toString().padLeft(2, '0');
+    final seconds = (elapsed.inSeconds % 60).toString().padLeft(2, '0');
+
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
       child: Column(
@@ -272,14 +357,28 @@ class _MatchmakingScreenState extends State<MatchmakingScreen>
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Text(
-                'Finding a Match',
-                style: GoogleFonts.cinzel(
-                  color: Colors.white70,
-                  fontSize: 20,
-                  fontWeight: FontWeight.bold,
-                  letterSpacing: 1.2,
-                ),
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Finding a Match',
+                    style: GoogleFonts.cinzel(
+                      color: Colors.white70,
+                      fontSize: 20,
+                      fontWeight: FontWeight.bold,
+                      letterSpacing: 1.2,
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    'Time Elapsed: $minutes:$seconds',
+                    style: GoogleFonts.inter(
+                      color: Colors.white38,
+                      fontSize: 12,
+                      fontWeight: FontWeight.w500,
+                    ),
+                  ),
+                ],
               ),
               IconButton(
                 icon: const Icon(Icons.close, color: Colors.white54),
@@ -585,8 +684,9 @@ class _MatchmakingScreenState extends State<MatchmakingScreen>
             ),
             const SizedBox(height: 8),
             InkWell(
-              onTap: canAfford
+              onTap: (canAfford && !_isStartingMatch)
                   ? () {
+                      setState(() => _isStartingMatch = true);
                       _handler?.startGame();
                     }
                   : null,
@@ -596,11 +696,11 @@ class _MatchmakingScreenState extends State<MatchmakingScreen>
                   vertical: 16,
                 ),
                 decoration: BoxDecoration(
-                  color: canAfford
+                  color: (canAfford && !_isStartingMatch)
                       ? const Color(0xFFE5A043)
                       : Colors.grey.withValues(alpha: 0.3),
                   borderRadius: BorderRadius.circular(30),
-                  boxShadow: canAfford
+                  boxShadow: (canAfford && !_isStartingMatch)
                       ? [
                           BoxShadow(
                             color: const Color(
@@ -613,9 +713,13 @@ class _MatchmakingScreenState extends State<MatchmakingScreen>
                       : [],
                 ),
                 child: Text(
-                  canAfford ? 'START MATCH' : 'INSUFFICIENT COINS',
+                  !canAfford
+                      ? 'INSUFFICIENT COINS'
+                      : (_isStartingMatch ? 'STARTING...' : 'START MATCH'),
                   style: GoogleFonts.cinzel(
-                    color: canAfford ? Colors.black : Colors.white38,
+                    color: (canAfford && !_isStartingMatch)
+                        ? Colors.black
+                        : Colors.white38,
                     fontSize: 16,
                     fontWeight: FontWeight.bold,
                     letterSpacing: 1.5,

@@ -27,6 +27,7 @@ type Room struct {
 	register   chan *Client
 	unregister chan *Client
 	actions    chan GameAction
+	quit       chan struct{}
 
 	// Timing
 	turnTimer       *time.Timer
@@ -63,6 +64,7 @@ func NewRoom(id string) *Room {
 		clients:         make(map[*Client]bool),
 		game:            game.NewGame(),
 		actions:         make(chan GameAction, 32),
+		quit:            make(chan struct{}),
 		maxPlayers:      game.MaxPlayers, // Default
 		voice:           game.NewVoiceState(),
 		webRTC:          game.NewWebRTCManager(),
@@ -89,6 +91,15 @@ func NewPrivateRoom(id, name, code, password, hostID string, maxPlayers int, boo
 
 func (r *Room) Join(client *Client) {
 	r.register <- client
+}
+
+func (r *Room) Stop() {
+	select {
+	case <-r.quit:
+		// Already stopped
+	default:
+		close(r.quit)
+	}
 }
 
 func (r *Room) Leave(client *Client) {
@@ -201,6 +212,10 @@ func (r *Room) Run() {
 
 	for {
 		select {
+		case <-r.quit:
+			log.Printf("Room %s received quit signal. Stopping.", r.ID)
+			return
+
 		case client := <-r.register:
 			// 1. Perform I/O (Deduct coins) BEFORE locking the room
 			var joinErr error

@@ -83,11 +83,13 @@ func (m *Manager) Run() {
 				if client.CurrentRoom != nil {
 					// If they are leaving the currently filling lobby, free up a slot
 					m.mu.Lock()
+					// Safe Decrement: Only if they are actually in the lobby that is still filling
 					if m.ActiveLobby != nil && client.CurrentRoom == m.ActiveLobby {
 						m.ActiveLobbyCount--
 						if m.ActiveLobbyCount < 0 {
 							m.ActiveLobbyCount = 0
 						}
+						log.Printf("Lobby slot freed. Remaining: %d", m.ActiveLobbyCount)
 					}
 					m.mu.Unlock()
 
@@ -100,8 +102,9 @@ func (m *Manager) Run() {
 			}
 
 		case <-ticker.C:
-			// Regular Housekeeping and Lobby Timeout Check
+			// Regular Housekeeping
 			m.checkLobbyTimeout()
+			m.cleanupEmptyRooms()
 		}
 	}
 }
@@ -113,7 +116,7 @@ func (m *Manager) checkLobbyTimeout() {
 	defer m.mu.Unlock()
 
 	// Constants
-	const LobbyTimeout = 10 * time.Second
+	const LobbyTimeout = 60 * time.Second
 	const TargetPlayers = 5
 
 	lobby := m.ActiveLobby
@@ -168,6 +171,11 @@ func (m *Manager) checkLobbyTimeout() {
 func (m *Manager) AttemptJoinActiveLobby(c *Client) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
+
+	// 0. Double-Check: Ensure client didn't join a room while waiting for lock
+	if c.CurrentRoom != nil {
+		return
+	}
 
 	const MaxPlayers = 5
 
@@ -308,8 +316,17 @@ func (m *Manager) HandleMessage(c *Client, message []byte) {
 		return
 
 	case protocol.MsgTypeLeaveRoom:
-		// Logic handled via Client.Leave/Unregister, but explicit allow:
 		if c.CurrentRoom != nil {
+			m.mu.Lock()
+			if m.ActiveLobby != nil && c.CurrentRoom == m.ActiveLobby {
+				m.ActiveLobbyCount--
+				if m.ActiveLobbyCount < 0 {
+					m.ActiveLobbyCount = 0
+				}
+				log.Printf("Manual Leave: Lobby slot freed. Remaining: %d", m.ActiveLobbyCount)
+			}
+			m.mu.Unlock()
+
 			c.CurrentRoom.Leave(c)
 			c.CurrentRoom = nil
 		}
@@ -592,6 +609,26 @@ func (m *Manager) BroadcastSystemMessage(message string) {
 		select {
 		case client.Send <- bytes:
 		default:
+		}
+	}
+}
+
+// cleanupEmptyRooms removes rooms that have no active clients
+func (m *Manager) cleanupEmptyRooms() {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	for id, room := range m.Rooms {
+		// Never cleanup the ActiveLobby while it is active
+		if room == m.ActiveLobby {
+			continue
+		}
+
+		// Cleanup if empty
+		if room.GetClientCount() == 0 {
+			log.Printf("Cleaning up empty room: %s", id)
+			room.Stop()
+			delete(m.Rooms, id)
 		}
 	}
 }
