@@ -479,7 +479,8 @@ func (r *Room) processAction(action GameAction) {
 					"declaredRank":       payload.DeclaredRank,
 					"newPileCount":       r.game.PileCount,
 					"nextPlayerId":       r.game.ActivePlayerID(),
-					"playerNewCardCount": len(p.Hand), // Fix state drift
+					"playerNewCardCount": len(p.Hand),          // Fix state drift
+					"turnStartTime":      r.game.TurnStartTime, // CRITICAL: Include timer
 				})
 				return // Skip default broadcast
 			}
@@ -495,8 +496,9 @@ func (r *Room) processAction(action GameAction) {
 			} else {
 				// HYBRID: Send lightweight pass event
 				r.broadcaster.BroadcastActionLocked("PASS", map[string]interface{}{
-					"playerId":     client.ID,
-					"nextPlayerId": r.game.ActivePlayerID(),
+					"playerId":      client.ID,
+					"nextPlayerId":  r.game.ActivePlayerID(),
+					"turnStartTime": r.game.TurnStartTime, // CRITICAL: Include timer
 				})
 			}
 			return // Skip default broadcast
@@ -512,6 +514,13 @@ func (r *Room) processAction(action GameAction) {
 			time.AfterFunc(2*time.Second, func() {
 				r.mu.Lock()
 				defer r.mu.Unlock()
+
+				// Safety: Check if game is still in revealing phase and has players
+				if r.game.Phase != game.PhaseRevealing || len(r.game.Players) == 0 {
+					log.Printf("Challenge resolution skipped in Room %s (phase: %s, players: %d)",
+						r.ID, r.game.Phase, len(r.game.Players))
+					return
+				}
 
 				// Finalize the result
 				msg := r.game.ResolveChallenge(client.ID)

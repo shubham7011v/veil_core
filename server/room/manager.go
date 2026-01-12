@@ -101,7 +101,6 @@ func (m *Manager) Run() {
 
 		case <-ticker.C:
 			// Regular Housekeeping
-			// Regular Housekeeping
 			m.matchmaker.CheckLobbyTimeout()
 			m.matchmaker.CleanupEmptyRooms()
 		}

@@ -896,12 +896,14 @@ class WebSocketSessionHandler extends GameSessionHandler
           final count = data['count'] as int? ?? 0;
           final newPileCount = data['newPileCount'] as int? ?? 0;
           final nextPlayerId = data['nextPlayerId'] as String?;
+          final turnStartTime = data['turnStartTime'] as int?;
 
           // Update current state
           _currentState = _currentState.copyWith(
             pileCount: newPileCount,
             activeParticipantId: nextPlayerId == myId ? 'me' : nextPlayerId,
             currentPhase: SessionPhase.challenging,
+            turnStartTime: turnStartTime,
           );
 
           // Emit state update
@@ -921,9 +923,11 @@ class WebSocketSessionHandler extends GameSessionHandler
         case 'PASS':
           // Patch state with turn advance
           final nextPlayerId = data['nextPlayerId'] as String?;
+          final turnStartTime = data['turnStartTime'] as int?;
 
           _currentState = _currentState.copyWith(
             activeParticipantId: nextPlayerId == myId ? 'me' : nextPlayerId,
+            turnStartTime: turnStartTime,
           );
 
           if (!_stateController.isClosed) {

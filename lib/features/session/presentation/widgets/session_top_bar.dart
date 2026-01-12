@@ -6,6 +6,7 @@ import '../bloc/session_state.dart';
 import 'session_history_list.dart';
 import 'doc_viewer.dart';
 import '../../../../core/config/feature_flags.dart';
+import '../../../../core/engine/engine.dart' as engine;
 
 class SessionTopBar extends StatelessWidget {
   final SessionBlocState state;
@@ -193,15 +194,46 @@ class SessionTopBar extends StatelessWidget {
 
   Widget _buildTimer(SessionBlocState state) {
     if (state.engineState.turnStartTime == null) {
-      return const Text(
-        "WAITING...",
-        style: TextStyle(
-          color: Colors.white,
-          fontSize: 16,
-          fontWeight: FontWeight.w900,
-          letterSpacing: 1.5,
-          fontFamily: 'Monospace',
-        ),
+      // Show phase-specific status instead of generic "WAITING..."
+      String status;
+      Color statusColor;
+
+      switch (state.engineState.currentPhase) {
+        case engine.SessionPhase.lobby:
+          status = "LOBBY";
+          statusColor = const Color(0xFF4CAF50);
+          break;
+        case engine.SessionPhase.starting:
+          status = "STARTING";
+          statusColor = const Color(0xFFFFD700);
+          break;
+        default:
+          status = "READY";
+          statusColor = const Color(0xFF2196F3);
+      }
+
+      return Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text(
+            status,
+            style: TextStyle(
+              color: statusColor,
+              fontSize: 14,
+              fontWeight: FontWeight.w900,
+              letterSpacing: 1.2,
+            ),
+          ),
+          if (state.engineState.pileCount > 0)
+            Text(
+              "${state.engineState.pileCount} in pile",
+              style: const TextStyle(
+                fontSize: 9,
+                color: Colors.white54,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+        ],
       );
     }
 

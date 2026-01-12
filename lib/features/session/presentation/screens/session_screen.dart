@@ -14,6 +14,7 @@ import '../widgets/session_background.dart';
 import '../widgets/game_win_overlay.dart';
 import '../widgets/session_staging_area.dart';
 import '../widgets/session_bottom_controls.dart';
+import '../widgets/compact_match_log.dart';
 import '../../../../core/theme/colors.dart';
 import 'package:veil_core/features/voice/presentation/widgets/voice_overlay.dart';
 import '../../../../core/di/service_locator.dart' as di;
@@ -175,7 +176,6 @@ class _SessionScreenState extends State<SessionScreen>
     engine.SessionEventType event,
     SessionBlocState state,
   ) {
-    debugPrint("SessionScreen: Handling Event -> $event");
     switch (event) {
       case engine.SessionEventType.cardsPlayed:
         if (state.lastEventActorId != null) {
@@ -555,6 +555,14 @@ class _SessionScreenState extends State<SessionScreen>
                       child: VoiceOverlay(
                         sessionHandler: di.sl.voiceSessionHandler!,
                       ),
+                    ),
+
+                  // Compact Match Log - bottom right
+                  if (state.gameLog.isNotEmpty && !showSpectatorView)
+                    Positioned(
+                      bottom: 120,
+                      right: 16,
+                      child: CompactMatchLog(gameLog: state.gameLog),
                     ),
                 ],
               ),
