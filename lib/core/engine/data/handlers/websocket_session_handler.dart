@@ -69,8 +69,8 @@ class WebSocketSessionHandler extends GameSessionHandler
   DateTime _lastMessageTime = DateTime.now();
   static const _heartbeatInterval = Duration(seconds: 10);
   static const _watchdogTimeout = Duration(
-    seconds: 10,
-  ); // ✅ Reduced from 20s for faster detection
+    seconds: 15,
+  ); // ✅ Increased to 15s (1.5x heartbeat) to allow latency
 
   // Auth timeout
   Timer? _authTimeoutTimer;
@@ -102,7 +102,8 @@ class WebSocketSessionHandler extends GameSessionHandler
         timer.cancel();
         _heartbeatTimer = null;
         _updateConnectionStatus(ConnectionStatus.reconnecting);
-        _channel?.sink.close(1006, 'Watchdog timeout');
+        // ✅ FIX: Use 1001 (Going Away) instead of reserved 1006
+        _channel?.sink.close(1001, 'Watchdog timeout');
         _channel = null;
         // Reconnection will be handled by _channel.stream.onDone -> _handleConnectionFailure
       }
@@ -554,6 +555,7 @@ class WebSocketSessionHandler extends GameSessionHandler
       final type = msg['type'] as String;
 
       if (type == 'PONG') {
+        debugPrint('🏓 PONG received'); // Debug to verify server responding
         return; // Heartbeat response
       }
 

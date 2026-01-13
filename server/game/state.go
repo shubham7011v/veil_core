@@ -184,31 +184,43 @@ func (g *Game) SyncParticipants(ownerID string) {
 		activeID = g.TurnOrder[g.ActiveIdx]
 	}
 
-	// ✅ FIX: Build participants in TURN ORDER, not Players slice order
-	// This ensures UI displays players in correct turn sequence
-	for _, playerID := range g.TurnOrder {
-		p := g.PlayerMap[playerID]
-		if p == nil {
-			continue
+	// ✅ FIX: Build participants list
+	// if Game is active -> Use TurnOrder (for correct gameplay order)
+	// if Lobby (TurnOrder empty) -> Use g.Players (for joining order)
+	if len(g.TurnOrder) > 0 {
+		for _, playerID := range g.TurnOrder {
+			p := g.PlayerMap[playerID]
+			if p == nil {
+				continue
+			}
+			g.appendParticipant(p, ownerID, activeID)
 		}
-
-		// Only include real ID if it's the owner's own data
-		var displayID string
-		if p.ID == ownerID {
-			displayID = p.ID
+	} else {
+		// Fallback for Lobby Phase
+		for _, p := range g.Players {
+			g.appendParticipant(p, ownerID, activeID)
 		}
-
-		g.Participants = append(g.Participants, PublicParticipant{
-			ID:             displayID,
-			SessionID:      p.SessionID,
-			Name:           p.Name,
-			AvatarURL:      p.AvatarURL,
-			Rank:           CalculateRank(p.Wins),
-			IsDisconnected: p.IsDisconnected,
-			UnitCount:      len(p.Hand),
-			IsActive:       (p.ID == activeID) && (g.Phase != PhaseFinished),
-		})
 	}
+}
+
+// Helper to avoid duplication
+func (g *Game) appendParticipant(p *Player, ownerID, activeID string) {
+	// Only include real ID if it's the owner's own data
+	var displayID string
+	if p.ID == ownerID {
+		displayID = p.ID
+	}
+
+	g.Participants = append(g.Participants, PublicParticipant{
+		ID:             displayID,
+		SessionID:      p.SessionID,
+		Name:           p.Name,
+		AvatarURL:      p.AvatarURL,
+		Rank:           CalculateRank(p.Wins),
+		IsDisconnected: p.IsDisconnected,
+		UnitCount:      len(p.Hand),
+		IsActive:       (p.ID == activeID) && (g.Phase != PhaseFinished),
+	})
 }
 
 // Helper (Duplicate of db.CalculateRank to avoid package cycle if needed, or move to common)

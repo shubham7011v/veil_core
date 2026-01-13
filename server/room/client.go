@@ -11,7 +11,7 @@ import (
 
 const (
 	writeWait      = 10 * time.Second
-	pongWait       = 10 * time.Second // ✅ Reduced from 20s to match client watchdog
+	pongWait       = 30 * time.Second // ✅ Increased - client sends JSON PING, not WS PING
 	pingPeriod     = (pongWait * 9) / 10
 	maxMessageSize = 8192
 )
@@ -80,6 +80,9 @@ func (c *Client) ReadPump() {
 			log.Printf("Read error for Client %s: %v", c.ID, err)
 			break
 		}
+
+		// ✅ FIX: Reset deadline on ANY message (including JSON PING)
+		c.Conn.SetReadDeadline(time.Now().Add(pongWait))
 
 		// Handle message via the Manager
 		// (We wrap it in a struct or just pass bytes? Let's decode partially here or pass to Hub)
