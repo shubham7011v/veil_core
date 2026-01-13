@@ -231,11 +231,9 @@ func (m *Manager) HandleMessage(c *Client, message []byte) {
 
 	case "PING":
 		// Heartbeat - respond with PONG (no room required)
+		// ✅ FIX: Use blocking send - PONG is critical for connection health
 		pongBytes, _ := json.Marshal(protocol.NewMessage("PONG", nil))
-		select {
-		case c.Send <- pongBytes:
-		default:
-		}
+		c.Send <- pongBytes
 		return
 
 	case protocol.MsgTypeUpdateFCM:

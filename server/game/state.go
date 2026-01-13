@@ -169,6 +169,10 @@ func (g *Game) Start() error {
 	g.Phase = PhaseThinking
 	g.LastEvent = "shuffling"
 	g.TurnStartTime = time.Now().Unix()
+	// ✅ FIX: Initialize CurrentPlayerID for bots to detect first turn
+	if len(g.TurnOrder) > 0 {
+		g.CurrentPlayerID = g.TurnOrder[0]
+	}
 	g.SyncParticipants("") // Refresh with new turn order
 
 	return nil

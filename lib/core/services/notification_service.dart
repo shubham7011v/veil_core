@@ -111,7 +111,8 @@ class NotificationService {
           return;
         }
 
-        final token = await user.getIdToken();
+        // ✅ FIX: Force token refresh in case it's expired after long background
+        final token = await user.getIdToken(true);
         final displayName = user.displayName;
 
         if (token != null) {

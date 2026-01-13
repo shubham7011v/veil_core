@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
+import 'dart:math';
 import 'package:flutter/widgets.dart';
 import 'package:web_socket_channel/web_socket_channel.dart';
 
@@ -175,7 +176,19 @@ class WebSocketSessionHandler extends GameSessionHandler
         // App backgrounded - close connection gracefully
         if (_connectionStatus == ConnectionStatus.connected) {
           debugPrint('📱 App backgrounded, disconnecting WebSocket');
+
+          // ✅ FIX: Cancel all timers to prevent memory leak and battery drain
+          _heartbeatTimer?.cancel();
+          _heartbeatTimer = null;
+          _authTimeoutTimer?.cancel();
+          _authTimeoutTimer = null;
+          _reconnectTimer?.cancel();
+          _reconnectTimer = null;
+          _reconnectScheduleTimer?.cancel();
+          _reconnectScheduleTimer = null;
+
           _channel?.sink.close(1000, 'App backgrounded');
+          _updateConnectionStatus(ConnectionStatus.disconnected);
         }
         break;
 
@@ -461,8 +474,9 @@ class WebSocketSessionHandler extends GameSessionHandler
     if (_reconnectAttempts < _maxReconnectAttempts) {
       _reconnectAttempts++;
       final baseDelay = _baseReconnectDelay * (1 << (_reconnectAttempts - 1));
-      // Add random jitter (0-500ms) to prevent Thundering Herd
-      final jitter = Duration(milliseconds: DateTime.now().millisecond % 500);
+      // ✅ FIX: Use proper random jitter to prevent Thundering Herd
+      final random = Random();
+      final jitter = Duration(milliseconds: random.nextInt(500));
       final delay = baseDelay + jitter;
 
       debugPrint(

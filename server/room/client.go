@@ -136,7 +136,7 @@ func ServeWs(manager *Manager, w http.ResponseWriter, r *http.Request) {
 		log.Println(err)
 		return
 	}
-	client := &Client{Hub: manager, Conn: conn, Send: make(chan []byte, 256)}
+	client := &Client{Hub: manager, Conn: conn, Send: make(chan []byte, 1024)}
 	// Use strict timeout for registration to prevent hanging if Manager blocks
 	select {
 	case client.Hub.Register <- client:
