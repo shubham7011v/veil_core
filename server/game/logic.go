@@ -202,6 +202,8 @@ func (g *Game) AdvanceTurn() {
 		// Found a connected player
 		if player != nil && !player.IsDisconnected {
 			g.TurnStartTime = time.Now().Unix()
+			// ✅ FIX: Update CurrentPlayerID for bots
+			g.CurrentPlayerID = playerID
 			return
 		}
 	}
@@ -209,12 +211,17 @@ func (g *Game) AdvanceTurn() {
 	// All players disconnected - this shouldn't happen in practice
 	// but we set timer anyway to prevent nil pointer issues
 	g.TurnStartTime = time.Now().Unix()
+	if len(g.TurnOrder) > 0 && g.ActiveIdx < len(g.TurnOrder) {
+		g.CurrentPlayerID = g.TurnOrder[g.ActiveIdx]
+	}
 }
 
 func (g *Game) SetTurnMessages(playerID string) {
 	for i, id := range g.TurnOrder {
 		if id == playerID {
 			g.ActiveIdx = i
+			// ✅ FIX: Update CurrentPlayerID when manually setting turn
+			g.CurrentPlayerID = playerID
 			break
 		}
 	}

@@ -68,7 +68,9 @@ class WebSocketSessionHandler extends GameSessionHandler
   Timer? _heartbeatTimer;
   DateTime _lastMessageTime = DateTime.now();
   static const _heartbeatInterval = Duration(seconds: 10);
-  static const _watchdogTimeout = Duration(seconds: 20);
+  static const _watchdogTimeout = Duration(
+    seconds: 10,
+  ); // ✅ Reduced from 20s for faster detection
 
   // Auth timeout
   Timer? _authTimeoutTimer;

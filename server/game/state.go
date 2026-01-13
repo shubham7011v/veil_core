@@ -29,6 +29,9 @@ type Game struct {
 	TurnOrder []string `json:"turnOrder"`
 	ActiveIdx int      `json:"activeIdx"`
 
+	// ✅ FIX: Add CurrentPlayerID so bots can detect their turn (renamed to avoid conflict with method)
+	CurrentPlayerID string `json:"activePlayerId"`
+
 	Pile      []Card `json:"-"` // Server-only
 	PileCount int    `json:"pileCount"`
 
@@ -175,20 +178,27 @@ func (g *Game) Start() error {
 // ownerID is the ID of the player this view is being generated for.
 // If empty, it's a generic public view (spectator).
 func (g *Game) SyncParticipants(ownerID string) {
-	g.Participants = make([]PublicParticipant, len(g.Players))
+	g.Participants = make([]PublicParticipant, 0, len(g.Players))
 	activeID := ""
 	if len(g.TurnOrder) > 0 {
 		activeID = g.TurnOrder[g.ActiveIdx]
 	}
 
-	for i, p := range g.Players {
+	// ✅ FIX: Build participants in TURN ORDER, not Players slice order
+	// This ensures UI displays players in correct turn sequence
+	for _, playerID := range g.TurnOrder {
+		p := g.PlayerMap[playerID]
+		if p == nil {
+			continue
+		}
+
 		// Only include real ID if it's the owner's own data
 		var displayID string
 		if p.ID == ownerID {
 			displayID = p.ID
 		}
 
-		g.Participants[i] = PublicParticipant{
+		g.Participants = append(g.Participants, PublicParticipant{
 			ID:             displayID,
 			SessionID:      p.SessionID,
 			Name:           p.Name,
@@ -197,7 +207,7 @@ func (g *Game) SyncParticipants(ownerID string) {
 			IsDisconnected: p.IsDisconnected,
 			UnitCount:      len(p.Hand),
 			IsActive:       (p.ID == activeID) && (g.Phase != PhaseFinished),
-		}
+		})
 	}
 }
 

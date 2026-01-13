@@ -19,11 +19,21 @@ class _CompactMatchLogState extends State<CompactMatchLog> {
       return const SizedBox.shrink();
     }
 
+    // ✅ FIX: Hide overlay when collapsed to not cover cards
+    if (!_isExpanded) {
+      return Positioned(
+        bottom: 16,
+        left: 16,
+        child: IconButton(
+          icon: const Icon(Icons.history, color: Color(0xFFFFD700), size: 20),
+          onPressed: () => setState(() => _isExpanded = true),
+          tooltip: 'Show Match Log',
+        ),
+      );
+    }
+
     return Container(
-      constraints: BoxConstraints(
-        maxHeight: _isExpanded ? 200 : 60,
-        maxWidth: 280,
-      ),
+      constraints: const BoxConstraints(maxHeight: 200, maxWidth: 280),
       decoration: BoxDecoration(
         color: Colors.black.withValues(alpha: 0.7),
         borderRadius: BorderRadius.circular(12),
@@ -36,7 +46,7 @@ class _CompactMatchLogState extends State<CompactMatchLog> {
         children: [
           // Header
           InkWell(
-            onTap: () => setState(() => _isExpanded = !_isExpanded),
+            onTap: () => setState(() => _isExpanded = false),
             child: Padding(
               padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
               child: Row(
@@ -44,9 +54,9 @@ class _CompactMatchLogState extends State<CompactMatchLog> {
                 children: [
                   const Icon(Icons.history, size: 14, color: Color(0xFFFFD700)),
                   const SizedBox(width: 6),
-                  Text(
-                    _isExpanded ? "MATCH LOG" : "LAST ACTION",
-                    style: const TextStyle(
+                  const Text(
+                    "MATCH LOG",
+                    style: TextStyle(
                       color: Colors.white70,
                       fontSize: 10,
                       fontWeight: FontWeight.bold,
@@ -54,10 +64,8 @@ class _CompactMatchLogState extends State<CompactMatchLog> {
                     ),
                   ),
                   const Spacer(),
-                  Icon(
-                    _isExpanded
-                        ? Icons.keyboard_arrow_down
-                        : Icons.keyboard_arrow_up,
+                  const Icon(
+                    Icons.keyboard_arrow_down,
                     size: 16,
                     color: Colors.white54,
                   ),
@@ -67,40 +75,29 @@ class _CompactMatchLogState extends State<CompactMatchLog> {
           ),
 
           // Content
-          if (_isExpanded)
-            Expanded(
-              child: ListView.builder(
-                padding: const EdgeInsets.only(left: 12, right: 12, bottom: 8),
-                reverse: true, // Latest at bottom
-                itemCount: widget.gameLog.length.clamp(0, 10),
-                itemBuilder: (context, index) {
-                  final log = widget.gameLog[index];
-                  return Padding(
-                    padding: const EdgeInsets.only(bottom: 4),
-                    child: Text(
-                      "• $log",
-                      style: const TextStyle(
-                        color: Colors.white70,
-                        fontSize: 11,
-                        height: 1.3,
-                      ),
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                  );
-                },
-              ),
-            )
-          else
-            Padding(
+          Expanded(
+            child: ListView.builder(
               padding: const EdgeInsets.only(left: 12, right: 12, bottom: 8),
-              child: Text(
-                widget.gameLog.first,
-                style: const TextStyle(color: Colors.white70, fontSize: 11),
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-              ),
+              reverse: true, // Latest at bottom
+              itemCount: widget.gameLog.length.clamp(0, 10),
+              itemBuilder: (context, index) {
+                final log = widget.gameLog[index];
+                return Padding(
+                  padding: const EdgeInsets.only(bottom: 4),
+                  child: Text(
+                    "• $log",
+                    style: const TextStyle(
+                      color: Colors.white70,
+                      fontSize: 11,
+                      height: 1.3,
+                    ),
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                );
+              },
             ),
+          ),
         ],
       ),
     );
