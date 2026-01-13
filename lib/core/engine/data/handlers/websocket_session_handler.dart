@@ -61,11 +61,18 @@ class WebSocketSessionHandler extends GameSessionHandler
   String? _lastUrl;
   String? _fcmToken;
 
+  // Connection lock to prevent duplicate simultaneous connections
+  bool _isConnecting = false;
+
   // Heartbeat & Watchdog
   Timer? _heartbeatTimer;
   DateTime _lastMessageTime = DateTime.now();
   static const _heartbeatInterval = Duration(seconds: 10);
   static const _watchdogTimeout = Duration(seconds: 20);
+
+  // Auth timeout
+  Timer? _authTimeoutTimer;
+  static const _authTimeout = Duration(seconds: 10);
 
   void _startHeartbeat() {
     _heartbeatTimer?.cancel();
@@ -170,11 +177,9 @@ class WebSocketSessionHandler extends GameSessionHandler
         break;
 
       case AppLifecycleState.resumed:
-        // App foregrounded - attempt reconnection
-        debugPrint('📱 App resumed, checking connection');
-        if (_connectionStatus != ConnectionStatus.connected) {
-          _attemptAutoReconnect();
-        }
+        // App foregrounded - attempt reconnection with delay
+        debugPrint('📱 App resumed, scheduling connection check');
+        _scheduleReconnectIfNeeded();
         break;
 
       case AppLifecycleState.detached:
@@ -187,27 +192,74 @@ class WebSocketSessionHandler extends GameSessionHandler
     }
   }
 
+  /// Schedule reconnection with delay to handle edge cases
+  /// This ensures the app is fully resumed and Firebase Auth is ready
+  Timer? _reconnectScheduleTimer;
+
+  Future<void> _scheduleReconnectIfNeeded() async {
+    // Cancel any existing scheduled reconnect
+    _reconnectScheduleTimer?.cancel();
+
+    // Wait a bit to allow the app to fully resume and Firebase to be ready
+    _reconnectScheduleTimer = Timer(
+      const Duration(milliseconds: 300),
+      () async {
+        if (_connectionStatus != ConnectionStatus.connected &&
+            _connectionStatus != ConnectionStatus.connecting) {
+          debugPrint('🔄 Scheduled reconnection triggered');
+          await _attemptAutoReconnect();
+        } else {
+          debugPrint('⚠️ Reconnect skipped: Already connected or connecting');
+        }
+      },
+    );
+  }
+
+  /// Force reconnection attempt (e.g., from notification handler)
+  /// This is a public method that can be called externally
+  Future<void> forceReconnect() async {
+    debugPrint('🔄 Force reconnect requested');
+    if (_connectionStatus == ConnectionStatus.connected) {
+      debugPrint('⚠️ Already connected, skipping force reconnect');
+      return;
+    }
+    return _attemptAutoReconnect();
+  }
+
   Future<void> _attemptAutoReconnect() async {
     // Don't auto-reconnect if we are already connected or connecting
     if (_connectionStatus == ConnectionStatus.connected ||
-        _connectionStatus == ConnectionStatus.connecting) {
+        _connectionStatus == ConnectionStatus.connecting ||
+        _isConnecting) {
       debugPrint('⚠️ Auto-reconnect skipped: Already connected/connecting');
       return;
     }
 
     try {
       final user = sl.authRepository.currentUser;
-      final token = await user?.getIdToken();
-      final displayName = user?.displayName;
+      if (user == null) {
+        debugPrint('❌ No user found for auto-reconnect');
+        return;
+      }
+
+      // ✅ FIX: Force token refresh to avoid expired tokens
+      final token = await user.getIdToken(true); // Force refresh
+      final displayName = user.displayName;
 
       if (token != null && _lastUrl != null) {
-        debugPrint('🔄 Auto-reconnecting after app resume...');
+        debugPrint('🔄 Auto-reconnecting with fresh token...');
         // Reset attempts to 0 for a fresh start on resume
         _reconnectAttempts = 0;
         await connect(_lastUrl!, token, displayName: displayName);
       }
     } catch (e) {
       debugPrint('❌ Auto-reconnect failed: $e');
+      // If token refresh fails, user needs to re-authenticate
+      if (!_errorController.isClosed) {
+        _errorController.add(
+          const AuthFailure('Session expired. Please sign in again.'),
+        );
+      }
     }
   }
 
@@ -296,7 +348,17 @@ class WebSocketSessionHandler extends GameSessionHandler
     String firebaseToken, {
     String? displayName,
   }) async {
+    // ✅ FIX: Connection mutex to prevent duplicate attempts
+    if (_isConnecting) {
+      debugPrint(
+        '⚠️ Connection already in progress, skipping duplicate attempt',
+      );
+      return;
+    }
+
     if (_connectionStatus == ConnectionStatus.connecting) return;
+
+    _isConnecting = true; // Lock
 
     _updateConnectionStatus(
       _reconnectAttempts > 0
@@ -311,25 +373,41 @@ class WebSocketSessionHandler extends GameSessionHandler
       debugPrint('Connecting to WebSocket: $_lastUrl');
       _channel = WebSocketChannel.connect(Uri.parse(_lastUrl!));
 
-      // Monitor if the connection actually connects at the socket level
-      _channel!.ready
-          .then((_) {
-            debugPrint('✅ WebSocket Handshake Ready for $_lastUrl');
-          })
-          .catchError((e) {
-            debugPrint('🚨 WebSocket Handshake Failed for $_lastUrl: $e');
-            // Do not call _handleConnectionFailure here, let onDone/onError in _setupMessageListener handle it
-          });
+      // ✅ FIX: Wait for handshake before sending AUTH
+      try {
+        await _channel!.ready;
+        debugPrint('✅ WebSocket Handshake Ready - Sending AUTH');
 
-      _setupMessageListener(firebaseToken, displayName: displayName);
-      _reconnectAttempts = 0; // Reset on success
+        _setupMessageListener(firebaseToken, displayName: displayName);
+        _setupAuth(firebaseToken, displayName: displayName);
+
+        _reconnectAttempts = 0; // Reset on success
+      } catch (handshakeError) {
+        debugPrint('🚨 WebSocket Handshake Failed: $handshakeError');
+        _isConnecting = false; // Unlock before retry
+        _handleConnectionFailure(firebaseToken, displayName: displayName);
+        return;
+      }
     } catch (e) {
       debugPrint('Connection attempt failed to $_lastUrl: $e');
+      _isConnecting = false; // Unlock before retry
       _handleConnectionFailure(firebaseToken, displayName: displayName);
+    } finally {
+      _isConnecting = false; // Always unlock
     }
   }
 
   void _setupAuth(String firebaseToken, {String? displayName}) {
+    // ✅ FIX: Start AUTH timeout timer
+    _authTimeoutTimer?.cancel();
+    _authTimeoutTimer = Timer(_authTimeout, () {
+      if (_connectionStatus != ConnectionStatus.connected) {
+        debugPrint('❌ AUTH_OK timeout - no response from server');
+        _channel?.sink.close(1008, 'Auth timeout');
+        _handleConnectionFailure(firebaseToken, displayName: displayName);
+      }
+    });
+
     final photoURL = sl.authRepository.currentUser?.photoURL;
     _send({
       'type': 'AUTH',
@@ -345,8 +423,8 @@ class WebSocketSessionHandler extends GameSessionHandler
   }
 
   void _setupMessageListener(String firebaseToken, {String? displayName}) {
-    // Send auth message
-    _setupAuth(firebaseToken, displayName: displayName);
+    // NOTE: AUTH is now sent AFTER handshake in _attemptConnection
+    // Don't send it here to avoid race condition
 
     // Listen for messages
     _channel!.stream.listen(
@@ -405,22 +483,63 @@ class WebSocketSessionHandler extends GameSessionHandler
   }
 
   void _updateConnectionStatus(ConnectionStatus status) {
+    final previousStatus = _connectionStatus;
     _connectionStatus = status;
+
     if (!_connectionStatusController.isClosed) {
       _connectionStatusController.add(status);
+    }
+
+    // Provide user-friendly feedback based on status changes
+    if (status == ConnectionStatus.connected &&
+        previousStatus != ConnectionStatus.connected) {
+      debugPrint('✅ Connected to server');
+    } else if (status == ConnectionStatus.reconnecting) {
+      debugPrint('🔄 Attempting to reconnect...');
+    } else if (status == ConnectionStatus.failed) {
+      debugPrint('❌ Connection failed');
+      // Emit error to notify user
+      if (!_errorController.isClosed) {
+        _errorController.add(
+          const NetworkFailure(
+            'Unable to connect to server. Please check your internet connection.',
+          ),
+        );
+      }
+    } else if (status == ConnectionStatus.disconnected &&
+        previousStatus == ConnectionStatus.connected) {
+      debugPrint('📡 Disconnected from server');
     }
   }
 
   void _send(Map<String, dynamic> message, {bool force = false}) {
-    if (_channel != null &&
-        (force || _connectionStatus == ConnectionStatus.connected)) {
-      try {
-        _channel!.sink.add(jsonEncode(message));
-      } catch (e) {
-        debugPrint('! Failed to send message: $e');
-        // Channel is likely closed, trigger reconnection
-        _heartbeatTimer?.cancel();
-        _heartbeatTimer = null;
+    // Check if channel exists and connection status is valid
+    if (_channel == null) {
+      debugPrint('⚠️ Cannot send message: WebSocket channel is null');
+      return;
+    }
+
+    if (!force && _connectionStatus != ConnectionStatus.connected) {
+      debugPrint(
+        '⚠️ Cannot send message: Not connected (status: $_connectionStatus)',
+      );
+      // Don't drop the message silently - log it for debugging
+      debugPrint('   Dropped message type: ${message['type']}');
+      return;
+    }
+
+    try {
+      _channel!.sink.add(jsonEncode(message));
+    } catch (e) {
+      debugPrint('❌ Failed to send message: $e');
+      debugPrint('   Message type: ${message['type']}');
+      // Channel is likely closed, trigger reconnection
+      _heartbeatTimer?.cancel();
+      _heartbeatTimer = null;
+
+      // Update status to trigger reconnection attempt
+      if (_connectionStatus == ConnectionStatus.connected) {
+        _updateConnectionStatus(ConnectionStatus.disconnected);
       }
     }
   }
@@ -438,9 +557,21 @@ class WebSocketSessionHandler extends GameSessionHandler
 
       switch (type) {
         case 'AUTH_OK':
+          // ✅ FIX: Cancel AUTH timeout - we got the response!
+          _authTimeoutTimer?.cancel();
+
           debugPrint('Auth successful: ${msg['data']}');
           _updateConnectionStatus(ConnectionStatus.connected);
           _startHeartbeat(); // Start keep-alive and watchdog
+
+          // ✅ FIX: Resend FCM token if we have one (for reconnections)
+          if (_fcmToken != null) {
+            _send({
+              'type': 'UPDATE_FCM',
+              'data': {'token': _fcmToken},
+            });
+            debugPrint('📬 FCM token resent after reconnection');
+          }
 
           // Parse stats from AUTH_OK response
           final authData = msg['data'] as Map<String, dynamic>;
@@ -1178,11 +1309,22 @@ class WebSocketSessionHandler extends GameSessionHandler
   @override
   Future<void> dispose() async {
     // NOTE: For Singleton usage, we do NOT close StreamControllers.
-    // We only reset the connection state.
+    // We only reset theconnection state.
 
+    // Cancel all timers
     _heartbeatTimer?.cancel();
-    _reconnectTimer?.cancel();
+    _heartbeatTimer = null;
 
+    _reconnectTimer?.cancel();
+    _reconnectTimer = null;
+
+    _reconnectScheduleTimer?.cancel();
+    _reconnectScheduleTimer = null;
+
+    _authTimeoutTimer?.cancel();
+    _authTimeoutTimer = null;
+
+    // Close WebSocket connection
     await _channel?.sink.close();
     _channel = null;
 
@@ -1191,5 +1333,8 @@ class WebSocketSessionHandler extends GameSessionHandler
     // Verify voice manager disposal, might need to be kept alive too?
     // Usually voice depends on active session, so disposing it is fine.
     await _voiceManager?.dispose();
+
+    // Remove lifecycle observer
+    WidgetsBinding.instance.removeObserver(this);
   }
 }

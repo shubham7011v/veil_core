@@ -33,7 +33,11 @@ func (ah *AuthHandler) HandleAuth(c *Client, authData protocol.AuthMessage) {
 	firebaseAvatar := authData.AvatarURL
 
 	if ah.manager.AuthClient != nil && !strings.HasPrefix(tokenString, "mock_") {
-		token, err := ah.manager.AuthClient.VerifyIDToken(context.Background(), tokenString)
+		// ✅ FIX: Add timeout to Firebase verification
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+
+		token, err := ah.manager.AuthClient.VerifyIDToken(ctx, tokenString)
 		if err == nil {
 			userID = token.UID
 			if firebaseName == "" && token.Claims["name"] != nil {
@@ -43,8 +47,14 @@ func (ah *AuthHandler) HandleAuth(c *Client, authData protocol.AuthMessage) {
 				firebaseAvatar = token.Claims["picture"].(string)
 			}
 		} else {
-			log.Printf("Token verify failed: %v", err)
-			ah.manager.sendError(c, "AUTH_FAILED", "Invalid authentication token")
+			// Check if it was a timeout
+			if err == context.DeadlineExceeded {
+				log.Printf("Token verification timeout for client: %v", err)
+				ah.manager.sendError(c, "AUTH_TIMEOUT", "Authentication service temporarily unavailable")
+			} else {
+				log.Printf("Token verify failed: %v", err)
+				ah.manager.sendError(c, "AUTH_FAILED", "Invalid authentication token")
+			}
 			return
 		}
 	}

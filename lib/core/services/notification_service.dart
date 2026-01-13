@@ -2,6 +2,8 @@ import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/foundation.dart';
 import 'package:veil_core/core/di/service_locator.dart';
 import 'package:veil_core/core/notifications/bloc/app_notification_event.dart';
+import 'package:veil_core/core/config/app_config.dart';
+import 'package:veil_core/core/engine/data/handlers/websocket_session_handler.dart';
 
 @pragma('vm:entry-point')
 Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
@@ -87,12 +89,61 @@ class NotificationService {
     }
   }
 
-  void _handleMessageInteraction(RemoteMessage message) {
+  Future<void> _handleMessageInteraction(RemoteMessage message) async {
+    debugPrint('📬 Notification tapped: ${message.data}');
+
+    // Give Firebase Auth time to reinitialize if app was terminated
+    // This is critical because auth state may not be ready immediately
+    await Future.delayed(const Duration(milliseconds: 500));
+
+    // Ensure WebSocket is connected before handling notification
+    final handler = sl.webSocketSessionHandler;
+    final currentStatus = handler.connectionStatus;
+
+    debugPrint('📊 Current connection status: $currentStatus');
+
+    if (currentStatus != ConnectionStatus.connected) {
+      debugPrint('🔌 Reconnecting WebSocket after notification tap...');
+      try {
+        final user = sl.authRepository.currentUser;
+        if (user == null) {
+          debugPrint('❌ No user found, cannot reconnect');
+          return;
+        }
+
+        final token = await user.getIdToken();
+        final displayName = user.displayName;
+
+        if (token != null) {
+          final serverUrl = AppConfig.instance.serverUrl;
+          await handler.connect(serverUrl, token, displayName: displayName);
+          debugPrint('✅ WebSocket reconnected successfully');
+        } else {
+          debugPrint('❌ Failed to get auth token');
+        }
+      } catch (e) {
+        debugPrint('❌ Failed to reconnect WebSocket: $e');
+        // Show error notification to user
+        sl.notificationBloc.add(
+          ShowErrorNotification('Failed to connect to server'),
+        );
+        return;
+      }
+    }
+
+    // Handle specific notification types
     if (message.data.containsKey('type')) {
       final type = message.data['type'];
       if (type == 'game_invite') {
-        // Navigate to lobby or join room
-        debugPrint("Navigate to game invite");
+        // TODO: Navigate to lobby or join room
+        final roomId = message.data['roomId'];
+        debugPrint("Navigate to game invite for room: $roomId");
+        // Future work: Add navigation after connection is established
+      } else if (type == 'game_start') {
+        debugPrint("Game started notification");
+        // Future work: Navigate to active game
+      } else if (type == 'game_end') {
+        debugPrint("Game ended notification");
       }
     }
   }

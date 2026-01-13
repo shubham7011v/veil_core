@@ -91,7 +91,9 @@ func (m *Manager) Run() {
 					}
 					m.mu.Unlock()
 
-					client.CurrentRoom.Leave(client)
+					// ✅ FIX: Run Leave in background to not block Manager
+					// This prevents registration timeouts when Leave is slow
+					go client.CurrentRoom.Leave(client)
 				}
 				if !client.IsBot {
 					close(client.Send)
