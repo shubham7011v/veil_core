@@ -58,6 +58,17 @@ jobs:
             # Ensure docker-compose.yml is up to date
             cp ~/veil_core/docker-compose-production.yml /root/docker-compose.yml
 
+            # Ensure Docker is healthy and iptables rules exist
+            if ! iptables -t nat -L DOCKER >/dev/null 2>&1; then
+              echo "⚠️ Docker iptables chains missing. Restarting Docker..."
+              systemctl restart docker
+              sleep 5
+            fi
+
+            # Clean up disk space (Aggressive: removes all unused images to free up to 30GB+)
+            echo "🧹 Performing deep Docker cleanup..."
+            docker system prune -a -f
+
             # Restart container using docker compose
             cd /root
             docker compose up -d --force-recreate veil-game-prod
