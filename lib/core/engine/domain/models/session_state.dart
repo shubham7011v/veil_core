@@ -26,6 +26,7 @@ class SessionState extends Equatable {
   final int? turnStartTime; // For turn timer
   final int? turnTimerS; // Local countdown if any
   final bool isSpectator;
+  final bool isSyncing; // Added for Phase 4 UX
   final SessionError? error;
   final int? createdAt;
 
@@ -43,6 +44,7 @@ class SessionState extends Equatable {
     this.startTime,
     this.turnStartTime,
     this.isSpectator = false,
+    this.isSyncing = false,
     this.error,
     this.createdAt,
   });
@@ -62,6 +64,7 @@ class SessionState extends Equatable {
     startTime,
     turnStartTime,
     isSpectator,
+    isSyncing,
     error,
     createdAt,
   ];
@@ -74,6 +77,7 @@ class SessionState extends Equatable {
       myHand: [],
       pileCount: 0,
       currentPhase: SessionPhase.lobby,
+      isSyncing: false,
     );
   }
 
@@ -91,6 +95,7 @@ class SessionState extends Equatable {
     int? startTime,
     int? turnStartTime,
     bool? isSpectator,
+    bool? isSyncing,
     SessionError? error,
     int? createdAt,
     bool clearTimer = false,
@@ -110,6 +115,7 @@ class SessionState extends Equatable {
       startTime: startTime ?? this.startTime,
       turnStartTime: turnStartTime ?? this.turnStartTime,
       isSpectator: isSpectator ?? this.isSpectator,
+      isSyncing: isSyncing ?? this.isSyncing,
       error: clearError ? null : (error ?? this.error),
       createdAt: createdAt ?? this.createdAt,
     );

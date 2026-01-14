@@ -23,6 +23,17 @@ type ActiveRoomInfo struct {
 	PlayerIDs   []string `json:"playerIds"`
 }
 
+// ManagerStatus for observability
+type ManagerStatus struct {
+	TotalClients     int    `json:"totalClients"`
+	TotalRooms       int    `json:"totalRooms"`
+	PlayerRoomCount  int    `json:"playerRoomCount"`
+	ActiveLobbyCount int    `json:"activeLobbyCount"`
+	ActiveLobbyID    string `json:"activeLobbyId,omitempty"`
+	LoopLag          int64  `json:"loopLag"` // Seconds since last iteration
+	Uptime           int64  `json:"uptime"`  // Seconds since start
+}
+
 // Manager keeps track of all clients and rooms
 type Manager struct {
 	mu         sync.RWMutex
@@ -45,16 +56,18 @@ type Manager struct {
 	matchmaker  *Matchmaker
 
 	lastLoopTime int64 // Unix timestamp (monitored via atomic)
+	CreationTime time.Time
 }
 
 func NewManager(authClient *auth.Client) *Manager {
 	m := &Manager{
-		Clients:     make(map[*Client]bool),
-		Register:    make(chan *Client, 1024), // Increased buffer to prevent blocking
-		Unregister:  make(chan *Client, 1024),
-		Rooms:       make(map[string]*Room),
-		PlayerRooms: make(map[string]*Room),
-		AuthClient:  authClient,
+		Clients:      make(map[*Client]bool),
+		Register:     make(chan *Client, 1024), // Increased buffer to prevent blocking
+		Unregister:   make(chan *Client, 1024),
+		Rooms:        make(map[string]*Room),
+		PlayerRooms:  make(map[string]*Room),
+		AuthClient:   authClient,
+		CreationTime: time.Now(),
 	}
 	// Initialize modular handlers
 	m.authHandler = NewAuthHandler(m)
@@ -240,6 +253,14 @@ func (m *Manager) HandleMessage(c *Client, message []byte) {
 
 	case protocol.MsgTypeFriendList:
 		m.authHandler.AddFriendListResponse(c)
+		return
+
+	case protocol.MsgTypeMatchHistoryGet:
+		history, err := db.GetUserMatchHistory(c.ID)
+		if err == nil {
+			bytes, _ := json.Marshal(protocol.NewMessage(protocol.MsgTypeMatchHistoryData, history))
+			c.Send <- bytes
+		}
 		return
 
 	case protocol.MsgTypeChallengesGet:
@@ -479,6 +500,33 @@ func (m *Manager) GetActiveRooms() []ActiveRoomInfo {
 		})
 	}
 	return list
+}
+
+// GetStatus returns a snapshot of manager health and load
+func (m *Manager) GetStatus() ManagerStatus {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+
+	last := atomic.LoadInt64(&m.lastLoopTime)
+	lag := int64(0)
+	if last > 0 {
+		lag = time.Now().Unix() - last
+	}
+
+	activeLobbyID := ""
+	if m.ActiveLobby != nil {
+		activeLobbyID = m.ActiveLobby.ID
+	}
+
+	return ManagerStatus{
+		TotalClients:     len(m.Clients),
+		TotalRooms:       len(m.Rooms),
+		PlayerRoomCount:  len(m.PlayerRooms),
+		ActiveLobbyCount: m.ActiveLobbyCount,
+		ActiveLobbyID:    activeLobbyID,
+		LoopLag:          lag,
+		Uptime:           int64(time.Since(m.CreationTime).Seconds()),
+	}
 }
 
 func (m *Manager) BroadcastSystemMessage(message string) {

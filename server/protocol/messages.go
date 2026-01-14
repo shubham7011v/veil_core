@@ -68,6 +68,10 @@ const (
 	MsgTypeUpdateFCM = "UPDATE_FCM"
 	MsgTypePing      = "PING"
 	MsgTypePong      = "PONG"
+
+	// Match History
+	MsgTypeMatchHistoryGet  = "MATCH_HISTORY_GET"
+	MsgTypeMatchHistoryData = "MATCH_HISTORY_DATA"
 )
 
 // BaseMessage structure for all WebSocket messages

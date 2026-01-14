@@ -149,6 +149,43 @@ type UserChallengeProgress struct {
 	Completed   bool   `json:"completed"`
 }
 
+type MatchRecord struct {
+	MatchID   string    `json:"matchId"`
+	CreatedAt time.Time `json:"createdAt"`
+	EndedAt   time.Time `json:"endedAt"`
+	PlayerIDs []string  `json:"playerIds"`
+	WinnerID  string    `json:"winnerId"`
+}
+
+// GetUserMatchHistory returns the last 20 matches for a player
+func GetUserMatchHistory(userID string) ([]MatchRecord, error) {
+	query := `
+		SELECT match_id, created_at, ended_at, players_json, winner_id
+		FROM matches
+		WHERE players_json LIKE ?
+		ORDER BY ended_at DESC
+		LIMIT 20`
+
+	rows, err := DB.Query(query, "%"+userID+"%")
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var history []MatchRecord
+	for rows.Next() {
+		var m MatchRecord
+		var playersJSON string
+		if err := rows.Scan(&m.MatchID, &m.CreatedAt, &m.EndedAt, &playersJSON, &m.WinnerID); err != nil {
+			return nil, err
+		}
+		json.Unmarshal([]byte(playersJSON), &m.PlayerIDs)
+		history = append(history, m)
+	}
+
+	return history, nil
+}
+
 // InitDB initializes the SQLite database and creates tables
 func InitDB(dbPath string) error {
 	// Ensure directory exists

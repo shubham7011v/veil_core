@@ -261,3 +261,40 @@ func (g *Game) CheckAllPassed() bool {
 	// If N-1 players passed (all except the one who played last)
 	return passCount >= (len(g.Players) - 1)
 }
+
+// VerifyDeckConsistency checks if the total cards in hands + pile = 52 and no duplicates exist.
+// Returns an error if inconsistency is detected.
+func (g *Game) VerifyDeckConsistency() error {
+	seen := make(map[string]bool)
+	totalCount := 0
+
+	// 1. Check Pile
+	for _, c := range g.Pile {
+		if seen[c.ID] {
+			return fmt.Errorf("duplicate card detected in pile: %s", c.ID)
+		}
+		seen[c.ID] = true
+		totalCount++
+	}
+
+	// 2. Check Players
+	for _, p := range g.Players {
+		for _, c := range p.Hand {
+			if seen[c.ID] {
+				return fmt.Errorf("duplicate card detected in player %s hand: %s", p.ID, c.ID)
+			}
+			seen[c.ID] = true
+			totalCount++
+		}
+	}
+
+	// 3. Final Count Check
+	// Note: We only check if cards are dealt. If game hasn't started, totalCount will be 0.
+	if g.Phase != PhaseLobby && g.Phase != PhaseStarting && g.Phase != PhaseFinished {
+		if totalCount != 52 {
+			return fmt.Errorf("deck inconsistency: expected 52 cards, found %d", totalCount)
+		}
+	}
+
+	return nil
+}

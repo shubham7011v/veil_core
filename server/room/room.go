@@ -492,6 +492,13 @@ func (r *Room) Run() {
 			if r.game.Phase != game.PhaseLobby && r.game.Phase != game.PhaseFinished {
 				if now.Sub(r.lastFullSync) >= 30*time.Second {
 					r.lastFullSync = now
+
+					// ✅ Anti-Cheat: Verify deck consistency during sync
+					if err := r.game.VerifyDeckConsistency(); err != nil {
+						log.Printf("CRITICAL ALERT: Anti-Cheat triggered in Room %s: %v", r.ID, err)
+						// Optionally: Pause game or flag players
+					}
+
 					r.broadcaster.BroadcastStateLocked() // Full state resync to prevent drift
 					log.Printf("Room %s: Periodic full state sync", r.ID)
 				}
@@ -545,6 +552,11 @@ func (r *Room) processAction(action GameAction) {
 					"playerNewCardCount": len(p.Hand),          // Fix state drift
 					"turnStartTime":      r.game.TurnStartTime, // CRITICAL: Include timer
 				})
+
+				// ✅ Anti-Cheat check after play
+				if err := r.game.VerifyDeckConsistency(); err != nil {
+					log.Printf("CRITICAL ALERT: Anti-Cheat triggered after PlayCards in Room %s: %v", r.ID, err)
+				}
 				return // Skip default broadcast
 			}
 		}
@@ -599,8 +611,15 @@ func (r *Room) processAction(action GameAction) {
 				}
 
 				// Finalize the result
-				msg := r.game.ResolveChallenge(challengerID)
-				log.Printf("Challenge Resolved in Room %s: %s", roomID, msg)
+				if r.game.Phase == game.PhaseRevealing {
+					msg := r.game.ResolveChallenge(challengerID)
+					log.Printf("Challenge Resolved in Room %s: %s", roomID, msg)
+
+					// ✅ Anti-Cheat check after resolution
+					if err := r.game.VerifyDeckConsistency(); err != nil {
+						log.Printf("CRITICAL ALERT: Anti-Cheat triggered after ResolveChallenge in Room %s: %v", roomID, err)
+					}
+				}
 
 				// Broadcast the final result state
 				r.broadcaster.BroadcastStateLocked()

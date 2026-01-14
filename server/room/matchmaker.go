@@ -4,10 +4,12 @@ import (
 	"fmt"
 	"log"
 	"math/rand"
+	"strings"
 	"time"
 
 	"veil_server/config"
 	"veil_server/db"
+	"veil_server/game"
 )
 
 // Matchmaker handles lobby management and matchmaking operations
@@ -85,11 +87,34 @@ func (mm *Matchmaker) CheckLobbyTimeout() {
 func (mm *Matchmaker) AttemptJoinActiveLobby(c *Client) {
 	// 1. Pre-Check: Validate coins BEFORE locking or assigning slot
 	// This prevents "Ghost Slots" where a user takes a slot but is later rejected by the room.
-	stats, err := db.GetOrCreateUser(c.ID, "")
-	if err != nil || stats.Coins < 100 {
+	var stats *db.UserStats
+	var err error
+
+	// Retry loop for SQLite busy/locked errors
+	for i := 0; i < 5; i++ {
+		stats, err = db.GetOrCreateUser(c.ID, "")
+		if err == nil {
+			break
+		}
+		// If it's a transient lock error, wait and retry
+		errMsg := err.Error()
+		if i < 4 && (strings.Contains(errMsg, "locked") || strings.Contains(errMsg, "busy")) {
+			time.Sleep(time.Duration(100+rand.Intn(200)) * time.Millisecond)
+			continue
+		}
+		break
+	}
+
+	if err != nil || stats == nil || stats.Coins < 100 {
+		coins := -1
+		if stats != nil {
+			coins = stats.Coins
+		}
+		log.Printf("DEBUG: Player %s failed coin check after retries. err: %v, coins: %d", c.ID, err, coins)
 		mm.manager.sendError(c, "INSUFFICIENT_FUNDS", "You need 100 coins to play online")
 		return
 	}
+	log.Printf("DEBUG: Player %s passed coin check (coins: %d)", c.ID, stats.Coins)
 
 	mm.manager.mu.Lock()
 	defer mm.manager.mu.Unlock()
@@ -104,7 +129,7 @@ func (mm *Matchmaker) AttemptJoinActiveLobby(c *Client) {
 		if mm.manager.ActiveLobbyCount >= TargetPlayers {
 			mm.manager.ActiveLobby = nil
 			mm.manager.ActiveLobbyCount = 0
-		} else if mm.manager.ActiveLobby.GetGamePhase() != "Lobby" {
+		} else if mm.manager.ActiveLobby.GetGamePhase() != string(game.PhaseLobby) {
 			mm.manager.ActiveLobby = nil
 			mm.manager.ActiveLobbyCount = 0
 		}
@@ -137,6 +162,7 @@ func (mm *Matchmaker) AttemptJoinActiveLobby(c *Client) {
 
 	// Join - Increment sync counter immediately to reserve the slot
 	mm.manager.ActiveLobbyCount++
+	log.Printf("DEBUG: Matchmaking Reservation SUCCESS for %s. New Count: %d", c.ID, mm.manager.ActiveLobbyCount)
 	log.Printf("Matchmaking: Client %s reserved slot. Lobby count: %d/%d",
 		c.ID, mm.manager.ActiveLobbyCount, TargetPlayers)
 

@@ -116,8 +116,9 @@ func (h *AdminHandler) Ping(w http.ResponseWriter, r *http.Request) {
 
 // ServerStats struct
 type ServerStats struct {
-	Goroutines int `json:"goroutines"`
-	Uptime     int `json:"uptime_sec"`
+	Goroutines int                `json:"goroutines"`
+	Uptime     int                `json:"uptime_sec"`
+	Manager    room.ManagerStatus `json:"manager"`
 }
 
 var startTime = time.Now()
@@ -127,6 +128,7 @@ func (h *AdminHandler) GetStats(w http.ResponseWriter, r *http.Request) {
 	stats := ServerStats{
 		Goroutines: runtime.NumGoroutine(),
 		Uptime:     int(time.Since(startTime).Seconds()),
+		Manager:    h.Manager.GetStatus(),
 	}
 
 	w.Header().Set("Content-Type", "application/json")

@@ -518,6 +518,14 @@ class WebSocketSessionHandler extends GameSessionHandler
       _connectionStatusController.add(status);
     }
 
+    // ✅ Phase 4 UX: Set syncing flag during reconnection
+    if (status == ConnectionStatus.reconnecting) {
+      _currentState = _currentState.copyWith(isSyncing: true);
+      if (!_stateController.isClosed) {
+        _stateController.add(_currentState);
+      }
+    }
+
     // Provide user-friendly feedback based on status changes
     if (status == ConnectionStatus.connected &&
         previousStatus != ConnectionStatus.connected) {
@@ -1010,6 +1018,7 @@ class WebSocketSessionHandler extends GameSessionHandler
           : null,
       turnTimerS: null, // Timer logic handled via turnStartTime
       isSpectator: stateData['isSpectator'] as bool? ?? false,
+      isSyncing: false, // Reset syncing flag on full state sync
       createdAt: stateData['createdAt'] as int?,
     );
 
