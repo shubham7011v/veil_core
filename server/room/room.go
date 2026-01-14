@@ -59,6 +59,9 @@ type Room struct {
 
 	// Broadcaster handles message distribution
 	broadcaster *Broadcaster
+
+	// Cleanup callback
+	OnStop func()
 }
 
 type GameAction struct {
@@ -286,6 +289,11 @@ func (r *Room) Run() {
 		close(r.register)
 		close(r.unregister)
 		close(r.actions)
+
+		if r.OnStop != nil {
+			r.OnStop()
+		}
+
 		log.Printf("Room %s Run loop stopped", r.ID)
 	}()
 
@@ -454,6 +462,23 @@ func (r *Room) Run() {
 
 			// Grace Period Check
 			now := time.Now()
+			humanCount := 0
+			for client := range r.clients {
+				if !client.IsBot {
+					humanCount++
+				}
+			}
+			humanCount += len(r.disconnectTimes)
+
+			// ✅ FIX #5: If NO humans are left (connected or waiting), stop the room immediately
+			// This prevents ghost rooms with only bots running forever.
+			if humanCount == 0 && r.game.Phase != game.PhaseLobby {
+				log.Printf("Room %s: No humans left. Closing room.", r.ID)
+				r.mu.Unlock() // Must unlock before returning!
+				r.Stop()
+				return
+			}
+
 			for pid, disconnectTime := range r.disconnectTimes {
 				if now.Sub(disconnectTime) > r.gracePeriod {
 					log.Printf("Player %s grace period expired in room %s. Removing permanently.", pid, r.ID)

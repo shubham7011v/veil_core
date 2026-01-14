@@ -28,7 +28,8 @@ type Manager struct {
 	Register   chan *Client
 	Unregister chan *Client
 
-	Rooms map[string]*Room
+	Rooms       map[string]*Room
+	PlayerRooms map[string]*Room // O(1) Lookup: playerID -> *Room
 
 	// Active Lobby State
 	ActiveLobby          *Room
@@ -44,11 +45,12 @@ type Manager struct {
 
 func NewManager(authClient *auth.Client) *Manager {
 	m := &Manager{
-		Clients:    make(map[*Client]bool),
-		Register:   make(chan *Client, 256), // Buffered to prevent blocking
-		Unregister: make(chan *Client, 256),
-		Rooms:      make(map[string]*Room),
-		AuthClient: authClient,
+		Clients:     make(map[*Client]bool),
+		Register:    make(chan *Client, 1024), // Increased buffer to prevent blocking
+		Unregister:  make(chan *Client, 1024),
+		Rooms:       make(map[string]*Room),
+		PlayerRooms: make(map[string]*Room),
+		AuthClient:  authClient,
 	}
 	// Initialize modular handlers
 	m.authHandler = NewAuthHandler(m)
@@ -79,6 +81,9 @@ func (m *Manager) Run() {
 				// No need to remove from Queue.
 				// The client is always in a Room now (ActiveLobby or GameRoom).
 				if client.CurrentRoom != nil {
+					// Remove from index
+					m.RemovePlayerRoom(client.ID)
+
 					// If they are leaving the currently filling lobby, free up a slot
 					m.mu.Lock()
 					// Safe Decrement: Only if they are actually in the lobby that is still filling
@@ -108,6 +113,17 @@ func (m *Manager) Run() {
 	}
 }
 
+// Shutdown stops all active rooms and cleans up resources
+func (m *Manager) Shutdown() {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	log.Printf("Manager: Shutting down %d rooms", len(m.Rooms))
+	for _, r := range m.Rooms {
+		r.Stop()
+	}
+}
+
 // DELEGATED to Matchmaker
 
 // DELEGATED to Matchmaker but wrapper kept for Interface Compliance
@@ -115,17 +131,26 @@ func (m *Manager) AttemptJoinActiveLobby(c *Client) {
 	m.matchmaker.AttemptJoinActiveLobby(c)
 }
 
-// FindRoomByPlayerID scans all active rooms for a specific player ID
+// SetPlayerRoom updates the O(1) index
+func (m *Manager) SetPlayerRoom(playerID string, r *Room) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.PlayerRooms[playerID] = r
+}
+
+// RemovePlayerRoom removes the player from the O(1) index
+func (m *Manager) RemovePlayerRoom(playerID string) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	delete(m.PlayerRooms, playerID)
+}
+
+// FindRoomByPlayerID uses the indexed map for O(1) lookup
 func (m *Manager) FindRoomByPlayerID(playerID string) *Room {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
 
-	for _, r := range m.Rooms {
-		if r.IsPlayerInRoom(playerID) {
-			return r
-		}
-	}
-	return nil
+	return m.PlayerRooms[playerID]
 }
 
 // HandleMessage routes incoming messages from clients
@@ -195,7 +220,7 @@ func (m *Manager) HandleMessage(c *Client, message []byte) {
 		m.authHandler.HandleChallengeClaim(c, baseMsg.Data)
 		return
 
-	case "JOIN_ROOM":
+	case protocol.MsgTypeJoinRoom:
 		// Public Realtime Matchmaking
 		if c.CurrentRoom == nil {
 			// ✅ Session Restoration: Check if they are already in an active room
@@ -211,6 +236,27 @@ func (m *Manager) HandleMessage(c *Client, message []byte) {
 			m.matchmaker.AttemptJoinActiveLobby(c)
 		} else {
 			c.CurrentRoom.ForceBroadcastState()
+		}
+		return
+
+	case protocol.MsgTypeCancelMatchmaking:
+		if c.CurrentRoom != nil {
+			m.mu.Lock()
+			// Only allow cancellation if in ActiveLobby (matchmaking)
+			if m.ActiveLobby != nil && c.CurrentRoom == m.ActiveLobby {
+				log.Printf("Matchmaking: Client %s cancelled matchmaking", c.ID)
+				m.ActiveLobbyCount--
+				if m.ActiveLobbyCount < 0 {
+					m.ActiveLobbyCount = 0
+				}
+				m.mu.Unlock()
+
+				c.CurrentRoom.Leave(c)
+				c.CurrentRoom = nil
+				m.RemovePlayerRoom(c.ID)
+			} else {
+				m.mu.Unlock()
+			}
 		}
 		return
 
@@ -291,6 +337,14 @@ func (m *Manager) createPrivateRoom(c *Client, data protocol.CreatePrivateRoomMe
 
 	r := NewPrivateRoom(roomID, data.RoomName, code, data.Password, c.ID, data.MaxPlayers, data.BootAmount)
 
+	// Set cleanup callback
+	r.OnStop = func() {
+		m.mu.Lock()
+		delete(m.Rooms, code)
+		m.mu.Unlock()
+		log.Printf("Manager: Cleaned up private room %s after stop", code)
+	}
+
 	m.mu.Lock()
 	m.Rooms[code] = r
 	m.mu.Unlock()
@@ -310,6 +364,7 @@ func (m *Manager) createPrivateRoom(c *Client, data protocol.CreatePrivateRoomMe
 	c.Send <- bytes
 
 	c.CurrentRoom = r
+	m.SetPlayerRoom(c.ID, r)
 	r.Join(c)
 }
 
@@ -340,6 +395,7 @@ func (m *Manager) joinPrivateRoom(c *Client, data protocol.JoinPrivateRoomMessag
 	}
 
 	c.CurrentRoom = r
+	m.SetPlayerRoom(c.ID, r)
 	r.Join(c)
 
 	info := r.GetInfo()

@@ -396,7 +396,7 @@ class _MatchmakingScreenState extends State<MatchmakingScreen>
     _waitTimer?.cancel();
     // If we haven't found a match OR if we manually popped (aborting match found state)
     if (!_isMatchFound || _isManualPop) {
-      _handler?.leaveRoom('');
+      _handler?.cancelMatchmaking();
     }
     _controller.dispose();
     _pulseController.dispose();

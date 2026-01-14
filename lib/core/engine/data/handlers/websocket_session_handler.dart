@@ -1324,6 +1324,14 @@ class WebSocketSessionHandler extends GameSessionHandler
 
   /// Join the matchmaking queue for public matches
   void joinMatchmaking() {
+    // Check if we are already in an active room (session restoration)
+    if (_currentState.roomId != '0' && _currentState.roomId != '000') {
+      debugPrint(
+        '⚠️ joinMatchmaking skipped: Already in room ${_currentState.roomId}',
+      );
+      return;
+    }
+
     // ✅ FIX #4: Prevent duplicate matchmaking joins
     if (_isJoiningMatchmaking) {
       debugPrint('⚠️ joinMatchmaking skipped: already joining');
@@ -1335,6 +1343,13 @@ class WebSocketSessionHandler extends GameSessionHandler
     Future.delayed(const Duration(seconds: 2), () {
       _isJoiningMatchmaking = false;
     });
+  }
+
+  /// Cancel matchmaking queue
+  void cancelMatchmaking() {
+    _send({'type': 'CANCEL_MATCHMAKING'});
+    _isJoiningMatchmaking = false;
+    debugPrint('📤 CANCEL_MATCHMAKING sent');
   }
 
   @override

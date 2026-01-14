@@ -5,15 +5,17 @@ import "encoding/json"
 // Message Type Constants
 const (
 	// Client -> Server
-	MsgTypeAuth          = "AUTH"
-	MsgTypePlayCards     = "PLAY_CARDS"
-	MsgTypePass          = "PASS"
-	MsgTypeChallenge     = "CHALLENGE"
-	MsgTypeStartGame     = "START_GAME"
-	MsgTypeUpdateName    = "UPDATE_NAME"
-	MsgTypeUpdateAvatar  = "UPDATE_AVATAR"
-	MsgTypeRefillCoins   = "REFILL_COINS"
-	MsgTypeDeleteAccount = "DELETE_ACCOUNT"
+	MsgTypeAuth              = "AUTH"
+	MsgTypePlayCards         = "PLAY_CARDS"
+	MsgTypePass              = "PASS"
+	MsgTypeChallenge         = "CHALLENGE"
+	MsgTypeStartGame         = "START_GAME"
+	MsgTypeUpdateName        = "UPDATE_NAME"
+	MsgTypeUpdateAvatar      = "UPDATE_AVATAR"
+	MsgTypeRefillCoins       = "REFILL_COINS"
+	MsgTypeDeleteAccount     = "DELETE_ACCOUNT"
+	MsgTypeJoinRoom          = "JOIN_ROOM"
+	MsgTypeCancelMatchmaking = "CANCEL_MATCHMAKING"
 
 	// Private Room (Client -> Server)
 	MsgTypeCreatePrivateRoom = "CREATE_PRIVATE_ROOM"
@@ -137,6 +139,14 @@ type AuthOkMessage struct {
 type ErrorMessage struct {
 	Code    string `json:"code"`
 	Message string `json:"message"`
+}
+
+type JoinRoomMessage struct {
+	// Optional fields if needed
+}
+
+type CancelMatchmakingMessage struct {
+	// Optional fields if needed
 }
 
 // Helper to wrap payload in a standard message map

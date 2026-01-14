@@ -115,6 +115,15 @@ func (mm *Matchmaker) AttemptJoinActiveLobby(c *Client) {
 		roomID := fmt.Sprintf("match_%d", time.Now().UnixNano())
 		room := NewRoom(roomID)
 		room.SetMaxPlayers(TargetPlayers) // Override default (10) with matchmaking target (5)
+
+		// Set cleanup callback
+		room.OnStop = func() {
+			mm.manager.mu.Lock()
+			delete(mm.manager.Rooms, roomID)
+			mm.manager.mu.Unlock()
+			log.Printf("Manager: Cleaned up room %s after stop", roomID)
+		}
+
 		mm.manager.Rooms[roomID] = room
 
 		go room.Run() // Start the room loop
@@ -133,6 +142,9 @@ func (mm *Matchmaker) AttemptJoinActiveLobby(c *Client) {
 
 	c.CurrentRoom = mm.manager.ActiveLobby
 	mm.manager.ActiveLobby.Join(c)
+
+	// ✅ Index for O(1) Session Restoration
+	mm.manager.PlayerRooms[c.ID] = mm.manager.ActiveLobby
 
 	// If we just hit max, clear ActiveLobby
 	if mm.manager.ActiveLobbyCount >= TargetPlayers {

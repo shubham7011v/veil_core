@@ -140,7 +140,16 @@ func main() {
 	defer cancel()
 
 	if err := srv.Shutdown(shutdownCtx); err != nil {
-		log.Fatalf("Server Shutdown Failed:%+v", err)
+		log.Printf("Server Shutdown Failed: %+v", err)
+	}
+
+	// 2.5 Stop all rooms
+	manager.Shutdown()
+
+	// 3. Flush all buffered coin updates to DB
+	log.Println("Flushing coin buffer...")
+	if err := db.FlushCoins(); err != nil {
+		log.Printf("Error flushing coins during shutdown: %v", err)
 	}
 
 	log.Println("Server exited gracefully")
