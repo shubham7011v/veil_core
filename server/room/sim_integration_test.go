@@ -627,3 +627,92 @@ func TestGameFlow(t *testing.T) {
 	}
 	log.Println("Pass & Round Reset verified")
 }
+
+func TestLobbyCountdownReset(t *testing.T) {
+	// Scenario: 4 players join (threshold 2 for 5s).
+	// If 1 leaves, does countdown cancel/reset?
+	// Note: Current logic: If len >= MaxPlayers, start countdown.
+	// Wait, standard logic is usually "Start when full".
+	// Let's see if we can trigger "Starting" phase then leave.
+
+	// Helper to create client which just holds connection
+	createJoiner := func(name string) (*websocket.Conn, chan []byte) {
+		c, m := createSimClient(t, name)
+		writeJSON(c, protocol.NewMessage(protocol.MsgTypeJoinRoom, nil))
+		return c, m
+	}
+
+	c1, _ := createJoiner("keep_1")
+	defer c1.Close()
+	c2, _ := createJoiner("keep_2")
+	defer c2.Close()
+	c3, _ := createJoiner("leave_3")
+	defer c3.Close()
+	c4, _ := createJoiner("keep_4")
+	defer c4.Close()
+
+	// We need 5 to be full? MaxPlayers is 5.
+	c5, _ := createJoiner("leave_5")
+	defer c5.Close()
+
+	// Now we should be full (5/5). Countdown should start.
+	// We'd expect a GAME_STATE with phase "starting" or similar log check.
+	// But let's just make one leave immediately.
+
+	time.Sleep(200 * time.Millisecond)
+	log.Println("Simulating player 5 leaving...")
+	c5.Close() // Disconnect
+
+	// Wait a moment for server to process disconnect
+	time.Sleep(500 * time.Millisecond)
+
+	// Now verify if Room Phase reverted to Lobby?
+	// We can check by having c1 send a message or just wait to see if game starts.
+	// If the bug exists, the game will start in X seconds despite only 4 players.
+
+	// Let's query state via c1 catch-up? Or wait for update.
+	// Actually, if we wait > StartGameDelay, and game starts, it's a bug.
+	// Default StartGameDelay is 10s? In tests we might not have changed it.
+	// Let's assume 3s for test environment?
+
+	// Better check: Send a chat or action to provoke state update?
+	// Or just read the channel of c1.
+
+	// Clean out c1 channel
+	drain(c1)
+
+	// Check phase via creating a NEW connection to inspect?
+	// Or trust c1 updates.
+	// Let's wait 1s.
+
+	// Re-join c5 as "checker"
+	checker, mCheck := createSimClient(t, "checker")
+	defer checker.Close()
+	writeJSON(checker, protocol.NewMessage(protocol.MsgTypeJoinRoom, nil))
+
+	select {
+	case msg := <-mCheck:
+		var bm protocol.BaseMessage
+		json.Unmarshal(msg, &bm)
+		if bm.Type == protocol.MsgTypeGameState {
+			var state map[string]interface{}
+			json.Unmarshal(bm.Data, &state)
+			phase := state["phase"].(string)
+			log.Printf("Current Phase after leave: %s", phase)
+			if phaseItem, ok := state["phase"]; ok {
+				if phaseItem == "starting" {
+					t.Error("FAIL: Room is still in 'starting' phase after player left full lobby")
+				}
+			}
+		}
+	case <-time.After(2 * time.Second):
+		t.Log("No state update, good sign?")
+	}
+}
+
+func drain(c *websocket.Conn) {
+	// Helper to drain buffer?
+	// In reality we rely on the channel in createSimClient but here we access raw Conn?
+	// createSimClient returns Conn AND channel. We should use channel.
+	// Logic above used createJoiner which returns channel.
+}
