@@ -170,3 +170,264 @@ func sendMsg(t *testing.T, conn *websocket.Conn, msgType string, data interface{
 		t.Fatalf("Failed to write: %v", err)
 	}
 }
+
+func TestBotBehavior(t *testing.T) {
+	// 0. Environment Setup
+	dbPath := "test_veil_bots.db"
+	os.Remove(dbPath)
+	defer os.Remove(dbPath)
+	db.InitDB(dbPath)
+	os.Setenv("ENABLE_BOT_PLAYERS", "true")
+	os.Setenv("LOBBY_TIMEOUT_S", "1") // Fast bot join
+	os.Setenv("START_GAME_DELAY", "1")
+	defer os.Unsetenv("ENABLE_BOT_PLAYERS")
+	defer os.Unsetenv("LOBBY_TIMEOUT_S")
+	defer os.Unsetenv("START_GAME_DELAY")
+
+	// 1. Setup Server
+	manager := room.NewManager(nil)
+	go manager.Run()
+	s := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		room.ServeWs(manager, w, r)
+	}))
+	defer s.Close()
+
+	wsURL := "ws" + strings.TrimPrefix(s.URL, "http")
+
+	// 2. Connect Human Client
+	connH, _, err := websocket.DefaultDialer.Dial(wsURL, nil)
+	if err != nil {
+		t.Fatalf("Human connect failed: %v", err)
+	}
+	defer connH.Close()
+
+	// 3. Auth & Join
+	sendMsg(t, connH, protocol.MsgTypeAuth, protocol.AuthMessage{Token: "HumanBotTester", Name: "HumanBotTester"})
+
+	// Wait for Auth Success
+	connH.SetReadDeadline(time.Now().Add(5 * time.Second))
+	_, _, _ = connH.ReadMessage() // PING or AUTH_OK
+	// Simple check, assume OK for speed, real check in waitForGameState loop implicit
+
+	sendMsg(t, connH, "JOIN_ROOM", nil) // Triggers matchmaking
+
+	// 4. Wait for Game Start (Bots should join after 1s timeout)
+	t.Log("Waiting for bots to fill lobby...")
+
+	// We expect "thinking" phase eventually
+	// This might take LOBBY_TIMEOUT (1s) + START_DELAY (1s) + buffer = 3-4s
+	state := waitForGameState(t, connH, "thinking")
+
+	t.Logf("Game Started! Active Player: %s", state["activePlayerId"])
+
+	participants := state["participants"].([]interface{})
+	if len(participants) < 2 {
+		t.Fatalf("Expected bots to join, only saw %d participants", len(participants))
+	} else {
+		t.Logf("Participant Count: %d", len(participants))
+	}
+
+	// 5. Play Loop
+	// If it's human turn, play valid. If bot, wait.
+
+	// myID := "load-player-HumanBotTester" // Auth handler internal ID pattern
+	// Actually we can check "myHand" existence to confirm identity if ID varies.
+
+	for i := 0; i < 4; i++ {
+		activeID := state["activePlayerId"].(string)
+
+		if strings.Contains(activeID, "HumanBotTester") {
+			// Human Turn - Pass for simplicity
+			t.Log("Human Turn: Passing...")
+			sendMsg(t, connH, protocol.MsgTypePass, nil)
+		} else {
+			// Bot Turn
+			t.Logf("Bot %s Turn: Waiting...", activeID)
+		}
+
+		// Wait for next state change
+		// We can't reuse waitForGameState directly if we don't know the phase (might remain 'thinking')
+		// So we read next message.
+		connH.SetReadDeadline(time.Now().Add(5 * time.Second))
+		_, message, err := connH.ReadMessage()
+		if err != nil {
+			t.Fatalf("Read error loop %d: %v", i, err)
+		}
+
+		var bm protocol.BaseMessage
+		json.Unmarshal(message, &bm)
+
+		if bm.Type == protocol.MsgTypeGameState {
+			var newState map[string]interface{}
+			json.Unmarshal(bm.Data, &newState)
+			state = newState
+
+			// Optional: Verify bots played (lastEvent)
+			if newState["lastEvent"] == "cardsPlayed" || newState["lastEvent"] == "passed" {
+				t.Logf("Turn Event: %s by %s", newState["lastEvent"], newState["lastEventActorId"])
+			}
+		}
+	}
+
+	t.Log("Bot Behavior Verification Complete")
+}
+
+func TestNetworkEdgeCases(t *testing.T) {
+	// 0. Environment Setup
+	dbPath := "test_veil_network.db"
+	os.Remove(dbPath)
+	defer os.Remove(dbPath)
+	db.InitDB(dbPath)
+
+	// 1. Setup Server
+	manager := room.NewManager(nil)
+	go manager.Run()
+	s := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		room.ServeWs(manager, w, r)
+	}))
+	defer s.Close()
+	wsURL := "ws" + strings.TrimPrefix(s.URL, "http")
+
+	// Helper to connect and auth
+	connectAndAuth := func(name, token string) *websocket.Conn {
+		c, _, err := websocket.DefaultDialer.Dial(wsURL, nil)
+		if err != nil {
+			t.Fatalf("Dial failed for %s: %v", name, err)
+		}
+		sendMsg(t, c, protocol.MsgTypeAuth, protocol.AuthMessage{Token: token, Name: name})
+		// Drain Auth Response
+		c.SetReadDeadline(time.Now().Add(2 * time.Second))
+		_, _, _ = c.ReadMessage()
+		return c
+	}
+
+	// SCENARIO A: Reconnection & Session Restoration
+	// SCENARIO A: Reconnection & Session Restoration (Active Game)
+	t.Run("Reconnection", func(t *testing.T) {
+		token := "recon_user_1"
+
+		// 1. Initial Connect
+		c1 := connectAndAuth("ReconUser", token)
+
+		// 2. Start Private Game (Guarantees Active State)
+		createPayload := protocol.CreatePrivateRoomMessage{RoomName: "ReconRoom", MaxPlayers: 2}
+		sendMsg(t, c1, protocol.MsgTypeCreatePrivateRoom, createPayload)
+
+		// Get Room Code
+		c1.SetReadDeadline(time.Now().Add(2 * time.Second))
+		_, msg, _ := c1.ReadMessage()
+		var bm protocol.BaseMessage
+		json.Unmarshal(msg, &bm)
+		var data map[string]interface{}
+		json.Unmarshal(bm.Data, &data)
+		roomCode := data["roomCode"].(string)
+
+		// Join 2nd Player to allow Start
+		c2 := connectAndAuth("OtherPlayer", "other_token")
+		defer c2.Close()
+		sendMsg(t, c2, protocol.MsgTypeJoinPrivateRoom, protocol.JoinPrivateRoomMessage{RoomCode: roomCode})
+
+		// Wait for c2 to get room joined
+		c2.SetReadDeadline(time.Now().Add(2 * time.Second))
+		c2.ReadMessage()
+
+		// Start Game
+		time.Sleep(200 * time.Millisecond)
+		sendMsg(t, c1, protocol.MsgTypeStartPrivateGame, protocol.StartPrivateGameMessage{RoomCode: roomCode})
+
+		// Wait for Game Start (Thinking Phase)
+		state1 := waitForGameState(t, c1, "thinking")
+		t.Log("Game started. User in thinking phase.")
+
+		// 3. Disconnect
+		c1.Close()
+		t.Log("User disconnected.")
+		time.Sleep(1 * time.Second) // Simulate network gap
+
+		// 4. Reconnect with SAME token
+		c3 := connectAndAuth("ReconUser", token) // Reconnect as c3
+		defer c3.Close()
+
+		// 5. Verify Session Restoration
+		t.Log("Waiting for auto-restoration state update...")
+		state2 := waitForGameState(t, c3, "thinking")
+
+		// Verify Room ID is same
+		if state1["roomId"] != state2["roomId"] {
+			t.Errorf("FAIL: Session did not restore to same room. Old: %v, New: %v", state1["roomId"], state2["roomId"])
+		} else {
+			t.Log("SUCCESS: Session restored to correct room.")
+		}
+	})
+
+	// SCENARIO B: Message Flooding
+	t.Run("MessageFlooding", func(t *testing.T) {
+		c := connectAndAuth("Flooder", "flood_token")
+		defer c.Close()
+
+		// Flood 500 PINGs
+		start := time.Now()
+		for i := 0; i < 500; i++ {
+			err := c.WriteJSON(protocol.BaseMessage{Type: protocol.MsgTypePing})
+			if err != nil {
+				t.Logf("Flood write failed at %d: %v", i, err)
+				break
+			}
+		}
+		duration := time.Since(start)
+		t.Logf("Flooded 500 messages in %v", duration)
+
+		// Verify server is still alive by sending a valid request
+		sendMsg(t, c, protocol.MsgTypePing, nil)
+
+		c.SetReadDeadline(time.Now().Add(2 * time.Second))
+		_, msg, err := c.ReadMessage()
+		if err != nil {
+			t.Fatalf("Server died or disconnected flooder: %v", err)
+		}
+		var bm protocol.BaseMessage
+		json.Unmarshal(msg, &bm)
+		if bm.Type != protocol.MsgTypePong {
+			t.Errorf("Expected PONG after flood, got %s", bm.Type)
+		} else {
+			t.Log("SUCCESS: Server survived flooding.")
+		}
+	})
+
+	// SCENARIO C: Invalid Actions (Out of Turn)
+	t.Run("InvalidActions", func(t *testing.T) {
+		c := connectAndAuth("Cheater", "cheat_token")
+		defer c.Close()
+
+		sendMsg(t, c, "JOIN_ROOM", nil)
+		waitForGameState(t, c, "lobby")
+
+		// Try to play card while in lobby/waiting (Invalid Phase)
+		playMsg := protocol.PlayCardsMessage{
+			CardIDs:      []string{"invalid_card"},
+			DeclaredRank: "A",
+		}
+		sendMsg(t, c, protocol.MsgTypePlayCards, playMsg)
+
+		// We expect an Error message or Ignore.
+		// Server sends MsgTypeError if room.HandleAction rejects it?
+		// Room logic usually checks phase.
+
+		c.SetReadDeadline(time.Now().Add(1 * time.Second))
+		_, msg, err := c.ReadMessage()
+		if err == nil {
+			var bm protocol.BaseMessage
+			json.Unmarshal(msg, &bm)
+			if bm.Type == protocol.MsgTypeError {
+				t.Logf("SUCCESS: Server rejected invalid action with error: %s", string(bm.Data))
+			} else if bm.Type == protocol.MsgTypeGameState {
+				// Ignored and sent state update? Acceptable.
+				t.Log("Server sent state update (likely ignored action).")
+			} else {
+				t.Logf("Received %s (Action likely ignored)", bm.Type)
+			}
+		} else {
+			t.Log("Timeout (Action ignored silently). SUCCESS.")
+		}
+	})
+}

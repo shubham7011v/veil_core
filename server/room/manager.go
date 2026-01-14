@@ -36,10 +36,11 @@ type ManagerStatus struct {
 
 // Manager keeps track of all clients and rooms
 type Manager struct {
-	mu         sync.RWMutex
-	Clients    map[*Client]bool
-	Register   chan *Client
-	Unregister chan *Client
+	mu              sync.RWMutex
+	Clients         map[*Client]bool
+	Register        chan *Client
+	Unregister      chan *Client
+	ExpiredSessions chan string // Channel for Rooms to enforce index cleanup
 
 	Rooms       map[string]*Room
 	PlayerRooms map[string]*Room // O(1) Lookup: playerID -> *Room
@@ -61,9 +62,11 @@ type Manager struct {
 
 func NewManager(authClient *auth.Client) *Manager {
 	m := &Manager{
-		Clients:      make(map[*Client]bool),
-		Register:     make(chan *Client, 1024), // Increased buffer to prevent blocking
-		Unregister:   make(chan *Client, 1024),
+		Clients:         make(map[*Client]bool),
+		Register:        make(chan *Client, 1024), // Increased buffer to prevent blocking
+		Unregister:      make(chan *Client, 1024),
+		ExpiredSessions: make(chan string, 1024),
+
 		Rooms:        make(map[string]*Room),
 		PlayerRooms:  make(map[string]*Room),
 		AuthClient:   authClient,
@@ -116,8 +119,8 @@ func (m *Manager) Run() {
 				// No need to remove from Queue.
 				// The client is always in a Room now (ActiveLobby or GameRoom).
 				if client.CurrentRoom != nil {
-					// Remove from index
-					m.RemovePlayerRoom(client.ID)
+					// NOTE: We do NOT remove from PlayerRooms here anymore.
+					// We wait for the Room to signal expiry via ExpiredSessions.
 
 					// If they are leaving the currently filling lobby, free up a slot
 					m.mu.Lock()
@@ -139,6 +142,10 @@ func (m *Manager) Run() {
 				close(client.Send)
 				log.Println("Connection Unregistered")
 			}
+
+		case playerID := <-m.ExpiredSessions:
+			// Cleanup from Index
+			m.RemovePlayerRoom(playerID)
 
 		case <-ticker.C:
 			// Regular Housekeeping
@@ -397,6 +404,7 @@ func (m *Manager) createPrivateRoom(c *Client, data protocol.CreatePrivateRoomMe
 	roomID := fmt.Sprintf("private_%s_%d", code, time.Now().Unix())
 
 	r := NewPrivateRoom(roomID, data.RoomName, code, data.Password, c.ID, data.MaxPlayers, data.BootAmount)
+	r.SessionExpiry = m.ExpiredSessions
 
 	// Set cleanup callback
 	r.OnStop = func() {

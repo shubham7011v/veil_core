@@ -75,3 +75,36 @@ func NewDeck() []Card {
 
 	return deck
 }
+
+func RankValue(r Rank) int {
+	switch r {
+	case RankTwo:
+		return 2
+	case RankThree:
+		return 3
+	case RankFour:
+		return 4
+	case RankFive:
+		return 5
+	case RankSix:
+		return 6
+	case RankSeven:
+		return 7
+	case RankEight:
+		return 8
+	case RankNine:
+		return 9
+	case RankTen:
+		return 10
+	case RankJack:
+		return 11
+	case RankQueen:
+		return 12
+	case RankKing:
+		return 13
+	case RankAce:
+		return 14
+	default:
+		return 0
+	}
+}

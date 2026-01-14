@@ -62,6 +62,9 @@ type Room struct {
 
 	// Cleanup callback
 	OnStop func()
+
+	// Session Expiry Channel (Notify Manager to clean index)
+	SessionExpiry chan<- string
 }
 
 type GameAction struct {
@@ -359,9 +362,9 @@ func (r *Room) Run() {
 			// Broadcast Update
 			if r.isPrivate {
 				r.broadcaster.BroadcastRoomInfoLocked()
-			} else {
-				r.broadcaster.BroadcastStateLocked()
 			}
+			// Always broadcast state so clients receive hand/game data
+			r.broadcaster.BroadcastStateLocked()
 			r.mu.Unlock()
 
 		case client := <-r.unregister:
@@ -386,6 +389,15 @@ func (r *Room) Run() {
 					// If in Lobby, Starting, or Finished phase - remove immediately
 					r.game.RemovePlayer(client.ID)
 					delete(r.disconnectTimes, client.ID) // Ensure they are not in disconnectTimes
+
+					// Notify Manager to clean up index
+					if r.SessionExpiry != nil {
+						select {
+						case r.SessionExpiry <- client.ID:
+						default:
+							log.Printf("WARNING: SessionExpiry buffer full for %s", client.ID)
+						}
+					}
 				}
 
 				// Host reassignment
@@ -455,6 +467,19 @@ func (r *Room) Run() {
 					elapsed := time.Now().Unix() - r.game.TurnStartTime
 					if elapsed > 25 { // 25s limit
 						r.handleTurnTimeout()
+					}
+				}
+			}
+
+			// ✅ FIX: Process Bot Turns
+			// Check every tick (200ms) but strict throttled by TurnStartTime
+			if r.game.Phase == game.PhaseThinking {
+				activeID := r.game.ActivePlayerID()
+				if p := r.game.PlayerMap[activeID]; p != nil && p.IsBot {
+					// Add delay so bot doesn't play instantly (human-like)
+					// Verify TurnStartTime + 2s < Now
+					if time.Now().Unix() >= r.game.TurnStartTime+2 { // 2s thinking time
+						r.processBotMove(p)
 					}
 				}
 			}
@@ -815,4 +840,116 @@ func (r *Room) sendErrorToClient(client *Client, code, message string) {
 // ForceBroadcastState allows external triggers (e.g. from Manager) to safely broadcast state.
 func (r *Room) ForceBroadcastState() {
 	r.broadcaster.BroadcastState()
+}
+
+func (r *Room) processBotMove(bot *game.Player) {
+	log.Printf("🤖 Bot %s (Hand: %d) is thinking...", bot.Name, len(bot.Hand))
+
+	// Simple Bot Strategy:
+	// 1. If pile is empty, play lowest single card.
+	// 2. If pile has cards, try to beat it with same quantity.
+	// 3. Else pass.
+
+	// This is minimal logic for testing; robustness belongs in a dedicated package really.
+
+	// Access game safely (lock held in caller)
+	pile := r.game.Pile // ✅ Corrected for updated Game struct
+
+	// Candidates
+	hand := bot.Hand
+
+	var cardsToPlay []string
+	var rankToDeclare game.Rank
+
+	if len(pile) == 0 {
+		// Play lowest single
+		if len(hand) > 0 {
+			// Find lowest card
+			lowest := hand[0]
+			for _, c := range hand {
+				if game.RankValue(c.Rank) < game.RankValue(lowest.Rank) { // ✅ Corrected with RankValue
+					lowest = c
+				}
+			}
+			cardsToPlay = []string{lowest.ID}
+			rankToDeclare = lowest.Rank
+		}
+	} else {
+		// Must match count and beat rank
+		countNeeded := len(pile)
+		var rankToBeat game.Rank
+
+		if r.game.DeclaredRank != nil {
+			rankToBeat = *r.game.DeclaredRank // ✅ Corrected pointer access
+		}
+
+		// Naive: Try to find N cards of same rank > rankToBeat
+		// Map cards by rank
+		rankMap := make(map[game.Rank][]game.Card)
+		for _, c := range hand {
+			rankMap[c.Rank] = append(rankMap[c.Rank], c)
+		}
+
+		// Iterate possible ranks higher than current
+		currentVal := game.RankValue(rankToBeat)
+
+		// All ranks logic
+		allRanks := []game.Rank{
+			game.RankTwo, game.RankThree, game.RankFour, game.RankFive,
+			game.RankSix, game.RankSeven, game.RankEight, game.RankNine,
+			game.RankTen, game.RankJack, game.RankQueen, game.RankKing, game.RankAce,
+		}
+
+		for _, rk := range allRanks {
+			if game.RankValue(rk) > currentVal {
+				if cards, ok := rankMap[rk]; ok {
+					if len(cards) >= countNeeded {
+						// Take first N
+						subset := cards[:countNeeded]
+						for _, c := range subset {
+							cardsToPlay = append(cardsToPlay, c.ID)
+						}
+						rankToDeclare = rk
+						break
+					}
+				}
+			}
+		}
+	}
+
+	if len(cardsToPlay) > 0 {
+		log.Printf("🤖 Bot %s playing %d cards (Rank: %s)", bot.Name, len(cardsToPlay), rankToDeclare)
+
+		// Use same broadcast logic as processAction
+		err := r.game.PlayCards(bot.ID, cardsToPlay, rankToDeclare)
+		if err == nil {
+			r.broadcaster.BroadcastActionLocked("PLAY_CARDS", map[string]interface{}{
+				"playerId":           bot.ID,
+				"count":              len(cardsToPlay),
+				"declaredRank":       rankToDeclare,
+				"newPileCount":       r.game.PileCount,
+				"nextPlayerId":       r.game.ActivePlayerID(),
+				"playerNewCardCount": len(bot.Hand),
+				"turnStartTime":      r.game.TurnStartTime,
+			})
+			return
+		} else {
+			log.Printf("🤖 Bot Play Failed: %v", err)
+		}
+	}
+
+	// Default: Pass
+	log.Printf("🤖 Bot %s passing", bot.Name)
+	err := r.game.Pass(bot.ID)
+	if err == nil {
+		if r.game.LastEvent == "pileDiscarded" {
+			r.broadcaster.BroadcastStateLocked()
+		} else {
+			r.broadcaster.BroadcastActionLocked("PASS", map[string]interface{}{
+				"playerId":      bot.ID,
+				"nextPlayerId":  r.game.ActivePlayerID(),
+				"turnStartTime": r.game.TurnStartTime,
+			})
+		}
+	}
 }

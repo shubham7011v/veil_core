@@ -670,21 +670,6 @@ func TestLobbyCountdownReset(t *testing.T) {
 	// We can check by having c1 send a message or just wait to see if game starts.
 	// If the bug exists, the game will start in X seconds despite only 4 players.
 
-	// Let's query state via c1 catch-up? Or wait for update.
-	// Actually, if we wait > StartGameDelay, and game starts, it's a bug.
-	// Default StartGameDelay is 10s? In tests we might not have changed it.
-	// Let's assume 3s for test environment?
-
-	// Better check: Send a chat or action to provoke state update?
-	// Or just read the channel of c1.
-
-	// Clean out c1 channel
-	drain(c1)
-
-	// Check phase via creating a NEW connection to inspect?
-	// Or trust c1 updates.
-	// Let's wait 1s.
-
 	// Re-join c5 as "checker"
 	checker, mCheck := createSimClient(t, "checker")
 	defer checker.Close()
@@ -697,10 +682,10 @@ func TestLobbyCountdownReset(t *testing.T) {
 		if bm.Type == protocol.MsgTypeGameState {
 			var state map[string]interface{}
 			json.Unmarshal(bm.Data, &state)
-			phase := state["phase"].(string)
-			log.Printf("Current Phase after leave: %s", phase)
 			if phaseItem, ok := state["phase"]; ok {
-				if phaseItem == "starting" {
+				phase := phaseItem.(string)
+				log.Printf("Current Phase after leave: %s", phase)
+				if phase == "starting" {
 					t.Error("FAIL: Room is still in 'starting' phase after player left full lobby")
 				}
 			}
@@ -712,7 +697,102 @@ func TestLobbyCountdownReset(t *testing.T) {
 
 func drain(c *websocket.Conn) {
 	// Helper to drain buffer?
-	// In reality we rely on the channel in createSimClient but here we access raw Conn?
-	// createSimClient returns Conn AND channel. We should use channel.
-	// Logic above used createJoiner which returns channel.
+	// Not used but kept for interface consistency if needed.
+}
+
+func TestBotBehavior(t *testing.T) {
+	// 2. Enable Bots
+	t.Setenv("ENABLE_BOT_PLAYERS", "true")
+	t.Setenv("LOBBY_TIMEOUT_S", "2") // Fast timeout
+
+	// 3. Connect Human
+	client, msgChan := createSimClient(t, "human-bot-test")
+	defer client.Close()
+
+	// Join Matchmaking
+	joinMsg := protocol.NewMessage(protocol.MsgTypeJoinRoom, nil)
+	writeJSON(client, joinMsg)
+
+	// 4. Wait for Game Start (Bots should fill)
+	log.Println("Waiting for bots to join and game to start...")
+
+	// Wait for Phase "thinking"
+	timeout := time.After(15 * time.Second) // 2s lobby timeout + buffer
+	var startState map[string]interface{}
+
+	for {
+		select {
+		case msg := <-msgChan:
+			var bm protocol.BaseMessage
+			json.Unmarshal(msg, &bm)
+			if bm.Type == protocol.MsgTypeGameState {
+				var state map[string]interface{}
+				json.Unmarshal(bm.Data, &state)
+				if state["phase"] == "thinking" {
+					startState = state
+					goto GAME_STARTED
+				}
+			}
+		case <-timeout:
+			t.Fatal("Timeout waiting for game start with bots")
+		}
+	}
+GAME_STARTED:
+	activePlayerID := startState["activePlayerId"].(string)
+	myID := "mock_human-bot-test"
+	log.Printf("Game Started! Active: %s (Me: %s)", activePlayerID, myID)
+
+	// 5. Watch for Bot Moves
+	// Helper to play a card (Just Pass)
+	playCard := func() {
+		log.Println("Human passing to let bots play...")
+		passMsg := protocol.NewMessage(protocol.MsgTypePass, nil)
+		writeJSON(client, passMsg)
+	}
+
+	// Observer Loop
+	for i := 0; i < 3; i++ {
+		// If it's my turn, play
+		if activePlayerID == myID {
+			playCard()
+		} else {
+			log.Printf("Turn %d: Waiting for Bot %s to move...", i, activePlayerID)
+		}
+
+		// Wait for next event
+		eventTimeout := time.After(8 * time.Second) // Bots have 2s delay + buffer
+		eventReceived := false
+		for !eventReceived {
+			select {
+			case msg := <-msgChan:
+				var bm protocol.BaseMessage
+				json.Unmarshal(msg, &bm)
+				// Look for GameAction or State Update with LastEvent
+				if bm.Type == protocol.MsgTypeGameAction {
+					var data map[string]interface{}
+					json.Unmarshal(bm.Data, &data)
+					log.Printf("Action Received: %v", data["action"])
+					if data["nextPlayerId"] != nil {
+						activePlayerID = data["nextPlayerId"].(string)
+					}
+					eventReceived = true
+				} else if bm.Type == protocol.MsgTypeGameState {
+					var state map[string]interface{}
+					json.Unmarshal(bm.Data, &state)
+					lastEvent := state["lastEvent"]
+					log.Printf("State Received: LastEvent=%v", lastEvent)
+					if state["activePlayerId"] != nil {
+						activePlayerID = state["activePlayerId"].(string)
+					}
+					if lastEvent == "cardsPlayed" || lastEvent == "passed" || lastEvent == "pileDiscarded" {
+						eventReceived = true
+					}
+				}
+			case <-eventTimeout:
+				t.Fatal("Timeout waiting for bot move")
+			}
+		}
+	}
+
+	t.Log("Verified bot interaction loop.")
 }

@@ -12,6 +12,7 @@ type Player struct {
 	// Game state flags
 	HasPassed      bool `json:"hasPassed"`      // Reset every round
 	IsDisconnected bool `json:"isDisconnected"` // For grace period
+	IsBot          bool `json:"isBot"`          // ✅ FIX: Bot check
 }
 
 func NewPlayer(id, name, avatar string) *Player {

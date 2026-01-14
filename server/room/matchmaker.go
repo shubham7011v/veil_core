@@ -157,6 +157,7 @@ func (mm *Matchmaker) AttemptJoinActiveLobby(c *Client) {
 		roomID := fmt.Sprintf("match_%d", time.Now().UnixNano())
 		room := NewRoom(roomID)
 		room.SetMaxPlayers(TargetPlayers) // Override default (10) with matchmaking target (5)
+		room.SessionExpiry = mm.manager.ExpiredSessions
 
 		// Set cleanup callback
 		room.OnStop = func() {
