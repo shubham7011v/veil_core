@@ -26,7 +26,15 @@ func NewBroadcaster(r *Room) *Broadcaster {
 }
 
 // sendToClient handles backpressure by prioritizing critical messages
+// sendToClient handles backpressure and is safe against closed channels
 func (b *Broadcaster) sendToClient(c *Client, bytes []byte, critical bool) {
+	defer func() {
+		if r := recover(); r != nil {
+			// This happens if c.Send was closed concurrently
+			// We skip this client; they are likely already disconnected or disconnecting
+		}
+	}()
+
 	if c.IsBot {
 		select {
 		case c.Send <- bytes:
@@ -49,7 +57,6 @@ func (b *Broadcaster) sendToClient(c *Client, bytes []byte, critical bool) {
 			}
 		} else {
 			// For non-critical messages (Voice, Stats), skip immediately
-			// This is "soft backpressure" - lagging clients miss minor updates but stay in game
 		}
 	}
 }

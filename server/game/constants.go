@@ -27,10 +27,19 @@ const (
 
 // Config
 var (
-	MaxPlayers      = 10
-	MinPlayers      = 2  // For testing
-	StartGameDelayS = 10 // Seconds to wait in PhaseStarting
+	MaxPlayers = 10
+	MinPlayers = 2 // For testing
 )
+
+// GetStartGameDelay returns the countdown duration in seconds (dynamic for testing)
+func GetStartGameDelay() int {
+	if val := os.Getenv("START_GAME_DELAY"); val != "" {
+		if i, err := strconv.Atoi(val); err == nil {
+			return i
+		}
+	}
+	return 10 // Default
+}
 
 func init() {
 	if val := os.Getenv("MAX_PLAYERS"); val != "" {

@@ -22,6 +22,10 @@ func TestGameFlow(t *testing.T) {
 	os.Remove(dbPath)
 	defer os.Remove(dbPath)
 	db.InitDB(dbPath)
+	os.Setenv("LOBBY_TIMEOUT_S", "1")
+	os.Setenv("START_GAME_DELAY", "1")
+	defer os.Unsetenv("LOBBY_TIMEOUT_S")
+	defer os.Unsetenv("START_GAME_DELAY")
 
 	// 1. Setup Server
 	manager := room.NewManager(nil)

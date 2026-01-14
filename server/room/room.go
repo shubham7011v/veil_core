@@ -350,9 +350,9 @@ func (r *Room) Run() {
 
 				// Check auto-start for public rooms
 				if !r.isPrivate && len(r.game.Players) >= r.maxPlayers && r.game.Phase == game.PhaseLobby {
-					log.Printf("Lobby full in room %s. Starting %ds countdown...", r.ID, game.StartGameDelayS)
+					log.Printf("Lobby full in room %s. Starting %ds countdown...", r.ID, game.GetStartGameDelay())
 					r.game.Phase = game.PhaseStarting
-					r.game.StartTime = time.Now().Unix() + int64(game.StartGameDelayS)
+					r.game.StartTime = time.Now().Unix() + int64(game.GetStartGameDelay())
 				}
 			}
 
@@ -416,7 +416,6 @@ func (r *Room) Run() {
 				select {
 				case client.Send <- message:
 				default:
-					close(client.Send)
 					delete(r.clients, client)
 				}
 			}
@@ -557,7 +556,7 @@ func (r *Room) processAction(action GameAction) {
 				if err := r.game.VerifyDeckConsistency(); err != nil {
 					log.Printf("CRITICAL ALERT: Anti-Cheat triggered after PlayCards in Room %s: %v", r.ID, err)
 				}
-				return // Skip default broadcast
+				// Fall through to broadcast full state
 			}
 		}
 
@@ -576,7 +575,7 @@ func (r *Room) processAction(action GameAction) {
 					"turnStartTime": r.game.TurnStartTime, // CRITICAL: Include timer
 				})
 			}
-			return // Skip default broadcast
+			// Fall through to broadcast full state
 		}
 
 	case protocol.MsgTypeChallenge:
@@ -749,7 +748,8 @@ func (r *Room) processAction(action GameAction) {
 		default:
 		}
 	} else {
-		// Valid move -> Already sent event or full state above
+		// Valid move -> Broadcast full state to ensure all clients are synced on phase and turn
+		r.broadcaster.BroadcastStateLocked()
 
 		// Check Game Over
 		if r.game.Phase == game.PhaseFinished {

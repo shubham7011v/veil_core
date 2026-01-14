@@ -7,12 +7,12 @@ import (
 	"testing"
 	"time"
 	"veil_server/db"
-	"veil_server/game"
 )
 
 func TestLoadMatchmaking(t *testing.T) {
 	// Speed up the test
-	game.StartGameDelayS = 1
+	os.Setenv("START_GAME_DELAY", "1")
+	defer os.Unsetenv("START_GAME_DELAY")
 
 	if testing.Short() {
 		t.Skip("skipping load test in short mode")

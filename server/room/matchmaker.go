@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"log"
 	"math/rand"
+	"os"
 	"strings"
 	"time"
 
@@ -23,12 +24,22 @@ func NewMatchmaker(m *Manager) *Matchmaker {
 	return &Matchmaker{manager: m}
 }
 
-// Constants for matchmaking
-const (
+// Matchmaking Settings
+var (
 	LobbyTimeout  = 50 * time.Second
 	TargetPlayers = 5
-	RoomCodeChars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789" // Excludes I, O, 0, 1
 )
+
+const RoomCodeChars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789" // Excludes I, O, 0, 1
+
+func init() {
+	// Allow overriding via environment variables for testing
+	if val, exists := os.LookupEnv("LOBBY_TIMEOUT_S"); exists {
+		if s, err := time.ParseDuration(val + "s"); err == nil {
+			LobbyTimeout = s
+		}
+	}
+}
 
 // CheckLobbyTimeout checks if the active lobby has waited too long
 // and needs to be filled with bots to start the game.
@@ -41,22 +52,28 @@ func (mm *Matchmaker) CheckLobbyTimeout() {
 		return
 	}
 
+	// Dynamic timeout for testing/config
+	currentTimeout := LobbyTimeout
+	if val, exists := os.LookupEnv("LOBBY_TIMEOUT_S"); exists {
+		if s, err := time.ParseDuration(val + "s"); err == nil {
+			currentTimeout = s
+		}
+	}
+
 	// Check if lobby is full (no need for bots)
-	// Don't check phase here - we want to spawn bots even if game is starting
 	if mm.manager.ActiveLobbyCount >= TargetPlayers {
 		mm.manager.ActiveLobby = nil
 		mm.manager.ActiveLobbyCount = 0
 		return
 	}
 
-	if time.Since(mm.manager.ActiveLobbyStartTime) > LobbyTimeout {
+	if time.Since(mm.manager.ActiveLobbyStartTime) > currentTimeout {
 		// Timeout Reached! Fill with Bots.
 		if !config.GetFeatureFlags().EnableBotPlayers {
 			return // Leave open if bots disabled
 		}
 
 		botsNeeded := TargetPlayers - mm.manager.ActiveLobbyCount
-
 		if botsNeeded <= 0 {
 			mm.manager.ActiveLobby = nil
 			mm.manager.ActiveLobbyCount = 0
@@ -72,12 +89,12 @@ func (mm *Matchmaker) CheckLobbyTimeout() {
 			lobby.Join(bot.Client)
 		}
 
-		// Seal the lobby so no new humans join this bot-filled game
+		// Seal the lobby
 		mm.manager.ActiveLobby = nil
 		mm.manager.ActiveLobbyCount = 0
 	} else {
 		// Log how much time is left
-		timeLeft := LobbyTimeout - time.Since(mm.manager.ActiveLobbyStartTime)
+		timeLeft := currentTimeout - time.Since(mm.manager.ActiveLobbyStartTime)
 		log.Printf("Lobby %s waiting for timeout (%v remaining, count: %d/%d)",
 			lobby.ID, timeLeft, mm.manager.ActiveLobbyCount, TargetPlayers)
 	}
