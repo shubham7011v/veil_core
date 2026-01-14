@@ -115,6 +115,7 @@ func (b *Broadcaster) BroadcastStateLocked() {
 	sharedState := map[string]interface{}{
 		"phase":              b.room.game.Phase,
 		"startTime":          b.room.game.StartTime,
+		"turnStartTime":      b.room.game.TurnStartTime, // ✅ FIX #8: Include turnStartTime
 		"participants":       b.room.game.Participants,
 		"pileCount":          b.room.game.PileCount,
 		"activePlayerId":     b.room.game.ActivePlayerID(),

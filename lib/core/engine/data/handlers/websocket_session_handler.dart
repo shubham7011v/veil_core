@@ -65,13 +65,15 @@ class WebSocketSessionHandler extends GameSessionHandler
   // Connection lock to prevent duplicate simultaneous connections
   bool _isConnecting = false;
 
+  // ✅ FIX #4: Prevent duplicate matchmaking joins
+  bool _isJoiningMatchmaking = false;
+
   // Heartbeat & Watchdog
   Timer? _heartbeatTimer;
   DateTime _lastMessageTime = DateTime.now();
   static const _heartbeatInterval = Duration(seconds: 10);
-  static const _watchdogTimeout = Duration(
-    seconds: 15,
-  ); // ✅ Increased to 15s (1.5x heartbeat) to allow latency
+  // ✅ FIX #7: Increased watchdog timeout to 20s to handle mobile network latency
+  static const _watchdogTimeout = Duration(seconds: 20);
 
   // Auth timeout
   Timer? _authTimeoutTimer;
@@ -414,7 +416,7 @@ class WebSocketSessionHandler extends GameSessionHandler
   }
 
   void _setupAuth(String firebaseToken, {String? displayName}) {
-    // ✅ FIX: Start AUTH timeout timer
+    // ✅ FIX #12: Cancel any existing auth timeout first
     _authTimeoutTimer?.cancel();
     _authTimeoutTimer = Timer(_authTimeout, () {
       if (_connectionStatus != ConnectionStatus.connected) {
@@ -872,25 +874,42 @@ class WebSocketSessionHandler extends GameSessionHandler
       final activeId = stateData['activePlayerId'] as String?;
       final myId = sl.authRepository.currentUser?.uid;
       if (activeId == myId) {
-        sl.audioService.playSfx(SoundAssets.turnAlert);
-        sl.audioService.triggerHaptic(HapticType.heavy);
+        // ✅ FIX #15: Wrap audio calls to prevent crashes
+        try {
+          sl.audioService.playSfx(SoundAssets.turnAlert);
+          sl.audioService.triggerHaptic(HapticType.heavy);
+        } catch (e) {
+          debugPrint('Audio error (turn alert): $e');
+        }
       }
     }
     // Detect Challenge
     if (previousPhase != SessionPhase.challenging &&
         phase == SessionPhase.challenging) {
-      sl.audioService.playSfx(SoundAssets.challenge);
-      sl.audioService.triggerHaptic(HapticType.error); // Alert vibration
+      try {
+        sl.audioService.playSfx(SoundAssets.challenge);
+        sl.audioService.triggerHaptic(HapticType.error); // Alert vibration
+      } catch (e) {
+        debugPrint('Audio error (challenge): $e');
+      }
     }
 
     // BGM Lifecycle
     // Stop BGM when entering active gameplay
     if (previousPhase == SessionPhase.lobby && phase != SessionPhase.lobby) {
-      sl.audioService.stopBgm();
+      try {
+        sl.audioService.stopBgm();
+      } catch (e) {
+        debugPrint('Audio error (stop bgm): $e');
+      }
     }
     // Resume BGM when returning to lobby
     if (previousPhase != SessionPhase.lobby && phase == SessionPhase.lobby) {
-      sl.audioService.playBgm(SoundAssets.lobbyAmbience);
+      try {
+        sl.audioService.playBgm(SoundAssets.lobbyAmbience);
+      } catch (e) {
+        debugPrint('Audio error (resume bgm): $e');
+      }
     }
 
     // Parse participants
@@ -1063,6 +1082,29 @@ class WebSocketSessionHandler extends GameSessionHandler
           final newPileCount = data['newPileCount'] as int? ?? 0;
           final nextPlayerId = data['nextPlayerId'] as String?;
           final turnStartTime = data['turnStartTime'] as int?;
+          final playerNewCardCount = data['playerNewCardCount'] as int?;
+
+          // ✅ FIX #5: Update participant card count to prevent state drift
+          List<Participant> updatedParticipants = _currentState.participants;
+          if (playerId != null && playerNewCardCount != null) {
+            updatedParticipants = _currentState.participants.map((p) {
+              final pId = p.isMe ? myId : p.id;
+              if (pId == playerId) {
+                return Participant(
+                  id: p.id,
+                  sessionId: p.sessionId,
+                  name: p.name,
+                  avatarUrl: p.avatarUrl,
+                  rank: p.rank,
+                  unitCount: playerNewCardCount,
+                  isMe: p.isMe,
+                  isActive: p.isActive,
+                  isDisconnected: p.isDisconnected,
+                );
+              }
+              return p;
+            }).toList();
+          }
 
           // Update current state
           _currentState = _currentState.copyWith(
@@ -1070,6 +1112,7 @@ class WebSocketSessionHandler extends GameSessionHandler
             activeParticipantId: nextPlayerId == myId ? 'me' : nextPlayerId,
             currentPhase: SessionPhase.challenging,
             turnStartTime: turnStartTime,
+            participants: updatedParticipants,
           );
 
           // Emit state update
@@ -1281,7 +1324,17 @@ class WebSocketSessionHandler extends GameSessionHandler
 
   /// Join the matchmaking queue for public matches
   void joinMatchmaking() {
+    // ✅ FIX #4: Prevent duplicate matchmaking joins
+    if (_isJoiningMatchmaking) {
+      debugPrint('⚠️ joinMatchmaking skipped: already joining');
+      return;
+    }
+    _isJoiningMatchmaking = true;
     _send({'type': 'JOIN_ROOM'});
+    // Reset flag after a short delay to allow retry if needed
+    Future.delayed(const Duration(seconds: 2), () {
+      _isJoiningMatchmaking = false;
+    });
   }
 
   @override

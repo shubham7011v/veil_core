@@ -289,7 +289,8 @@ class _MatchmakingScreenState extends State<MatchmakingScreen>
       }
 
       final now = DateTime.now().toUtc().millisecondsSinceEpoch ~/ 1000;
-      final elapsed = now - _lobbyCreatedAt;
+      // ✅ FIX #13: Clamp elapsed to prevent negative from clock skew
+      final elapsed = (now - _lobbyCreatedAt).clamp(0, 600); // Max 10 min
       int remaining = 60 - elapsed;
       if (remaining < 0) remaining = 0;
 
@@ -713,7 +714,7 @@ class _MatchmakingScreenState extends State<MatchmakingScreen>
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
           Container(
-            width: 100,
+            width: 60, // ✅ FIX #9: Match participant card width
             height: 60,
             decoration: BoxDecoration(
               shape: BoxShape.circle,

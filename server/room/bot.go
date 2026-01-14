@@ -9,9 +9,7 @@ import (
 	"veil_server/protocol"
 )
 
-func init() {
-	rand.Seed(time.Now().UnixNano())
-}
+// ✅ FIX #10: Removed deprecated rand.Seed() - Go 1.20+ auto-seeds
 
 // BotNameList is a pool of realistic names for bots
 var BotNameList = []string{

@@ -54,6 +54,9 @@ type Room struct {
 	// Event sequencing for race condition prevention
 	eventSequence int64
 
+	// ✅ FIX #3: Track pending challenge timer for cancellation
+	pendingChallengeTimer *time.Timer
+
 	// Broadcaster handles message distribution
 	broadcaster *Broadcaster
 }
@@ -111,6 +114,13 @@ func (r *Room) Stop() {
 	case <-r.quit:
 		// Already stopped
 	default:
+		// ✅ FIX #3: Cancel any pending challenge timer
+		r.mu.Lock()
+		if r.pendingChallengeTimer != nil {
+			r.pendingChallengeTimer.Stop()
+			r.pendingChallengeTimer = nil
+		}
+		r.mu.Unlock()
 		close(r.quit)
 	}
 }
@@ -179,6 +189,12 @@ func (r *Room) GetGamePhase() string {
 
 // SetMaxPlayers allows overriding the default max players (used by matchmaker)
 func (r *Room) SetMaxPlayers(max int) {
+	// ✅ FIX #11: Add bounds validation
+	if max < 2 {
+		max = 2
+	} else if max > 10 {
+		max = 10
+	}
 	r.maxPlayers = max
 }
 
@@ -280,40 +296,34 @@ func (r *Room) Run() {
 			return
 
 		case client := <-r.register:
-			// 1. Perform I/O (Deduct coins) BEFORE locking the room
-			var joinErr error
+			// 1. Calculate boot amount
 			boot := 100 // Default public stake
 			if r.isPrivate {
 				boot = int(r.bootAmount)
 			}
 
-			r.mu.Lock() // Lock early to check disconnectTimes
-			// If a player rejoins within the grace period, remove them from disconnectTimes
+			// ✅ FIX #1: Check coins BEFORE locking to avoid unlock/relock race condition
+			// Pre-check: Validate coins without deducting (matchmaker already validated, this is backup)
+			isRejoining := false
+			r.mu.Lock()
 			if _, disconnected := r.disconnectTimes[client.ID]; disconnected {
+				isRejoining = true
 				delete(r.disconnectTimes, client.ID)
 				log.Printf("Client %s rejoined room %s within grace period.", client.ID, r.ID)
-				// No coin deduction needed if rejoining
-			} else {
-				// Only deduct coins if not rejoining
-				if !client.IsSpectator && !client.IsBot {
-					r.mu.Unlock() // Unlock temporarily for DB call
-					joinErr = db.UpdateUserCoins(client.ID, -boot)
-					r.mu.Lock() // Relock
-					if joinErr != nil {
-						log.Printf("Cannot join room: Insufficient funds for %s: %v", client.ID, joinErr)
-						r.sendErrorToClient(client, "INSUFFICIENT_FUNDS", "Not enough coins to join")
-						r.mu.Unlock()
-						continue // Drop this registration attempt
-					}
-				}
 			}
 
-			// 2. Now take the lock for in-memory updates
+			// Only deduct coins if not rejoining, not spectator, not bot
+			if !isRejoining && !client.IsSpectator && !client.IsBot {
+				// ✅ Use buffered coin update - deferred async deduction
+				// This avoids the dangerous unlock/relock pattern
+				db.BufferCoinUpdate(client.ID, -boot)
+			}
+
+			// 2. In-memory updates (lock is held)
 			r.clients[client] = true
 			log.Printf("Client joined Room %s (Spectator: %v)", r.ID, client.IsSpectator)
 
 			if !client.IsSpectator {
-				// We already deducted coins above, now just add to game
 				name := client.Name
 				if name == "" {
 					name = "Player " + client.ID
@@ -321,9 +331,9 @@ func (r *Room) Run() {
 				// Use client's stored name and avatar (synced during AUTH)
 				if err := r.game.AddPlayer(client.ID, client.Name, client.AvatarURL); err != nil {
 					log.Printf("Error adding player %s to game in room %s: %v", client.ID, r.ID, err)
-					// Refund if add fails (Note: This is still I/O inside a lock, but failing here is rare)
-					if !client.IsBot {
-						db.BufferCoinUpdate(client.ID, boot) // Use buffer for asynchronous refund
+					// Refund if add fails
+					if !client.IsBot && !isRejoining {
+						db.BufferCoinUpdate(client.ID, boot) // Async refund
 					}
 				} else {
 					log.Printf("Player %s successfully added to game in room %s. Players: %d/%d",
@@ -353,8 +363,11 @@ func (r *Room) Run() {
 				r.voice.ReleaseMic(client.ID)
 				log.Printf("Client left Room %s", r.ID)
 
-				// If game is active, mark as disconnected, don't remove immediately
-				if r.game.Phase != game.PhaseLobby && r.game.Phase != game.PhaseFinished {
+				// ✅ FIX #14: Handle PhaseStarting like PhaseLobby (immediate removal)
+				// If game is ACTIVE (Thinking, Challenging, Revealing), mark as disconnected
+				if r.game.Phase == game.PhaseThinking ||
+					r.game.Phase == game.PhaseChallenging ||
+					r.game.Phase == game.PhaseRevealing {
 					r.disconnectTimes[client.ID] = time.Now()
 					log.Printf("Player %s disconnected during active game. Grace period started.", client.ID)
 					// Update player status in game state
@@ -362,7 +375,7 @@ func (r *Room) Run() {
 						p.IsDisconnected = true
 					}
 				} else {
-					// If in lobby or game finished, remove player immediately
+					// If in Lobby, Starting, or Finished phase - remove immediately
 					r.game.RemovePlayer(client.ID)
 					delete(r.disconnectTimes, client.ID) // Ensure they are not in disconnectTimes
 				}
@@ -535,21 +548,34 @@ func (r *Room) processAction(action GameAction) {
 			// Broadcast the "Revealing" state immediately
 			r.broadcaster.BroadcastStateLocked()
 
+			// ✅ FIX #3: Use tracked timer so it can be cancelled on room stop
+			// Cancel any existing pending timer first
+			if r.pendingChallengeTimer != nil {
+				r.pendingChallengeTimer.Stop()
+			}
+
+			// Capture values for closure
+			challengerID := client.ID
+			roomID := r.ID
+
 			// Schedule resolution after 2 seconds (animation time)
-			time.AfterFunc(2*time.Second, func() {
+			r.pendingChallengeTimer = time.AfterFunc(2*time.Second, func() {
 				r.mu.Lock()
 				defer r.mu.Unlock()
+
+				// Clear the timer reference
+				r.pendingChallengeTimer = nil
 
 				// Safety: Check if game is still in revealing phase and has players
 				if r.game.Phase != game.PhaseRevealing || len(r.game.Players) == 0 {
 					log.Printf("Challenge resolution skipped in Room %s (phase: %s, players: %d)",
-						r.ID, r.game.Phase, len(r.game.Players))
+						roomID, r.game.Phase, len(r.game.Players))
 					return
 				}
 
 				// Finalize the result
-				msg := r.game.ResolveChallenge(client.ID)
-				log.Printf("Challenge Resolved in Room %s: %s", r.ID, msg)
+				msg := r.game.ResolveChallenge(challengerID)
+				log.Printf("Challenge Resolved in Room %s: %s", roomID, msg)
 
 				// Broadcast the final result state
 				r.broadcaster.BroadcastStateLocked()

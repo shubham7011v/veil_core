@@ -95,9 +95,8 @@ func (m *Manager) Run() {
 					// This prevents registration timeouts when Leave is slow
 					go client.CurrentRoom.Leave(client)
 				}
-				if !client.IsBot {
-					close(client.Send)
-				}
+				// ✅ FIX #2: Always close Send channel (including bots) to prevent goroutine leaks
+				close(client.Send)
 				log.Println("Connection Unregistered")
 			}
 
