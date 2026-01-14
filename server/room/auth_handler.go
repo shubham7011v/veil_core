@@ -81,6 +81,13 @@ func (ah *AuthHandler) HandleAuth(c *Client, authData protocol.AuthMessage) {
 		stats = &db.UserStats{UserID: c.ID, Name: "Unknown", Rank: "Novice", Coins: 1000}
 	}
 	ah.SendAuthOk(c, stats)
+
+	// ✅ Session Restoration: Check if player belongs to an active game
+	if r := ah.manager.FindRoomByPlayerID(c.ID); r != nil {
+		log.Printf("AUTH: Auto-restoring session for %s in room %s", c.ID, r.ID)
+		c.CurrentRoom = r
+		r.Join(c)
+	}
 }
 
 // HandleUpdateName processes name change requests

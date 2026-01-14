@@ -79,11 +79,23 @@ class _MatchmakingScreenState extends State<MatchmakingScreen>
             ? await user.getIdToken()
             : 'mock_token_${DateTime.now().millisecondsSinceEpoch}';
 
-        await handler.connect(
-          AppConfig.instance.serverUrl,
-          token!,
-          displayName: user?.displayName,
-        );
+        // Connect with retry
+        int retries = 0;
+        while (retries < 3) {
+          try {
+            await handler.connect(
+              AppConfig.instance.serverUrl,
+              token!,
+              displayName: user?.displayName,
+            );
+            if (handler.connectionStatus == ConnectionStatus.connected) break;
+          } catch (e) {
+            debugPrint('Connect attempt ${retries + 1} failed: $e');
+            retries++;
+            if (retries >= 3) rethrow;
+            await Future.delayed(const Duration(milliseconds: 1000));
+          }
+        }
         await Future.delayed(const Duration(milliseconds: 500));
       }
 

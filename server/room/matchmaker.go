@@ -128,6 +128,8 @@ func (mm *Matchmaker) AttemptJoinActiveLobby(c *Client) {
 
 	// Join - Increment sync counter immediately to reserve the slot
 	mm.manager.ActiveLobbyCount++
+	log.Printf("Matchmaking: Client %s reserved slot. Lobby count: %d/%d",
+		c.ID, mm.manager.ActiveLobbyCount, TargetPlayers)
 
 	c.CurrentRoom = mm.manager.ActiveLobby
 	mm.manager.ActiveLobby.Join(c)

@@ -116,6 +116,19 @@ func (m *Manager) AttemptJoinActiveLobby(c *Client) {
 	m.matchmaker.AttemptJoinActiveLobby(c)
 }
 
+// FindRoomByPlayerID scans all active rooms for a specific player ID
+func (m *Manager) FindRoomByPlayerID(playerID string) *Room {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+
+	for _, r := range m.Rooms {
+		if r.IsPlayerInRoom(playerID) {
+			return r
+		}
+	}
+	return nil
+}
+
 // HandleMessage routes incoming messages from clients
 func (m *Manager) HandleMessage(c *Client, message []byte) {
 	// 1. Parse ONLY the type first
@@ -186,6 +199,14 @@ func (m *Manager) HandleMessage(c *Client, message []byte) {
 	case "JOIN_ROOM":
 		// Public Realtime Matchmaking
 		if c.CurrentRoom == nil {
+			// ✅ Session Restoration: Check if they are already in an active room
+			if r := m.FindRoomByPlayerID(c.ID); r != nil {
+				log.Printf("Session Restoration: Player %s found in active room %s", c.ID, r.ID)
+				c.CurrentRoom = r
+				r.Join(c)
+				return
+			}
+
 			c.IsSpectator = false
 			// Join the active lobby IMMEDIATELY
 			m.matchmaker.AttemptJoinActiveLobby(c)

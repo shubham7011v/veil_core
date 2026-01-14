@@ -391,7 +391,7 @@ class WebSocketSessionHandler extends GameSessionHandler
 
       // ✅ FIX: Wait for handshake before sending AUTH
       try {
-        await _channel!.ready;
+        await _channel!.ready.timeout(const Duration(seconds: 10));
         debugPrint('✅ WebSocket Handshake Ready - Sending AUTH');
 
         _setupMessageListener(firebaseToken, displayName: displayName);
@@ -399,7 +399,7 @@ class WebSocketSessionHandler extends GameSessionHandler
 
         _reconnectAttempts = 0; // Reset on success
       } catch (handshakeError) {
-        debugPrint('🚨 WebSocket Handshake Failed: $handshakeError');
+        debugPrint('🚨 WebSocket Handshake Failed/Timeout: $handshakeError');
         _isConnecting = false; // Unlock before retry
         _handleConnectionFailure(firebaseToken, displayName: displayName);
         return;
@@ -419,7 +419,10 @@ class WebSocketSessionHandler extends GameSessionHandler
     _authTimeoutTimer = Timer(_authTimeout, () {
       if (_connectionStatus != ConnectionStatus.connected) {
         debugPrint('❌ AUTH_OK timeout - no response from server');
-        _channel?.sink.close(1008, 'Auth timeout');
+        // Check if channel is still open before closing
+        if (_channel != null) {
+          _channel?.sink.close(1008, 'Auth timeout');
+        }
         _handleConnectionFailure(firebaseToken, displayName: displayName);
       }
     });
@@ -470,6 +473,10 @@ class WebSocketSessionHandler extends GameSessionHandler
     // Stop heartbeat immediately to prevent send-after-close errors
     _heartbeatTimer?.cancel();
     _heartbeatTimer = null;
+
+    // ✅ FIX: Also stop auth timeout timer as we are already failing
+    _authTimeoutTimer?.cancel();
+    _authTimeoutTimer = null;
 
     if (_reconnectAttempts < _maxReconnectAttempts) {
       _reconnectAttempts++;
@@ -589,6 +596,16 @@ class WebSocketSessionHandler extends GameSessionHandler
               'data': {'token': _fcmToken},
             });
             debugPrint('📬 FCM token resent after reconnection');
+          }
+
+          // ✅ Session Restoration:
+          // The server now automatically restores our CurrentRoom if we were in one.
+          // If we receive AUTH_OK, we should check if we already have a game state.
+          // If so, we don't need to call joinMatchmaking() manually.
+          if (_currentState.roomId != '000' &&
+              _currentState.currentPhase != SessionPhase.lobby &&
+              _currentState.currentPhase != SessionPhase.finished) {
+            debugPrint('📬 Session restored automatically by server');
           }
 
           // Parse stats from AUTH_OK response

@@ -78,7 +78,7 @@ func NewRoom(id string) *Room {
 		voice:           game.NewVoiceState(),
 		webRTC:          game.NewWebRTCManager(),
 		turnDuration:    25 * time.Second, // 20s + buffer
-		gracePeriod:     30 * time.Second,
+		gracePeriod:     60 * time.Second, // ✅ Increased from 30s to 60s for better mobile stability
 		disconnectTimes: make(map[string]time.Time),
 		lastFullSync:    time.Now(), // Initialize for periodic sync
 	}
@@ -199,9 +199,34 @@ func (r *Room) GetPlayerIDs() []string {
 	return ids
 }
 
+// IsPlayerInRoom checks if a player ID is part of the game or currently disconnected but within grace period
+func (r *Room) IsPlayerInRoom(playerID string) bool {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+
+	// 1. Check if they are currently connected
+	for client := range r.clients {
+		if client.ID == playerID {
+			return true
+		}
+	}
+
+	// 2. Check if they are in the game state (participants)
+	if _, exists := r.game.PlayerMap[playerID]; exists {
+		return true
+	}
+
+	// 3. Check if they are in disconnectTimeout grace period
+	if _, exists := r.disconnectTimes[playerID]; exists {
+		return true
+	}
+
+	return false
+}
+
 func (r *Room) handleTurnTimeout() {
-	r.mu.Lock()
-	defer r.mu.Unlock()
+	// LOCK REMOVED: Called from Run() loop which already holds r.mu.Lock()
+	// Doing r.mu.Lock() here caused a deadlock.
 
 	activeID := r.game.ActivePlayerID()
 	if activeID == "" {
