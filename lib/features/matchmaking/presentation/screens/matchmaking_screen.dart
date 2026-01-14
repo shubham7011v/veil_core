@@ -145,8 +145,18 @@ class _MatchmakingScreenState extends State<MatchmakingScreen>
             setState(() => _connectionStatus = status);
 
             if (status == ConnectionStatus.connected && !_isMatchFound) {
-              // Auto-rejoin if we were disconnected
-              handler.joinMatchmaking();
+              // ✅ FIX #3: Prevent duplicate JOIN if already in a room or active lobby
+              // We rely on currentState.roomId being '000' (default) if not in a room
+              if (handler.currentState.roomId == '000' && !_isManualPop) {
+                // Double check if we are already seeing participants (means we are in lobby)
+                if (_participants.isEmpty ||
+                    _participants.length == 1 && _participants.first.isMe) {
+                  debugPrint(
+                    '🔄 Auto-rejoining matchmaking after reconnect...',
+                  );
+                  handler.joinMatchmaking();
+                }
+              }
             }
           }
         });

@@ -91,26 +91,49 @@ class WebSocketSessionHandler extends GameSessionHandler
         return;
       }
 
-      // 1. Send Heartbeat
-      if (_connectionStatus == ConnectionStatus.connected) {
-        _send({'type': 'PING'});
+      // ✅ FIX #4: Send Heartbeat if connected OR reconnecting (server might still be there)
+      // Check for non-null channel to prevent errors
+      if (_channel != null) {
+        // Safe send without forcing status check, rely on try-catch in _send if needed
+        // But for PING, we want to skip the "status connected" check in _send
+        try {
+          _channel!.sink.add(
+            jsonEncode({'type': 'PING', 'seq': _nextSequence++}),
+          );
+        } catch (e) {
+          debugPrint('⚠️ Heartbeat send failed: $e');
+        }
       }
 
       // 2. Watchdog: check if we've heard from server recently
       final idleTime = DateTime.now().difference(_lastMessageTime);
-      if (idleTime > _watchdogTimeout &&
-          _connectionStatus == ConnectionStatus.connected) {
+
+      // ✅ FIX #9: Auto-extend timeout if we are roaming/switching networks (simple heuristic)
+      var currentTimeout = _watchdogTimeout;
+      if (_connectionStatus == ConnectionStatus.reconnecting) {
+        currentTimeout = const Duration(
+          seconds: 20,
+        ); // Give more time during reconnect
+      }
+
+      if (idleTime > currentTimeout) {
         debugPrint(
-          '! Watchdog: No server activity for ${idleTime.inSeconds}s. Reconnecting...',
+          '! Watchdog: No server activity for ${idleTime.inSeconds}s (Limit: ${currentTimeout.inSeconds}s). Reconnecting...',
         );
         // Stop heartbeat BEFORE closing to prevent send-after-close errors
         timer.cancel();
         _heartbeatTimer = null;
-        _updateConnectionStatus(ConnectionStatus.reconnecting);
-        // ✅ FIX: Use 1001 (Going Away) instead of reserved 1006
-        _channel?.sink.close(1001, 'Watchdog timeout');
-        _channel = null;
-        // Reconnection will be handled by _channel.stream.onDone -> _handleConnectionFailure
+
+        // Only trigger failure if we aren't already failed/disconnected
+        if (_connectionStatus != ConnectionStatus.disconnected) {
+          _updateConnectionStatus(ConnectionStatus.reconnecting);
+          // ✅ FIX: Use 1001 (Going Away) instead of reserved 1006
+          try {
+            _channel?.sink.close(1001, 'Watchdog timeout');
+          } catch (_) {}
+          _channel = null;
+          // Reconnection will be handled by _channel.stream.onDone -> _handleConnectionFailure
+        }
       }
     });
   }
@@ -387,14 +410,14 @@ class WebSocketSessionHandler extends GameSessionHandler
     );
 
     try {
-      // Close existing connection if any to prevent leaks
-      await _channel?.sink.close();
-
-      debugPrint('Connecting to WebSocket: $_lastUrl');
-      _channel = WebSocketChannel.connect(Uri.parse(_lastUrl!));
-
-      // ✅ FIX: Wait for handshake before sending AUTH
       try {
+        // Close existing connection if any to prevent leaks
+        await _channel?.sink.close();
+
+        debugPrint('Connecting to WebSocket: $_lastUrl');
+        _channel = WebSocketChannel.connect(Uri.parse(_lastUrl!));
+
+        // ✅ FIX: Wait for handshake before sending AUTH
         await _channel!.ready.timeout(const Duration(seconds: 10));
         debugPrint('✅ WebSocket Handshake Ready - Sending AUTH');
 
@@ -402,18 +425,13 @@ class WebSocketSessionHandler extends GameSessionHandler
         _setupAuth(firebaseToken, displayName: displayName);
 
         _reconnectAttempts = 0; // Reset on success
-      } catch (handshakeError) {
-        debugPrint('🚨 WebSocket Handshake Failed/Timeout: $handshakeError');
-        _isConnecting = false; // Unlock before retry
+      } catch (e) {
+        debugPrint('🚨 Connection Error: $e');
         _handleConnectionFailure(firebaseToken, displayName: displayName);
-        return;
       }
-    } catch (e) {
-      debugPrint('Connection attempt failed to $_lastUrl: $e');
-      _isConnecting = false; // Unlock before retry
-      _handleConnectionFailure(firebaseToken, displayName: displayName);
     } finally {
-      _isConnecting = false; // Always unlock
+      // ✅ CRITICAL FIX: Always release the lock, even if _handleConnectionFailure throws or async gaps occur
+      _isConnecting = false;
     }
   }
 
