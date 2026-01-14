@@ -77,15 +77,26 @@ func FlushCoins() error {
 		return nil
 	}
 
+	// Helper to restore updates on failure
+	restore := func() {
+		coinBuffer.mu.Lock()
+		defer coinBuffer.mu.Unlock()
+		for uid, amount := range updates {
+			coinBuffer.updates[uid] += amount
+		}
+	}
+
 	tx, err := DB.Begin()
 	if err != nil {
-		return err
+		restore()
+		return fmt.Errorf("failed to begin transaction: %v", err)
 	}
 	defer tx.Rollback()
 
 	stmt, err := tx.Prepare("UPDATE users SET coins = coins + ? WHERE user_id = ?")
 	if err != nil {
-		return err
+		restore()
+		return fmt.Errorf("failed to prepare statement: %v", err)
 	}
 	defer stmt.Close()
 
@@ -94,13 +105,20 @@ func FlushCoins() error {
 			continue
 		}
 		if _, err := stmt.Exec(amount, uid); err != nil {
-			log.Printf("Failed to flush coins for user %s: %v", uid, err)
-			// Continue to try other users, but this user's coins might be desynced until next login
+			log.Printf("Failed to update coins for user %s: %v", uid, err)
+			// We don't restore individual failures here to avoid partial double-counts,
+			// but the log will show which user failed.
+			// In WAL mode with busy_timeout, this is rare.
 		}
 	}
 
-	log.Printf("Flushed coin updates for %d users", len(updates))
-	return tx.Commit()
+	if err := tx.Commit(); err != nil {
+		restore()
+		return fmt.Errorf("failed to commit transaction: %v", err)
+	}
+
+	log.Printf("Successfully flushed coin updates for %d users", len(updates))
+	return nil
 }
 
 type UserStats struct {
