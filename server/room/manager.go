@@ -10,6 +10,8 @@ import (
 	"veil_server/db"
 	"veil_server/protocol"
 
+	"sync/atomic"
+
 	"firebase.google.com/go/v4/auth"
 )
 
@@ -41,6 +43,8 @@ type Manager struct {
 	// Modular handlers (extracted for single-responsibility)
 	authHandler *AuthHandler
 	matchmaker  *Matchmaker
+
+	lastLoopTime int64 // Unix timestamp (monitored via atomic)
 }
 
 func NewManager(authClient *auth.Client) *Manager {
@@ -55,7 +59,24 @@ func NewManager(authClient *auth.Client) *Manager {
 	// Initialize modular handlers
 	m.authHandler = NewAuthHandler(m)
 	m.matchmaker = NewMatchmaker(m)
+
+	m.startDeadlockMonitor()
 	return m
+}
+
+func (m *Manager) startDeadlockMonitor() {
+	go func() {
+		for {
+			time.Sleep(10 * time.Second)
+			last := atomic.LoadInt64(&m.lastLoopTime)
+			if last > 0 {
+				elapsed := time.Now().Unix() - last
+				if elapsed > 15 {
+					log.Printf("CRITICAL: Manager.Run loop has not iterated for %ds! Potential deadlock or heavy blocking.", elapsed)
+				}
+			}
+		}
+	}()
 }
 
 func (m *Manager) Run() {
@@ -70,6 +91,7 @@ func (m *Manager) Run() {
 	defer ticker.Stop()
 
 	for {
+		atomic.StoreInt64(&m.lastLoopTime, time.Now().Unix())
 		select {
 		case client := <-m.Register:
 			m.Clients[client] = true
@@ -160,6 +182,20 @@ func (m *Manager) HandleMessage(c *Client, message []byte) {
 	if err := json.Unmarshal(message, &baseMsg); err != nil {
 		log.Printf("Invalid JSON: %v", err)
 		return
+	}
+
+	// ✅ FIX #8: Action Sequence Validation
+	// If a sequence is provided, ensure it's not an old/replayed message
+	if baseMsg.Sequence > 0 {
+		c.mu.Lock()
+		if baseMsg.Sequence <= c.lastSequence {
+			log.Printf("DROPPING: Out of order message from %s (Type: %s, Seq: %d, Last: %d)",
+				c.ID, baseMsg.Type, baseMsg.Sequence, c.lastSequence)
+			c.mu.Unlock()
+			return
+		}
+		c.lastSequence = baseMsg.Sequence
+		c.mu.Unlock()
 	}
 
 	// 2. Global Handlers (Auth, Join Room)
@@ -295,11 +331,15 @@ func (m *Manager) HandleMessage(c *Client, message []byte) {
 		m.authHandler.HandleDeleteAccount(c)
 		return
 
-	case "PING":
+	case protocol.MsgTypePing:
 		// Heartbeat - respond with PONG (no room required)
-		// ✅ FIX: Use blocking send - PONG is critical for connection health
-		pongBytes, _ := json.Marshal(protocol.NewMessage("PONG", nil))
-		c.Send <- pongBytes
+		// ✅ FIX: Use protocol constant and ensure PONG is sent
+		bytes, _ := json.Marshal(protocol.NewMessage(protocol.MsgTypePong, nil))
+		select {
+		case c.Send <- bytes:
+		case <-time.After(100 * time.Millisecond):
+			log.Printf("Heartbeat: Failed to send PONG to %s (buffer full)", c.ID)
+		}
 		return
 
 	case protocol.MsgTypeUpdateFCM:

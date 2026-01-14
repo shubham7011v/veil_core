@@ -66,12 +66,15 @@ const (
 	MsgTypeEmoji     = "EMOJI"
 	MsgTypeTyping    = "TYPING"
 	MsgTypeUpdateFCM = "UPDATE_FCM"
+	MsgTypePing      = "PING"
+	MsgTypePong      = "PONG"
 )
 
 // BaseMessage structure for all WebSocket messages
 type BaseMessage struct {
-	Type string          `json:"type"`
-	Data json.RawMessage `json:"data,omitempty"` // For specialized decoding
+	Type     string          `json:"type"`
+	Sequence int             `json:"seq,omitempty"`  // For ordering validation
+	Data     json.RawMessage `json:"data,omitempty"` // For specialized decoding
 }
 
 // -- Client Messages --

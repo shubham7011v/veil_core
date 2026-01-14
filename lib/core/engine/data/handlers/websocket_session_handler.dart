@@ -68,12 +68,14 @@ class WebSocketSessionHandler extends GameSessionHandler
   // ✅ FIX #4: Prevent duplicate matchmaking joins
   bool _isJoiningMatchmaking = false;
 
+  int _nextSequence = 1;
+
   // Heartbeat & Watchdog
   Timer? _heartbeatTimer;
   DateTime _lastMessageTime = DateTime.now();
   static const _heartbeatInterval = Duration(seconds: 10);
-  // ✅ FIX #7: Increased watchdog timeout to 20s to handle mobile network latency
-  static const _watchdogTimeout = Duration(seconds: 20);
+  // ✅ FIX #7: Reduced watchdog timeout to 12s for faster failure detection on mobile
+  static const _watchdogTimeout = Duration(seconds: 12);
 
   // Auth timeout
   Timer? _authTimeoutTimer;
@@ -555,6 +557,8 @@ class WebSocketSessionHandler extends GameSessionHandler
     }
 
     try {
+      // ✅ FIX #8: Add sequence number for ordering validation
+      message['seq'] = _nextSequence++;
       _channel!.sink.add(jsonEncode(message));
     } catch (e) {
       debugPrint('❌ Failed to send message: $e');

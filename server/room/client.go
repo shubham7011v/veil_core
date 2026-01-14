@@ -32,9 +32,10 @@ type Client struct {
 	Name        string // Display name
 	AvatarURL   string // Profile picture URL
 
-	// Rate limiting
+	// Rate limiting & Ordering
 	lastActionTime time.Time
 	actionCount    int
+	lastSequence   int
 	mu             sync.Mutex
 }
 

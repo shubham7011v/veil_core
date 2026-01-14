@@ -25,6 +25,35 @@ func NewBroadcaster(r *Room) *Broadcaster {
 	}
 }
 
+// sendToClient handles backpressure by prioritizing critical messages
+func (b *Broadcaster) sendToClient(c *Client, bytes []byte, critical bool) {
+	if c.IsBot {
+		select {
+		case c.Send <- bytes:
+		default:
+		}
+		return
+	}
+
+	select {
+	case c.Send <- bytes:
+		// Success
+	default:
+		// Buffer full!
+		if critical {
+			// For critical messages (Game State, Room Info), wait up to 100ms
+			select {
+			case c.Send <- bytes:
+			case <-time.After(100 * time.Millisecond):
+				log.Printf("BACKPRESSURE: Dropped CRITICAL update to %s (buffer full)", c.ID)
+			}
+		} else {
+			// For non-critical messages (Voice, Stats), skip immediately
+			// This is "soft backpressure" - lagging clients miss minor updates but stay in game
+		}
+	}
+}
+
 // BroadcastActionLocked sends a lightweight action event to all clients
 // Caller must hold room.mu
 func (b *Broadcaster) BroadcastActionLocked(action string, data map[string]interface{}) {
@@ -38,7 +67,10 @@ func (b *Broadcaster) BroadcastActionLocked(action string, data map[string]inter
 		"sequence":  b.room.eventSequence,
 	})
 	bytes, _ := json.Marshal(msg)
-	b.room.broadcast <- bytes
+
+	for client := range b.room.clients {
+		b.sendToClient(client, bytes, true) // Actions are usually critical
+	}
 }
 
 // BroadcastStats sends updated player statistics to all clients
@@ -64,10 +96,7 @@ func (b *Broadcaster) BroadcastStatsLocked() {
 			if err == nil {
 				msg := protocol.NewMessage("STATS_UPDATE", stats)
 				bytes, _ := json.Marshal(msg)
-				select {
-				case client.Send <- bytes:
-				default:
-				}
+				b.sendToClient(client, bytes, false) // Stats are non-critical
 			}
 		}
 	}(clients)
@@ -87,11 +116,7 @@ func (b *Broadcaster) BroadcastVoiceStateLocked() {
 	bytes, _ := json.Marshal(msg)
 
 	for client := range b.room.clients {
-		select {
-		case client.Send <- bytes:
-		default:
-			log.Printf("Skip send voice to %s", client.ID)
-		}
+		b.sendToClient(client, bytes, false) // Voice is non-critical
 	}
 }
 
@@ -149,10 +174,7 @@ func (b *Broadcaster) BroadcastStateLocked() {
 
 			msg := protocol.NewMessage(protocol.MsgTypeGameState, view)
 			bytes, _ := json.Marshal(msg)
-			select {
-			case client.Send <- bytes:
-			default:
-			}
+			b.sendToClient(client, bytes, true) // Game State is critical
 			continue
 		}
 
@@ -171,11 +193,7 @@ func (b *Broadcaster) BroadcastStateLocked() {
 
 		msg := protocol.NewMessage(protocol.MsgTypeGameState, view)
 		bytes, _ := json.Marshal(msg)
-		select {
-		case client.Send <- bytes:
-		default:
-			log.Printf("Skipped broadcast to %s", client.ID)
-		}
+		b.sendToClient(client, bytes, true) // Game State is critical
 	}
 }
 
@@ -204,11 +222,7 @@ func (b *Broadcaster) BroadcastRoomInfoLocked() {
 	bytes, _ := json.Marshal(msg)
 
 	for client := range b.room.clients {
-		select {
-		case client.Send <- bytes:
-		default:
-			log.Printf("Skipped room info to %s", client.ID)
-		}
+		b.sendToClient(client, bytes, true) // Room info is critical
 	}
 }
 
