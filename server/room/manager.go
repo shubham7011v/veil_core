@@ -350,8 +350,15 @@ func (m *Manager) HandleMessage(c *Client, message []byte) {
 			}
 			m.mu.Unlock()
 
+			// ✅ FIX: Force room to process permanent leave (bypass grace period)
+			c.CurrentRoom.HandleAction(GameAction{
+				Client:  c,
+				Message: baseMsg,
+			})
+
 			c.CurrentRoom.Leave(c)
 			c.CurrentRoom = nil
+			m.RemovePlayerRoom(c.ID) // Clear the index so they aren't restored
 		}
 		return
 

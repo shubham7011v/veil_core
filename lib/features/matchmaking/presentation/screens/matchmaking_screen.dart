@@ -146,13 +146,15 @@ class _MatchmakingScreenState extends State<MatchmakingScreen>
             setState(() => _connectionStatus = status);
             debugPrint('🔌 [Matchmaking] Connection status updated: $status');
 
-            if (status == ConnectionStatus.connected && !_isMatchFound) {
+            if (status == ConnectionStatus.connected &&
+                !_isMatchFound &&
+                !_isManualPop) {
               // ✅ FIX #3: Prevent duplicate JOIN if already in a room or active lobby
               // We rely on currentState.roomId being '000' (default) if not in a room
-              if (handler.currentState.roomId == '000' && !_isManualPop) {
+              if (handler.currentState.roomId == '000') {
                 // Double check if we are already seeing participants (means we are in lobby)
                 if (_participants.isEmpty ||
-                    _participants.length == 1 && _participants.first.isMe) {
+                    (_participants.length == 1 && _participants.first.isMe)) {
                   debugPrint(
                     '🔄 Auto-rejoining matchmaking after reconnect...',
                   );
@@ -267,7 +269,9 @@ class _MatchmakingScreenState extends State<MatchmakingScreen>
 
         await Future.delayed(const Duration(milliseconds: 500));
 
-        if (mounted && handler.connectionStatus == ConnectionStatus.connected) {
+        if (mounted &&
+            handler.connectionStatus == ConnectionStatus.connected &&
+            !_isManualPop) {
           debugPrint('🎯 [Matchmaking] Triggering joinMatchmaking()');
           handler.joinMatchmaking();
           _startTimeoutTimer(); // Start the "taking too long" timer
@@ -412,10 +416,14 @@ class _MatchmakingScreenState extends State<MatchmakingScreen>
   void dispose() {
     debugPrint('🛑 [Matchmaking] Screen disposed');
     _waitTimer?.cancel();
-    // If we haven't found a match OR if we manually popped (aborting match found state)
+    _timeoutTimer?.cancel();
+    _countdownTimer?.cancel();
+
+    // If we haven't found a match OR if we manually popped
     if (!_isMatchFound || _isManualPop) {
       _handler?.cancelMatchmaking();
     }
+
     _controller.dispose();
     _pulseController.dispose();
     _statsSubscription?.cancel();
@@ -423,9 +431,15 @@ class _MatchmakingScreenState extends State<MatchmakingScreen>
     _connectionStatusSubscription?.cancel();
     _errorSubscription?.cancel();
     _roomEventSubscription?.cancel();
-    _countdownTimer?.cancel();
-    _timeoutTimer?.cancel();
     super.dispose();
+  }
+
+  void _onManualPop() {
+    debugPrint('👈 [Matchmaking] Manual pop triggered');
+    _isManualPop = true;
+    if (mounted) {
+      Navigator.of(context).pop();
+    }
   }
 
   @override
@@ -551,7 +565,7 @@ class _MatchmakingScreenState extends State<MatchmakingScreen>
                 ),
                 IconButton(
                   icon: const Icon(Icons.close, color: Colors.white54),
-                  onPressed: () => Navigator.pop(context),
+                  onPressed: _onManualPop,
                 ),
               ],
             ),

@@ -25,6 +25,7 @@ class HomeScreen extends StatefulWidget {
 
 class _HomeScreenState extends State<HomeScreen> {
   int _selectedIndex = 0;
+  bool _isNavigating = false;
 
   @override
   void initState() {
@@ -159,12 +160,17 @@ class _HomeScreenState extends State<HomeScreen> {
                             context,
                             'FRIENDS\nMATCH',
                             Icons.people_outline,
-                            () {
+                            () async {
                               if (FeatureFlags.enableFriendsMatchOffline) {
-                                Navigator.pushNamed(
+                                if (_isNavigating) return;
+                                setState(() => _isNavigating = true);
+                                await Navigator.pushNamed(
                                   context,
                                   AppRouter.offlineLobby,
                                 );
+                                if (mounted) {
+                                  setState(() => _isNavigating = false);
+                                }
                               } else if (FeatureFlags.enableFriendsMatch) {
                                 // Online friends match flow
                                 _showComingSoonModal(
@@ -195,9 +201,17 @@ class _HomeScreenState extends State<HomeScreen> {
                             context,
                             'BOT\nMATCH',
                             Icons.smart_toy_outlined,
-                            () {
+                            () async {
                               if (FeatureFlags.enableBotPlayers) {
-                                Navigator.pushNamed(context, '/bot_settings');
+                                if (_isNavigating) return;
+                                setState(() => _isNavigating = true);
+                                await Navigator.pushNamed(
+                                  context,
+                                  '/bot_settings',
+                                );
+                                if (mounted) {
+                                  setState(() => _isNavigating = false);
+                                }
                               } else {
                                 _showComingSoonModal(
                                   context,
@@ -290,7 +304,12 @@ class _HomeScreenState extends State<HomeScreen> {
       child: Material(
         color: Colors.transparent,
         child: InkWell(
-          onTap: () => Navigator.pushNamed(context, '/matchmaking'),
+          onTap: () async {
+            if (_isNavigating) return;
+            setState(() => _isNavigating = true);
+            await Navigator.pushNamed(context, '/matchmaking');
+            if (mounted) setState(() => _isNavigating = false);
+          },
           borderRadius: BorderRadius.circular(16),
           child: Center(
             child: Text(
@@ -319,9 +338,12 @@ class _HomeScreenState extends State<HomeScreen> {
             context,
             'CREATE\nROOM',
             Icons.add_circle_outline,
-            () {
+            () async {
               if (FeatureFlags.enablePrivateRooms) {
-                Navigator.pushNamed(context, '/create_room');
+                if (_isNavigating) return;
+                setState(() => _isNavigating = true);
+                await Navigator.pushNamed(context, '/create_room');
+                if (mounted) setState(() => _isNavigating = false);
               } else {
                 _showComingSoonModal(
                   context,
@@ -338,9 +360,12 @@ class _HomeScreenState extends State<HomeScreen> {
         ),
         const SizedBox(width: 16),
         Expanded(
-          child: _buildMatchCard(context, 'JOIN\nROOM', Icons.login, () {
+          child: _buildMatchCard(context, 'JOIN\nROOM', Icons.login, () async {
             if (FeatureFlags.enablePrivateRooms) {
-              Navigator.pushNamed(context, '/join_room');
+              if (_isNavigating) return;
+              setState(() => _isNavigating = true);
+              await Navigator.pushNamed(context, '/join_room');
+              if (mounted) setState(() => _isNavigating = false);
             } else {
               _showComingSoonModal(
                 context,
@@ -409,9 +434,12 @@ class _HomeScreenState extends State<HomeScreen> {
       child: Material(
         color: Colors.transparent,
         child: InkWell(
-          onTap: () {
+          onTap: () async {
             if (FeatureFlags.enableDailyChallenges) {
-              Navigator.pushNamed(context, '/challenges');
+              if (_isNavigating) return;
+              setState(() => _isNavigating = true);
+              await Navigator.pushNamed(context, '/challenges');
+              if (mounted) setState(() => _isNavigating = false);
             } else {
               _showComingSoonModal(
                 context,

@@ -31,6 +31,7 @@ class _CreateRoomScreenState extends State<CreateRoomScreen> {
   bool _spectatorMode = false;
   bool _isPrivate = true; // Default to private based on flow
   bool _isCreating = false;
+  bool _isNavigating = false;
   StreamSubscription? _roomEventSubscription;
 
   @override
@@ -43,7 +44,10 @@ class _CreateRoomScreenState extends State<CreateRoomScreen> {
 
   Future<void> _handleCreateRoom() async {
     if (!_isPrivate) {
-      Navigator.pushNamed(context, '/matchmaking');
+      if (_isNavigating) return;
+      setState(() => _isNavigating = true);
+      await Navigator.pushNamed(context, '/matchmaking');
+      if (mounted) setState(() => _isNavigating = false);
       return;
     }
 

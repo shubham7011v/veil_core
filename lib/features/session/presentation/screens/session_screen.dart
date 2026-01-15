@@ -54,6 +54,7 @@ class _SessionScreenState extends State<SessionScreen>
   bool _showEmoji = false;
   final List<FloatingEmoji> _activeEmojis = [];
   bool? _isWebSocket;
+  bool _isNavigating = false;
 
   @override
   void initState() {
@@ -543,6 +544,8 @@ class _SessionScreenState extends State<SessionScreen>
                             )
                           : state.matchStats,
                       onBackToHome: () {
+                        if (_isNavigating) return;
+                        setState(() => _isNavigating = true);
                         context.read<SessionBloc>().add(
                           const SessionResetRequested(),
                         );
@@ -551,6 +554,8 @@ class _SessionScreenState extends State<SessionScreen>
                         ).pushNamedAndRemoveUntil('/home', (route) => false);
                       },
                       onPlayAgain: () {
+                        if (_isNavigating) return;
+                        setState(() => _isNavigating = true);
                         // Reset and navigate back to matchmaking
                         context.read<SessionBloc>().add(
                           const SessionResetRequested(),

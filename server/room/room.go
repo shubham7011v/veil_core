@@ -760,6 +760,17 @@ func (r *Room) processAction(action GameAction) {
 			bytes, _ := json.Marshal(response)
 			r.broadcast <- bytes
 		}
+
+	case protocol.MsgTypeLeaveRoom:
+		log.Printf("Player %s leaving room %s PERMANENTLY", client.ID, r.ID)
+		r.game.RemovePlayer(client.ID)
+		delete(r.disconnectTimes, client.ID) // Bypass grace period
+		if r.isPrivate {
+			r.broadcaster.BroadcastRoomInfoLocked()
+		} else {
+			r.broadcaster.BroadcastStateLocked()
+		}
+		return // Action processed
 	}
 
 	if err != nil {
@@ -821,6 +832,7 @@ func isValidGameMessageType(msgType string) bool {
 		protocol.MsgTypeChat:             true,
 		protocol.MsgTypeEmoji:            true,
 		protocol.MsgTypeTyping:           true,
+		protocol.MsgTypeLeaveRoom:        true,
 	}
 	return validTypes[msgType]
 }
