@@ -14,7 +14,6 @@ import '../widgets/session_background.dart';
 import '../widgets/game_win_overlay.dart';
 import '../widgets/session_staging_area.dart';
 import '../widgets/session_bottom_controls.dart';
-import '../widgets/compact_match_log.dart';
 import '../../../../core/theme/colors.dart';
 import 'package:veil_core/features/voice/presentation/widgets/voice_overlay.dart';
 import '../../../../core/di/service_locator.dart' as di;
@@ -62,6 +61,7 @@ class _SessionScreenState extends State<SessionScreen>
       vsync: this,
       duration: const Duration(milliseconds: 1200),
     );
+    debugPrint('🎮 [Session] Screen initialized');
     _entryController.forward();
   }
 
@@ -71,9 +71,10 @@ class _SessionScreenState extends State<SessionScreen>
     final args = ModalRoute.of(context)?.settings.arguments;
     if (args is Map && args['useWebSocket'] == true) {
       try {
+        debugPrint('🚪 [Session] Leaving online room on dispose');
         di.sl.webSocketSessionHandler.leaveRoom('');
       } catch (e) {
-        debugPrint('Error leaving room on dispose: $e');
+        debugPrint('🚨 [Session] Error leaving room on dispose: $e');
       }
     }
     _entryController.dispose();
@@ -176,6 +177,7 @@ class _SessionScreenState extends State<SessionScreen>
     engine.SessionEventType event,
     SessionBlocState state,
   ) {
+    debugPrint('🎲 [Session] Handling event: $event');
     switch (event) {
       case engine.SessionEventType.cardsPlayed:
         if (state.lastEventActorId != null) {
@@ -576,14 +578,6 @@ class _SessionScreenState extends State<SessionScreen>
                       child: VoiceOverlay(
                         sessionHandler: di.sl.voiceSessionHandler!,
                       ),
-                    ),
-
-                  // Compact Match Log - bottom right
-                  if (state.gameLog.isNotEmpty && !showSpectatorView)
-                    Positioned(
-                      bottom: 120,
-                      right: 16,
-                      child: CompactMatchLog(gameLog: state.gameLog),
                     ),
                 ],
               ),

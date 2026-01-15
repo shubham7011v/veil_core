@@ -478,7 +478,12 @@ class WebSocketSessionHandler extends GameSessionHandler
         _setupAuth(firebaseToken, displayName: displayName);
       } catch (e) {
         if (currentId != _connectionId) return;
-        debugPrint('🚨 Connection Error (ID: $currentId): $e');
+        debugPrint('🚨 [WebSocket] Connection Error (ID: $currentId): $e');
+        _handleConnectionFailure(firebaseToken, displayName: displayName);
+      }
+    } catch (e) {
+      debugPrint('🚨 [WebSocket] Unexpected error in _attemptConnection: $e');
+      if (currentId == _connectionId) {
         _handleConnectionFailure(firebaseToken, displayName: displayName);
       }
     } finally {
@@ -601,6 +606,7 @@ class WebSocketSessionHandler extends GameSessionHandler
   void _updateConnectionStatus(ConnectionStatus status) {
     final previousStatus = _connectionStatus;
     _connectionStatus = status;
+    debugPrint('🔌 [WebSocket] Status changed: $previousStatus -> $status');
 
     if (!_connectionStatusController.isClosed) {
       _connectionStatusController.add(status);
@@ -662,7 +668,11 @@ class WebSocketSessionHandler extends GameSessionHandler
     try {
       // ✅ FIX #8: Add sequence number for ordering validation
       message['seq'] = _nextSequence++;
-      _channel!.sink.add(jsonEncode(message));
+      final encoded = jsonEncode(message);
+      debugPrint(
+        '📤 [WebSocket] Sending: ${message['type']} (seq: ${message['seq']})',
+      );
+      _channel!.sink.add(encoded);
     } catch (e) {
       debugPrint('❌ Failed to send message: $e');
       debugPrint('   Message type: ${message['type']}');
@@ -726,8 +736,12 @@ class WebSocketSessionHandler extends GameSessionHandler
       final msg = jsonDecode(data as String) as Map<String, dynamic>;
       final type = msg['type'] as String;
 
+      debugPrint('📥 [WebSocket] Received: $type');
+
       if (type == 'PONG') {
-        debugPrint('🏓 PONG received'); // Debug to verify server responding
+        debugPrint(
+          '🏓 [WebSocket] PONG received',
+        ); // Debug to verify server responding
         return; // Heartbeat response
       }
 

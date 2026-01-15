@@ -59,6 +59,7 @@ class _MatchmakingScreenState extends State<MatchmakingScreen>
 
     // Delay slightly to allow UI to render before starting
     Future.delayed(Duration.zero, () {
+      debugPrint('🚀 [Matchmaking] Screen initialized');
       if (mounted) _startOnlineMatchmaking();
     });
   }
@@ -143,6 +144,7 @@ class _MatchmakingScreenState extends State<MatchmakingScreen>
         ) {
           if (mounted) {
             setState(() => _connectionStatus = status);
+            debugPrint('🔌 [Matchmaking] Connection status updated: $status');
 
             if (status == ConnectionStatus.connected && !_isMatchFound) {
               // ✅ FIX #3: Prevent duplicate JOIN if already in a room or active lobby
@@ -189,6 +191,9 @@ class _MatchmakingScreenState extends State<MatchmakingScreen>
           }
 
           if (state.currentPhase == SessionPhase.thinking && !_isMatchFound) {
+            debugPrint(
+              '🏁 [Matchmaking] Match Found! transitioning to Thinking phase',
+            );
             if (mounted) {
               setState(() {
                 _isMatchFound = true;
@@ -263,6 +268,7 @@ class _MatchmakingScreenState extends State<MatchmakingScreen>
         await Future.delayed(const Duration(milliseconds: 500));
 
         if (mounted && handler.connectionStatus == ConnectionStatus.connected) {
+          debugPrint('🎯 [Matchmaking] Triggering joinMatchmaking()');
           handler.joinMatchmaking();
           _startTimeoutTimer(); // Start the "taking too long" timer
         }
@@ -396,6 +402,7 @@ class _MatchmakingScreenState extends State<MatchmakingScreen>
             '/session',
             arguments: {'useWebSocket': true},
           );
+          debugPrint('➡️ [Matchmaking] Navigating to /session');
         }
       },
     );
@@ -403,6 +410,7 @@ class _MatchmakingScreenState extends State<MatchmakingScreen>
 
   @override
   void dispose() {
+    debugPrint('🛑 [Matchmaking] Screen disposed');
     _waitTimer?.cancel();
     // If we haven't found a match OR if we manually popped (aborting match found state)
     if (!_isMatchFound || _isManualPop) {
