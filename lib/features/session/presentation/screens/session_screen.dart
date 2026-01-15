@@ -229,7 +229,7 @@ class _SessionScreenState extends State<SessionScreen>
       case engine.SessionEventType.passed:
         if (state.lastEventActorId != null) {
           final isMe = state.engineState.participants.any(
-            (p) => p.isMe && p.id == state.lastEventActorId,
+            (p) => p.isMe && p.sessionId == state.lastEventActorId,
           );
           HapticFeedback.lightImpact();
 
@@ -238,11 +238,23 @@ class _SessionScreenState extends State<SessionScreen>
           if (isMe) {
             name = "YOU";
           } else {
-            final participant = state.engineState.participants.firstWhere(
-              (p) => p.id == state.lastEventActorId,
-              orElse: () => state.engineState.participants.first,
-            );
-            name = participant.name.split(' ').first.toUpperCase();
+            try {
+              final participant = state.engineState.participants.firstWhere(
+                (p) => p.sessionId == state.lastEventActorId,
+              );
+              name = participant.name.split(' ').first.toUpperCase();
+              debugPrint(
+                '✅ [Pass] Found participant: ${participant.name} for ID: ${state.lastEventActorId}',
+              );
+            } catch (e) {
+              debugPrint(
+                '❌ [Pass] No participant found for ID: ${state.lastEventActorId}',
+              );
+              debugPrint(
+                'Available IDs: ${state.engineState.participants.map((p) => p.sessionId).join(", ")}',
+              );
+              name = "PLAYER";
+            }
           }
 
           _showTurnPopup("$name PASSED", Colors.white);
@@ -256,17 +268,29 @@ class _SessionScreenState extends State<SessionScreen>
           // Get challenger name
           String name;
           final isMe = state.engineState.participants.any(
-            (p) => p.isMe && p.id == state.lastEventActorId,
+            (p) => p.isMe && p.sessionId == state.lastEventActorId,
           );
 
           if (isMe) {
             name = "YOU";
           } else {
-            final participant = state.engineState.participants.firstWhere(
-              (p) => p.id == state.lastEventActorId,
-              orElse: () => state.engineState.participants.first,
-            );
-            name = participant.name.split(' ').first.toUpperCase();
+            try {
+              final participant = state.engineState.participants.firstWhere(
+                (p) => p.sessionId == state.lastEventActorId,
+              );
+              name = participant.name.split(' ').first.toUpperCase();
+              debugPrint(
+                '✅ [Bluff] Found participant: ${participant.name} for ID: ${state.lastEventActorId}',
+              );
+            } catch (e) {
+              debugPrint(
+                '❌ [Bluff] No participant found for ID: ${state.lastEventActorId}',
+              );
+              debugPrint(
+                'Available IDs: ${state.engineState.participants.map((p) => p.id).join(", ")}',
+              );
+              name = "PLAYER";
+            }
           }
 
           _showTurnPopup("$name CALLS BLUFF", Colors.orange);
@@ -274,9 +298,10 @@ class _SessionScreenState extends State<SessionScreen>
         break;
       case engine.SessionEventType.cardsPlayed:
         // Only animate if cards were actually played (> 0)
+        // Ensure strictly positive count and valid actor
         if (state.lastEventActorId != null && state.lastEventCardCount > 0) {
           final isMe = state.engineState.participants.any(
-            (p) => p.isMe && p.id == state.lastEventActorId,
+            (p) => p.isMe && p.sessionId == state.lastEventActorId,
           );
           debugPrint(
             '🎬 [Session] CardsPlayed by ${state.lastEventActorId} (Me: $isMe, Count: ${state.lastEventCardCount})',
@@ -643,8 +668,88 @@ class _SessionScreenState extends State<SessionScreen>
                         ),
                         const SizedBox(height: 16),
 
-                        // Staging Area
-                        if (!showSpectatorView)
+                        // Feedback Popup OR Staging Area
+                        if (_turnPopupText != null)
+                          Container(
+                            height: 120, // Approximate height of staging area
+                            alignment: Alignment.center,
+                            child: TweenAnimationBuilder<double>(
+                              duration: const Duration(milliseconds: 300),
+                              tween: Tween(begin: 0.0, end: 1.0),
+                              builder: (context, value, child) {
+                                return Transform.scale(
+                                  scale: 0.9 + (0.1 * value),
+                                  child: Opacity(
+                                    opacity: value,
+                                    child: Container(
+                                      constraints: const BoxConstraints(
+                                        minWidth: 200,
+                                        maxWidth: 320,
+                                      ),
+                                      padding: const EdgeInsets.symmetric(
+                                        horizontal: 24,
+                                        vertical: 18,
+                                      ),
+                                      decoration: BoxDecoration(
+                                        gradient: LinearGradient(
+                                          begin: Alignment.topLeft,
+                                          end: Alignment.bottomRight,
+                                          colors: [
+                                            Colors.black.withValues(
+                                              alpha: 0.95,
+                                            ),
+                                            Colors.black.withValues(
+                                              alpha: 0.85,
+                                            ),
+                                          ],
+                                        ),
+                                        borderRadius: BorderRadius.circular(12),
+                                        border: Border.all(
+                                          color: _turnPopupColor,
+                                          width: 3,
+                                        ),
+                                        boxShadow: [
+                                          BoxShadow(
+                                            color: _turnPopupColor.withValues(
+                                              alpha: 0.4,
+                                            ),
+                                            blurRadius: 24,
+                                            spreadRadius: 2,
+                                          ),
+                                          BoxShadow(
+                                            color: Colors.black.withValues(
+                                              alpha: 0.6,
+                                            ),
+                                            blurRadius: 12,
+                                            offset: const Offset(0, 4),
+                                          ),
+                                        ],
+                                      ),
+                                      child: Text(
+                                        _turnPopupText!,
+                                        textAlign: TextAlign.center,
+                                        style: TextStyle(
+                                          color: _turnPopupColor,
+                                          fontSize: 22,
+                                          fontWeight: FontWeight.w900,
+                                          letterSpacing: 3,
+                                          shadows: [
+                                            Shadow(
+                                              color: _turnPopupColor.withValues(
+                                                alpha: 0.5,
+                                              ),
+                                              blurRadius: 8,
+                                            ),
+                                          ],
+                                        ),
+                                      ),
+                                    ),
+                                  ),
+                                );
+                              },
+                            ),
+                          )
+                        else if (!showSpectatorView)
                           SlideTransition(
                             position:
                                 Tween<Offset>(
@@ -786,89 +891,6 @@ class _SessionScreenState extends State<SessionScreen>
                     Positioned.fill(
                       child: VoiceOverlay(
                         sessionHandler: di.sl.voiceSessionHandler!,
-                      ),
-                    ),
-
-                  // Turn Transition Overlay - Card-style popup in staging area
-                  if (_turnPopupText != null)
-                    Positioned(
-                      bottom: MediaQuery.of(context).size.height * 0.30,
-                      left: 0,
-                      right: 0,
-                      child: IgnorePointer(
-                        child: Center(
-                          child: TweenAnimationBuilder<double>(
-                            duration: const Duration(milliseconds: 300),
-                            tween: Tween(begin: 0.0, end: 1.0),
-                            builder: (context, value, child) {
-                              return Transform.scale(
-                                scale: 0.9 + (0.1 * value),
-                                child: Opacity(
-                                  opacity: value,
-                                  child: Container(
-                                    constraints: const BoxConstraints(
-                                      minWidth: 200,
-                                      maxWidth: 320,
-                                    ),
-                                    padding: const EdgeInsets.symmetric(
-                                      horizontal: 24,
-                                      vertical: 18,
-                                    ),
-                                    decoration: BoxDecoration(
-                                      gradient: LinearGradient(
-                                        begin: Alignment.topLeft,
-                                        end: Alignment.bottomRight,
-                                        colors: [
-                                          Colors.black.withValues(alpha: 0.95),
-                                          Colors.black.withValues(alpha: 0.85),
-                                        ],
-                                      ),
-                                      borderRadius: BorderRadius.circular(12),
-                                      border: Border.all(
-                                        color: _turnPopupColor,
-                                        width: 3,
-                                      ),
-                                      boxShadow: [
-                                        BoxShadow(
-                                          color: _turnPopupColor.withValues(
-                                            alpha: 0.4,
-                                          ),
-                                          blurRadius: 24,
-                                          spreadRadius: 2,
-                                        ),
-                                        BoxShadow(
-                                          color: Colors.black.withValues(
-                                            alpha: 0.6,
-                                          ),
-                                          blurRadius: 12,
-                                          offset: const Offset(0, 4),
-                                        ),
-                                      ],
-                                    ),
-                                    child: Text(
-                                      _turnPopupText!,
-                                      textAlign: TextAlign.center,
-                                      style: TextStyle(
-                                        color: _turnPopupColor,
-                                        fontSize: 22,
-                                        fontWeight: FontWeight.w900,
-                                        letterSpacing: 3,
-                                        shadows: [
-                                          Shadow(
-                                            color: _turnPopupColor.withValues(
-                                              alpha: 0.5,
-                                            ),
-                                            blurRadius: 8,
-                                          ),
-                                        ],
-                                      ),
-                                    ),
-                                  ),
-                                ),
-                              );
-                            },
-                          ),
-                        ),
                       ),
                     ),
                 ],

@@ -94,10 +94,11 @@ class _FlyingCardItemState extends State<_FlyingCardItem>
 
         return Stack(
           children: _offsets.map((idx) {
-            // Apply a slight spread for multiple cards
+            // Apply a wider spread for multiple cards to make count obvious
             final double spreadX =
+                (idx - (_offsets.length / 2)) * 25 * progress;
+            final double spreadY =
                 (idx - (_offsets.length / 2)) * 12 * progress;
-            final double spreadY = (idx - (_offsets.length / 2)) * 6 * progress;
 
             return Positioned(
               left: _posAnim.value.dx - 25 + spreadX + (arcHeight * 0.2),
