@@ -62,6 +62,14 @@ class WebSocketSessionHandler extends GameSessionHandler
   String? _lastUrl;
   String? _fcmToken;
 
+  // Managed connection artifacts
+  StreamSubscription? _subscription;
+  Completer<void>? _connectionCompleter;
+  int _connectionId = 0;
+
+  // Message Queue for non-critical requests during reconnection
+  final List<Map<String, dynamic>> _messageQueue = [];
+
   // Connection lock to prevent duplicate simultaneous connections
   bool _isConnecting = false;
 
@@ -247,12 +255,16 @@ class WebSocketSessionHandler extends GameSessionHandler
     _reconnectScheduleTimer = Timer(
       const Duration(milliseconds: 300),
       () async {
-        if (_connectionStatus != ConnectionStatus.connected &&
-            _connectionStatus != ConnectionStatus.connecting) {
-          debugPrint('🔄 Scheduled reconnection triggered');
-          await _attemptAutoReconnect();
-        } else {
-          debugPrint('⚠️ Reconnect skipped: Already connected or connecting');
+        try {
+          if (_connectionStatus != ConnectionStatus.connected &&
+              _connectionStatus != ConnectionStatus.connecting) {
+            debugPrint('🔄 Scheduled reconnection triggered');
+            await _attemptAutoReconnect();
+          } else {
+            debugPrint('⚠️ Reconnect skipped: Already connected or connecting');
+          }
+        } catch (e) {
+          debugPrint('❌ Scheduled reconnect error: $e');
         }
       },
     );
@@ -384,7 +396,25 @@ class WebSocketSessionHandler extends GameSessionHandler
     String? displayName,
   }) async {
     _lastUrl = serverUrl;
-    await _attemptConnection(firebaseToken, displayName: displayName);
+
+    if (_connectionStatus == ConnectionStatus.connected) return;
+
+    // If already connecting, wait for the existing completer
+    if (_isConnecting &&
+        _connectionCompleter != null &&
+        !_connectionCompleter!.isCompleted) {
+      debugPrint('⌛ Waiting for existing connection attempt...');
+      return _connectionCompleter!.future;
+    }
+
+    // Reset attempt counter for new explicit connection
+    _reconnectAttempts = 0;
+
+    _connectionCompleter = Completer<void>();
+    // Start attempt without awaiting it here, we await the completer instead
+    _attemptConnection(firebaseToken, displayName: displayName);
+
+    return _connectionCompleter!.future;
   }
 
   Future<void> _attemptConnection(
@@ -399,9 +429,11 @@ class WebSocketSessionHandler extends GameSessionHandler
       return;
     }
 
-    if (_connectionStatus == ConnectionStatus.connecting) return;
+    if (_connectionStatus == ConnectionStatus.connected) return;
 
     _isConnecting = true; // Lock
+    _connectionId++; // Increment connection instance identity
+    final currentId = _connectionId;
 
     _updateConnectionStatus(
       _reconnectAttempts > 0
@@ -411,27 +443,51 @@ class WebSocketSessionHandler extends GameSessionHandler
 
     try {
       try {
-        // Close existing connection if any to prevent leaks
-        await _channel?.sink.close();
+        // Stop current heartbeat before changing channel
+        _heartbeatTimer?.cancel();
+        _heartbeatTimer = null;
 
-        debugPrint('Connecting to WebSocket: $_lastUrl');
+        // Close existing channel safely
+        if (_channel != null) {
+          try {
+            await _channel?.sink.close();
+          } catch (_) {}
+          _channel = null;
+        }
+
+        debugPrint('Connecting to WebSocket (ID: $currentId): $_lastUrl');
         _channel = WebSocketChannel.connect(Uri.parse(_lastUrl!));
 
         // ✅ FIX: Wait for handshake before sending AUTH
-        await _channel!.ready.timeout(const Duration(seconds: 10));
-        debugPrint('✅ WebSocket Handshake Ready - Sending AUTH');
+        // Use a shorter timeout for the handshake itself
+        await _channel!.ready.timeout(const Duration(seconds: 8));
+
+        // If we were interrupted by a newer connection, stop here
+        if (currentId != _connectionId) {
+          debugPrint(
+            '🚫 Connection ID $currentId superseded by $_connectionId',
+          );
+          return;
+        }
+
+        debugPrint(
+          '✅ WebSocket Handshake Ready (ID: $currentId) - Sending AUTH',
+        );
 
         _setupMessageListener(firebaseToken, displayName: displayName);
         _setupAuth(firebaseToken, displayName: displayName);
-
-        _reconnectAttempts = 0; // Reset on success
       } catch (e) {
-        debugPrint('🚨 Connection Error: $e');
+        if (currentId != _connectionId) return;
+        debugPrint('🚨 Connection Error (ID: $currentId): $e');
         _handleConnectionFailure(firebaseToken, displayName: displayName);
       }
     } finally {
-      // ✅ CRITICAL FIX: Always release the lock, even if _handleConnectionFailure throws or async gaps occur
-      _isConnecting = false;
+      // Small delay before releasing lock to prevent immediate flapping
+      Future.delayed(const Duration(milliseconds: 100), () {
+        if (currentId == _connectionId) {
+          _isConnecting = false;
+        }
+      });
     }
   }
 
@@ -464,25 +520,31 @@ class WebSocketSessionHandler extends GameSessionHandler
   }
 
   void _setupMessageListener(String firebaseToken, {String? displayName}) {
-    // NOTE: AUTH is now sent AFTER handshake in _attemptConnection
-    // Don't send it here to avoid race condition
+    final currentId = _connectionId;
+
+    // Cancel previous subscription to avoid double-processing
+    _subscription?.cancel();
 
     // Listen for messages
-    _channel!.stream.listen(
+    _subscription = _channel!.stream.listen(
       _handleMessage,
       onError: (error) {
-        debugPrint('🚨 WebSocket Error: $error');
+        if (currentId != _connectionId) return;
+        debugPrint('🚨 WebSocket Error (ID: $currentId): $error');
         _handleConnectionFailure(firebaseToken, displayName: displayName);
       },
       onDone: () {
-        debugPrint('🚨 WebSocket connection closed.');
-        if (_channel?.closeCode != null) {
-          debugPrint('🚨 Close Code: ${_channel?.closeCode}');
-          debugPrint('🚨 Close Reason: ${_channel?.closeReason}');
-        }
+        if (currentId != _connectionId) return;
+
+        // Check close code to see if it was intentional
+        final code = _channel?.closeCode;
+        debugPrint(
+          '🚨 WebSocket connection closed (ID: $currentId). Code: $code',
+        );
 
         if (_connectionStatus == ConnectionStatus.connected ||
-            _connectionStatus == ConnectionStatus.connecting) {
+            _connectionStatus == ConnectionStatus.connecting ||
+            _connectionStatus == ConnectionStatus.reconnecting) {
           // Unexpected disconnect - try to reconnect
           _handleConnectionFailure(firebaseToken, displayName: displayName);
         }
@@ -496,14 +558,12 @@ class WebSocketSessionHandler extends GameSessionHandler
     _heartbeatTimer?.cancel();
     _heartbeatTimer = null;
 
-    // ✅ FIX: Also stop auth timeout timer as we are already failing
     _authTimeoutTimer?.cancel();
     _authTimeoutTimer = null;
 
     if (_reconnectAttempts < _maxReconnectAttempts) {
       _reconnectAttempts++;
       final baseDelay = _baseReconnectDelay * (1 << (_reconnectAttempts - 1));
-      // ✅ FIX: Use proper random jitter to prevent Thundering Herd
       final random = Random();
       final jitter = Duration(milliseconds: random.nextInt(500));
       final delay = baseDelay + jitter;
@@ -522,6 +582,16 @@ class WebSocketSessionHandler extends GameSessionHandler
     } else {
       debugPrint('Max reconnection attempts reached');
       _updateConnectionStatus(ConnectionStatus.failed);
+
+      // Final failure - complete the completer with error
+      if (_connectionCompleter != null && !_connectionCompleter!.isCompleted) {
+        _connectionCompleter!.completeError(
+          const NetworkFailure(
+            'Server connection failed after multiple retries',
+          ),
+        );
+      }
+
       if (!_eventController.isClosed) {
         _eventController.add(SessionEventType.connectionFailed);
       }
@@ -569,16 +639,23 @@ class WebSocketSessionHandler extends GameSessionHandler
   void _send(Map<String, dynamic> message, {bool force = false}) {
     // Check if channel exists and connection status is valid
     if (_channel == null) {
-      debugPrint('⚠️ Cannot send message: WebSocket channel is null');
+      if (!force && _isQueuable(message['type'])) {
+        _queueMessage(message);
+      } else {
+        debugPrint('⚠️ Cannot send message: WebSocket channel is null');
+      }
       return;
     }
 
     if (!force && _connectionStatus != ConnectionStatus.connected) {
-      debugPrint(
-        '⚠️ Cannot send message: Not connected (status: $_connectionStatus)',
-      );
-      // Don't drop the message silently - log it for debugging
-      debugPrint('   Dropped message type: ${message['type']}');
+      if (_isQueuable(message['type'])) {
+        _queueMessage(message);
+      } else {
+        debugPrint(
+          '⚠️ Cannot send message: Not connected (status: $_connectionStatus)',
+        );
+        debugPrint('   Dropped message type: ${message['type']}');
+      }
       return;
     }
 
@@ -589,6 +666,11 @@ class WebSocketSessionHandler extends GameSessionHandler
     } catch (e) {
       debugPrint('❌ Failed to send message: $e');
       debugPrint('   Message type: ${message['type']}');
+
+      if (_isQueuable(message['type'])) {
+        _queueMessage(message);
+      }
+
       // Channel is likely closed, trigger reconnection
       _heartbeatTimer?.cancel();
       _heartbeatTimer = null;
@@ -597,6 +679,43 @@ class WebSocketSessionHandler extends GameSessionHandler
       if (_connectionStatus == ConnectionStatus.connected) {
         _updateConnectionStatus(ConnectionStatus.disconnected);
       }
+    }
+  }
+
+  bool _isQueuable(String? type) {
+    if (type == null) return false;
+    // Queue non-gameplay requests that are useful to have once connected
+    const queuable = {
+      'FRIEND_LIST',
+      'LEADERBOARD_GET',
+      'CHALLENGES_GET',
+      'REFILL_COINS',
+      'UPDATE_FCM',
+    };
+    return queuable.contains(type);
+  }
+
+  void _queueMessage(Map<String, dynamic> message) {
+    // Deduplicate: remove existing message of same type
+    _messageQueue.removeWhere((m) => m['type'] == message['type']);
+    _messageQueue.add(message);
+    debugPrint(
+      '📫 Queued message: ${message['type']} (${_messageQueue.length} in queue)',
+    );
+  }
+
+  void _processMessageQueue() {
+    if (_connectionStatus != ConnectionStatus.connected ||
+        _messageQueue.isEmpty) {
+      return;
+    }
+
+    debugPrint('📤 Processing ${_messageQueue.length} queued messages...');
+    final currentQueue = List<Map<String, dynamic>>.from(_messageQueue);
+    _messageQueue.clear();
+
+    for (final msg in currentQueue) {
+      _send(msg);
     }
   }
 
@@ -617,9 +736,17 @@ class WebSocketSessionHandler extends GameSessionHandler
           // ✅ FIX: Cancel AUTH timeout - we got the response!
           _authTimeoutTimer?.cancel();
 
-          debugPrint('Auth successful: ${msg['data']}');
+          debugPrint('✅ Auth successful: ${msg['data']} (ID: $_connectionId)');
           _updateConnectionStatus(ConnectionStatus.connected);
+
+          // Complete the connection completer
+          if (_connectionCompleter != null &&
+              !_connectionCompleter!.isCompleted) {
+            _connectionCompleter!.complete();
+          }
+
           _startHeartbeat(); // Start keep-alive and watchdog
+          _processMessageQueue(); // Flush any messages queued during connection
 
           // ✅ FIX: Resend FCM token if we have one (for reconnections)
           if (_fcmToken != null) {
@@ -1221,22 +1348,34 @@ class WebSocketSessionHandler extends GameSessionHandler
       'type': 'PLAY_CARDS',
       'data': {'cardIds': unitIds, 'declaredRank': declaredRank.name},
     });
-    sl.audioService.playSfx(SoundAssets.cardSlide);
-    sl.audioService.triggerHaptic(HapticType.light);
+    try {
+      sl.audioService.playSfx(SoundAssets.cardSlide);
+      sl.audioService.triggerHaptic(HapticType.light);
+    } catch (e) {
+      debugPrint('Audio/Haptic error (playCards): $e');
+    }
   }
 
   @override
   void passTurn() {
     _send({'type': 'PASS'});
-    sl.audioService.playSfx(SoundAssets.buttonTap);
-    sl.audioService.triggerHaptic(HapticType.medium);
+    try {
+      sl.audioService.playSfx(SoundAssets.buttonTap);
+      sl.audioService.triggerHaptic(HapticType.medium);
+    } catch (e) {
+      debugPrint('Audio/Haptic error (passTurn): $e');
+    }
   }
 
   @override
   void raiseChallenge() {
     _send({'type': 'CHALLENGE'});
-    sl.audioService.playSfx(SoundAssets.buttonTap);
-    sl.audioService.triggerHaptic(HapticType.heavy);
+    try {
+      sl.audioService.playSfx(SoundAssets.buttonTap);
+      sl.audioService.triggerHaptic(HapticType.heavy);
+    } catch (e) {
+      debugPrint('Audio/Haptic error (raiseChallenge): $e');
+    }
   }
 
   @override
@@ -1432,9 +1571,11 @@ class WebSocketSessionHandler extends GameSessionHandler
     _pNames.clear();
     _typingStatus.clear();
     _lastProcessedEventId = null;
+    _messageQueue.clear();
 
     // Reset state to Initial
     _currentState = SessionState.initial();
+
     if (!_stateController.isClosed) {
       _stateController.add(_currentState);
     }
@@ -1443,7 +1584,7 @@ class WebSocketSessionHandler extends GameSessionHandler
   @override
   Future<void> dispose() async {
     // NOTE: For Singleton usage, we do NOT close StreamControllers.
-    // We only reset theconnection state.
+    // We only reset the connection state.
 
     // Cancel all timers
     _heartbeatTimer?.cancel();
@@ -1457,6 +1598,11 @@ class WebSocketSessionHandler extends GameSessionHandler
 
     _authTimeoutTimer?.cancel();
     _authTimeoutTimer = null;
+
+    _subscription?.cancel();
+    _subscription = null;
+
+    _messageQueue.clear();
 
     // Close WebSocket connection
     await _channel?.sink.close();
