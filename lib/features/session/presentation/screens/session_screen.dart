@@ -53,6 +53,7 @@ class _SessionScreenState extends State<SessionScreen>
   bool _showChat = false;
   bool _showEmoji = false;
   final List<FloatingEmoji> _activeEmojis = [];
+  bool? _isWebSocket;
 
   @override
   void initState() {
@@ -66,10 +67,18 @@ class _SessionScreenState extends State<SessionScreen>
   }
 
   @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (_isWebSocket == null) {
+      final args = ModalRoute.of(context)?.settings.arguments;
+      _isWebSocket = args is Map && args['useWebSocket'] == true;
+    }
+  }
+
+  @override
   void dispose() {
     // Leave online room to clean up server state
-    final args = ModalRoute.of(context)?.settings.arguments;
-    if (args is Map && args['useWebSocket'] == true) {
+    if (_isWebSocket == true) {
       try {
         debugPrint('🚪 [Session] Leaving online room on dispose');
         di.sl.webSocketSessionHandler.leaveRoom('');
