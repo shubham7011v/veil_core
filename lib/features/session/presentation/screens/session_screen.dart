@@ -25,6 +25,7 @@ import '../../../game/presentation/widgets/chat_widget.dart';
 import '../../../game/presentation/widgets/emoji_picker.dart';
 import '../../../../core/config/feature_flags.dart';
 import '../widgets/floating_emoji_layer.dart';
+import '../utils/session_constants.dart';
 
 class SessionScreen extends StatefulWidget {
   const SessionScreen({super.key});
@@ -37,7 +38,7 @@ class _SessionScreenState extends State<SessionScreen>
     with TickerProviderStateMixin {
   late AnimationController _entryController;
 
-  final Map<String, GlobalKey> _avatarKeys = {'me': GlobalKey()};
+  final Map<String, GlobalKey> _avatarKeys = {SessionIds.me: GlobalKey()};
   final GlobalKey _pileKey = GlobalKey();
   final GlobalKey _stagingKey = GlobalKey();
   final List<FlyingCard> _flyingCards = [];
@@ -50,13 +51,15 @@ class _SessionScreenState extends State<SessionScreen>
   String? _turnPopupText;
   Color _turnPopupColor = const Color(0xFFFFD700); // Default Gold
   Timer? _turnPopupTimer;
+  // Track previous active player ID for turn change detection
+  String? _previousActivePlayerId;
 
   @override
   void initState() {
     super.initState();
     _entryController = AnimationController(
       vsync: this,
-      duration: const Duration(milliseconds: 1200),
+      duration: SessionDurations.entryAnimationDuration,
     );
     debugPrint('🎮 [Session] Screen initialized');
     _entryController.forward();
@@ -100,11 +103,11 @@ class _SessionScreenState extends State<SessionScreen>
     // Ensure all participants have GlobalKeys
     for (var p in state.engineState.participants) {
       if (p.isMe) {
-        // Map my actual ID to the 'me' key used by HandView
-        _avatarKeys[p.id] = _avatarKeys['me']!;
+        // Map my actual ID to the SessionIds.me key used by HandView
+        _avatarKeys[p.id] = _avatarKeys[SessionIds.me]!;
         // Also map sessionId to the same key
         if (p.sessionId != null) {
-          _avatarKeys[p.sessionId!] = _avatarKeys['me']!;
+          _avatarKeys[p.sessionId!] = _avatarKeys[SessionIds.me]!;
         }
       } else {
         // If we don't have a key for this participant, create one
@@ -130,12 +133,16 @@ class _SessionScreenState extends State<SessionScreen>
   }) {
     if (!mounted) return;
 
-    final sourceKey = sourceId == 'pile'
+    final sourceKey = sourceId == SessionIds.pile
         ? _pileKey
-        : (sourceId == 'staging' ? _stagingKey : _avatarKeys[sourceId]);
-    final targetKey = targetId == 'pile'
+        : (sourceId == SessionIds.staging
+              ? _stagingKey
+              : _avatarKeys[sourceId]);
+    final targetKey = targetId == SessionIds.pile
         ? _pileKey
-        : (targetId == 'staging' ? _stagingKey : _avatarKeys[targetId]);
+        : (targetId == SessionIds.staging
+              ? _stagingKey
+              : _avatarKeys[targetId]);
 
     // FALLBACK: If we can't find keys, try to infer sensible defaults
     // e.g. if target is 'pile' but key is missing, use screen center
@@ -152,9 +159,9 @@ class _SessionScreenState extends State<SessionScreen>
 
       // Fallback for start position
       if (start == Offset.zero) {
-        if (sourceId == 'pile') {
+        if (sourceId == SessionIds.pile) {
           start = Offset(screenSize.width / 2, screenSize.height / 2);
-        } else if (sourceId == 'staging') {
+        } else if (sourceId == SessionIds.staging) {
           start = Offset(screenSize.width / 2, screenSize.height - 100);
         } else {
           // Default for Opponents/Unknown: Top Center (Opponent Carousel area)
@@ -168,9 +175,9 @@ class _SessionScreenState extends State<SessionScreen>
 
       // Fallback for end position
       if (end == Offset.zero) {
-        if (targetId == 'pile') {
+        if (targetId == SessionIds.pile) {
           end = Offset(screenSize.width / 2, screenSize.height / 2);
-        } else if (targetId == 'staging') {
+        } else if (targetId == SessionIds.staging) {
           end = Offset(screenSize.width / 2, screenSize.height - 100);
         } else {
           // Default for Opponents/Unknown: Top Center
@@ -239,7 +246,7 @@ class _SessionScreenState extends State<SessionScreen>
     switch (event) {
       case engine.SessionEventType.passed:
         if (state.lastEventActorId != null) {
-          final isMe = state.lastEventActorId == 'me';
+          final isMe = state.lastEventActorId == SessionIds.me;
           HapticFeedback.lightImpact();
 
           // Get clean player name from participant object
@@ -276,7 +283,7 @@ class _SessionScreenState extends State<SessionScreen>
 
           // Get challenger name
           String name;
-          final isMe = state.lastEventActorId == 'me';
+          final isMe = state.lastEventActorId == SessionIds.me;
 
           if (isMe) {
             name = "YOU";
@@ -306,14 +313,14 @@ class _SessionScreenState extends State<SessionScreen>
       case engine.SessionEventType.cardsPlayed:
         // Ensure strictly positive count and valid actor
         if (state.lastEventActorId != null && state.lastEventCardCount > 0) {
-          final isMe = state.lastEventActorId == 'me';
+          final isMe = state.lastEventActorId == SessionIds.me;
           debugPrint(
             '🎬 [Session] CardsPlayed by ${state.lastEventActorId} (Me: $isMe, Count: ${state.lastEventCardCount})',
           );
           HapticFeedback.selectionClick();
           _triggerCardAnimation(
-            sourceId: isMe ? 'staging' : state.lastEventActorId!,
-            targetId: 'pile',
+            sourceId: isMe ? SessionIds.staging : state.lastEventActorId!,
+            targetId: SessionIds.pile,
             count: state.lastEventCardCount,
           );
         }
@@ -350,7 +357,7 @@ class _SessionScreenState extends State<SessionScreen>
 
           // Animate from Pile -> Loser
           _triggerCardAnimation(
-            sourceId: 'pile',
+            sourceId: SessionIds.pile,
             targetId: state.lastEventActorId!,
             count: state.lastEventCardCount,
           );
@@ -374,7 +381,7 @@ class _SessionScreenState extends State<SessionScreen>
         // Distribute cards to all players simultaneously
         for (var participant in participants) {
           _triggerCardAnimation(
-            sourceId: 'pile',
+            sourceId: SessionIds.pile,
             targetId: participant.id,
             count: cardsPerPlayer,
           );
@@ -398,8 +405,8 @@ class _SessionScreenState extends State<SessionScreen>
           );
           Future.delayed(Duration(milliseconds: i * 40), () {
             _triggerCardAnimation(
-              sourceId: 'pile',
-              targetId: 'offscreen',
+              sourceId: SessionIds.pile,
+              targetId: SessionIds.offscreen,
               customStartOffset: pileOffset,
               customEndOffset: targetPoint,
             );
@@ -409,8 +416,10 @@ class _SessionScreenState extends State<SessionScreen>
       case engine.SessionEventType.emojiReceived:
         final senderId = state.lastEventActorId;
         if (senderId != null) {
-          final isMe = senderId == 'me';
-          final sourceKey = isMe ? _avatarKeys['me'] : _avatarKeys[senderId];
+          final isMe = senderId == SessionIds.me;
+          final sourceKey = isMe
+              ? _avatarKeys[SessionIds.me]
+              : _avatarKeys[senderId];
 
           if (sourceKey != null) {
             final emojiChar =
@@ -448,7 +457,7 @@ class _SessionScreenState extends State<SessionScreen>
       _turnPopupText = text;
       _turnPopupColor = color;
     });
-    _turnPopupTimer = Timer(const Duration(milliseconds: 1500), () {
+    _turnPopupTimer = Timer(SessionDurations.turnPopupDuration, () {
       if (mounted) {
         setState(() {
           _turnPopupText = null;
@@ -473,6 +482,14 @@ class _SessionScreenState extends State<SessionScreen>
       }
     }
 
+    // ✅ Cleanup local state to prevent memory leaks
+    _avatarKeys.removeWhere((key, _) => key != SessionIds.me);
+    _flyingCards.clear();
+    _activeEmojis.clear();
+    _turnPopupTimer?.cancel();
+    _turnPopupText = null;
+    _previousActivePlayerId = null;
+
     if (!mounted) return;
     context.read<SessionBloc>().add(const SessionResetRequested());
     Navigator.of(context).pushNamedAndRemoveUntil(routeName, (route) => false);
@@ -487,28 +504,23 @@ class _SessionScreenState extends State<SessionScreen>
           prev.engineState.activeParticipantId !=
               curr.engineState.activeParticipantId,
       listener: (context, state) {
-        // ... (existing listener logic) ...
         _updateAvatarKeys(state);
 
-        final prevActiveId = context
-            .read<SessionBloc>()
-            .state
-            .engineState
-            .activeParticipantId;
-
-        // Handle Turn Change Feedback
-        if (state.engineState.activeParticipantId != prevActiveId &&
-            state.engineState.activeParticipantId != null) {
-          if (state.engineState.activeParticipantId == 'me') {
+        // Handle Turn Change Feedback using tracked previous ID
+        final currentActiveId = state.engineState.activeParticipantId;
+        if (currentActiveId != _previousActivePlayerId &&
+            currentActiveId != null &&
+            currentActiveId.isNotEmpty) {
+          if (currentActiveId == SessionIds.me) {
             HapticFeedback.mediumImpact();
             _showTurnPopup("YOUR TURN");
           } else {
             HapticFeedback.lightImpact();
-            final name = state.getPlayerName(
-              state.engineState.activeParticipantId!,
-            );
+            final name = state.getPlayerName(currentActiveId);
             _showTurnPopup("${name.toUpperCase()}'S TURN");
           }
+          // Update tracked ID after handling
+          _previousActivePlayerId = currentActiveId;
         }
 
         // Handle Failures
@@ -526,7 +538,7 @@ class _SessionScreenState extends State<SessionScreen>
       },
       child: BlocBuilder<SessionBloc, SessionBlocState>(
         builder: (context, state) {
-          _updateAvatarKeys(state);
+          // Note: _updateAvatarKeys is in listener, not here (avoid side effects in build)
 
           final showSpectatorView = state.engineState.isSpectator;
 
@@ -786,7 +798,7 @@ class _SessionScreenState extends State<SessionScreen>
                               child: SessionStagingArea(
                                 key: _stagingKey,
                                 state: state,
-                                myAvatarKey: _avatarKeys['me']!,
+                                myAvatarKey: _avatarKeys[SessionIds.me]!,
                               ),
                             ),
                           ),
@@ -820,7 +832,7 @@ class _SessionScreenState extends State<SessionScreen>
                               ),
                               child: SessionBottomControls(
                                 state: state,
-                                myAvatarKey: _avatarKeys['me']!,
+                                myAvatarKey: _avatarKeys[SessionIds.me]!,
                               ),
                             ),
                           )
@@ -861,7 +873,7 @@ class _SessionScreenState extends State<SessionScreen>
                       winnerName: state.getPlayerName(
                         state.engineState.winnerId!,
                       ),
-                      coinsEarned: state.engineState.winnerId == 'me'
+                      coinsEarned: state.engineState.winnerId == SessionIds.me
                           ? 400
                           : -100,
                       gameLog: state.gameLog,

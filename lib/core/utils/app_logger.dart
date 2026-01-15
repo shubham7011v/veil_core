@@ -16,6 +16,7 @@ class AppLogger {
     Object? exception,
     StackTrace? stackTrace,
   }) {
+    if (!_enableLogging) return;
     final timestamp = DateTime.now().toIso8601String();
     debugPrint('[$timestamp] SESSION ERROR: $error');
     if (exception != null) debugPrint('Exception: $exception');
@@ -30,6 +31,7 @@ class AppLogger {
   }
 
   static void voiceError(String error, {Object? exception}) {
+    if (!_enableLogging) return;
     final timestamp = DateTime.now().toIso8601String();
     debugPrint('[$timestamp] VOICE ERROR: $error');
     if (exception != null) debugPrint('Exception: $exception');
@@ -56,6 +58,7 @@ class AppLogger {
   }
 
   static void warning(String message, {Map<String, dynamic>? data}) {
+    if (!_enableLogging) return;
     final timestamp = DateTime.now().toIso8601String();
     debugPrint(
       '[$timestamp] WARNING: $message ${data != null ? '- $data' : ''}',
@@ -67,6 +70,7 @@ class AppLogger {
     Object? exception,
     StackTrace? stackTrace,
   }) {
+    if (!_enableLogging) return;
     final timestamp = DateTime.now().toIso8601String();
     debugPrint('[$timestamp] ERROR: $message');
     if (exception != null) debugPrint('Exception: $exception');
