@@ -57,15 +57,25 @@ class SessionBottomControls extends StatelessWidget {
                         ? () => bloc.add(TurnPassRequested())
                         : null,
                     style: OutlinedButton.styleFrom(
-                      side: const BorderSide(color: Colors.white24),
+                      side: BorderSide(
+                        color: isMyTurn
+                            ? const Color(0xFF4CAF50)
+                            : Colors.white24,
+                        width: isMyTurn ? 1.5 : 1,
+                      ),
+                      backgroundColor: isMyTurn
+                          ? const Color(0xFF4CAF50).withValues(alpha: 0.1)
+                          : null,
                       shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(12),
                       ),
                     ),
-                    child: const Text(
+                    child: Text(
                       "PASS",
                       style: TextStyle(
-                        color: Colors.white54,
+                        color: isMyTurn
+                            ? const Color(0xFF4CAF50)
+                            : Colors.white54,
                         fontWeight: FontWeight.w900,
                         fontSize: 12,
                       ),

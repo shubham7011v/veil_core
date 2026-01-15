@@ -16,6 +16,7 @@ class SessionBlocState extends Equatable {
   final String? lastEventActorId;
   final int lastEventCardCount;
   final bool isRevealingBluff;
+  final bool? isBluffSuccessful; // New field
   final engine.GameMove? lastMove;
   final int
   lastEventTimestamp; // Used to trigger animations on same-type events
@@ -44,6 +45,7 @@ class SessionBlocState extends Equatable {
     this.lastEventActorId,
     this.lastEventCardCount = 0,
     required this.isRevealingBluff,
+    this.isBluffSuccessful,
     this.lastMove,
     this.lastEventTimestamp = 0,
     required this.pNames,
@@ -61,6 +63,7 @@ class SessionBlocState extends Equatable {
     isSelectingRank: false,
     lastEvent: engine.SessionEventType.none,
     isRevealingBluff: false,
+    isBluffSuccessful: null,
     lastEventTimestamp: 0,
     pNames: const {},
     gameLog: const [],
@@ -78,6 +81,7 @@ class SessionBlocState extends Equatable {
     String? lastEventActorId,
     int? lastEventCardCount,
     bool? isRevealingBluff,
+    bool? isBluffSuccessful,
     engine.GameMove? lastMove,
     int? lastEventTimestamp,
     Map<String, String>? pNames,
@@ -101,6 +105,7 @@ class SessionBlocState extends Equatable {
       lastEventActorId: lastEventActorId ?? this.lastEventActorId,
       lastEventCardCount: lastEventCardCount ?? this.lastEventCardCount,
       isRevealingBluff: isRevealingBluff ?? this.isRevealingBluff,
+      isBluffSuccessful: isBluffSuccessful ?? this.isBluffSuccessful,
       lastMove: clearLastMove ? null : (lastMove ?? this.lastMove),
       lastEventTimestamp: lastEventTimestamp ?? this.lastEventTimestamp,
       pNames: pNames ?? this.pNames,
@@ -127,7 +132,14 @@ class SessionBlocState extends Equatable {
 
   String get roundStatus {
     if (isRoundSet) return "${lastMove!.declaredRank.name.toUpperCase()}S";
-    return stagedRank?.name.toUpperCase() ?? "WAITING";
+    if (stagedRank != null) return stagedRank!.name.toUpperCase();
+
+    // Dynamic status for empty round
+    if (isMyTurn) return "SELECT RANK";
+
+    final activeId = engineState.activeParticipantId;
+    final name = pNames[activeId]?.split(' ').first.toUpperCase() ?? "PLAYER";
+    return "$name SELECTING";
   }
 
   String getPlayerName(String id) => pNames[id] ?? id;
@@ -149,6 +161,7 @@ class SessionBlocState extends Equatable {
     lastEventActorId,
     lastEventCardCount,
     isRevealingBluff,
+    isBluffSuccessful,
     lastMove,
     lastEventTimestamp,
     pNames,

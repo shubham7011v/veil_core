@@ -45,13 +45,14 @@ class SessionBloc extends Bloc<SessionEvent, SessionBlocState> {
     on<EngineStateUpdated>((event, emit) {
       final isNewRound = _handler.lastMove == null;
       final hasCards = event.state.myHand.isNotEmpty;
-      final hadNoCards = state.engineState.myHand.isEmpty;
       final isNowMyTurn = event.state.activeParticipantId == 'me';
       final wasInRound = state.lastMove != null;
 
       // Detect round reset transition OR initial game start
       final roundJustReset = wasInRound && isNewRound;
-      final gameJustStarted = hadNoCards && hasCards && isNewRound;
+      // Also check if we just joined/started (activeId check handles initial state)
+      final gameJustStarted =
+          state.engineState.activeParticipantId == '' && isNowMyTurn;
 
       // Show rank selector when: new round + my turn + have cards
       // Trigger when round just reset OR on initial game start
@@ -65,12 +66,13 @@ class SessionBloc extends Bloc<SessionEvent, SessionBlocState> {
         state.copyWith(
           engineState: event.state,
           isRevealingBluff: _handler.isRevealingBluff,
+          isBluffSuccessful: _handler.isBluffSuccessful, // Sync from handler
           lastMove: _handler.lastMove,
           clearLastMove: _handler.lastMove == null,
           pNames: _handler.pNames,
           gameLog: _handler.gameLog,
           // Clear stagedRank on round reset or game start, show selector
-          clearStagedRank: roundJustReset || gameJustStarted,
+          clearStagedRank: shouldShowRankSelector,
           isSelectingRank: shouldShowRankSelector
               ? true
               : state.isSelectingRank,
@@ -110,6 +112,7 @@ class SessionBloc extends Bloc<SessionEvent, SessionBlocState> {
               lastEventCardCount: event.cardCount,
               lastEventTimestamp: DateTime.now().millisecondsSinceEpoch,
               isRevealingBluff: _handler.isRevealingBluff,
+              isBluffSuccessful: _handler.isBluffSuccessful,
               gameLog: _handler.gameLog,
               lastMove: shouldSync ? _handler.lastMove : state.lastMove,
               clearLastMove: false,
@@ -129,6 +132,7 @@ class SessionBloc extends Bloc<SessionEvent, SessionBlocState> {
           lastEventCardCount: event.cardCount,
           lastEventTimestamp: DateTime.now().millisecondsSinceEpoch,
           isRevealingBluff: _handler.isRevealingBluff,
+          isBluffSuccessful: _handler.isBluffSuccessful,
           gameLog: _handler.gameLog,
           lastMove: shouldSync
               ? _handler.lastMove

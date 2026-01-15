@@ -7,7 +7,7 @@ import '../bloc/session_bloc.dart';
 import '../bloc/session_state.dart';
 import '../bloc/session_event.dart';
 import '../../../../core/engine/engine.dart' as engine;
-import '../widgets/bluff_reveal_overlay.dart';
+// import '../widgets/bluff_reveal_overlay.dart'; // Now using simple popup
 import '../widgets/flying_cards_layer.dart';
 import '../widgets/session_top_bar.dart';
 import '../widgets/opponent_carousel.dart';
@@ -46,7 +46,9 @@ class _SessionScreenState extends State<SessionScreen>
   final List<FloatingEmoji> _activeEmojis = [];
   bool? _isWebSocket;
   bool _isNavigating = false;
+  // Turn Popup State
   String? _turnPopupText;
+  Color _turnPopupColor = const Color(0xFFFFD700); // Default Gold
   Timer? _turnPopupTimer;
 
   @override
@@ -124,11 +126,10 @@ class _SessionScreenState extends State<SessionScreen>
         ? _pileKey
         : (targetId == 'staging' ? _stagingKey : _avatarKeys[targetId]);
 
-    // Allow null keys if custom offsets are provided
-    if ((sourceKey == null && customStartOffset == null) ||
-        (targetKey == null && customEndOffset == null)) {
-      return;
-    }
+    // FALLBACK: If we can't find keys, try to infer sensible defaults
+    // e.g. if target is 'pile' but key is missing, use screen center
+    // if source is 'staging' but missing, use bottom center
+    final screenSize = MediaQuery.of(context).size;
 
     // Use addPostFrameCallback to ensure keys are rendered
     WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -137,9 +138,34 @@ class _SessionScreenState extends State<SessionScreen>
       Offset start =
           customStartOffset ??
           (sourceKey != null ? _getCenterOffset(sourceKey) : Offset.zero);
+
+      // Fallback for start position
+      if (start == Offset.zero) {
+        if (sourceId == 'pile') {
+          start = Offset(screenSize.width / 2, screenSize.height / 2);
+        } else if (sourceId == 'staging') {
+          start = Offset(screenSize.width / 2, screenSize.height - 100);
+        } else {
+          // Default for Opponents/Unknown: Top Center (Opponent Carousel area)
+          start = Offset(screenSize.width / 2, 80);
+        }
+      }
+
       Offset end =
           customEndOffset ??
           (targetKey != null ? _getCenterOffset(targetKey) : Offset.zero);
+
+      // Fallback for end position
+      if (end == Offset.zero) {
+        if (targetId == 'pile') {
+          end = Offset(screenSize.width / 2, screenSize.height / 2);
+        } else if (targetId == 'staging') {
+          end = Offset(screenSize.width / 2, screenSize.height - 100);
+        } else {
+          // Default for Opponents/Unknown: Top Center
+          end = Offset(screenSize.width / 2, 80);
+        }
+      }
 
       debugPrint(
         '🎬 [Animation] $sourceId -> $targetId | Start: $start, End: $end',
@@ -200,13 +226,60 @@ class _SessionScreenState extends State<SessionScreen>
   ) {
     debugPrint('🎲 [Session] Handling event: $event');
     switch (event) {
-      case engine.SessionEventType.cardsPlayed:
+      case engine.SessionEventType.passed:
         if (state.lastEventActorId != null) {
           final isMe = state.engineState.participants.any(
             (p) => p.isMe && p.id == state.lastEventActorId,
           );
+          HapticFeedback.lightImpact();
+
+          // Get clean player name from participant object
+          String name;
+          if (isMe) {
+            name = "YOU";
+          } else {
+            final participant = state.engineState.participants.firstWhere(
+              (p) => p.id == state.lastEventActorId,
+              orElse: () => state.engineState.participants.first,
+            );
+            name = participant.name.split(' ').first.toUpperCase();
+          }
+
+          _showTurnPopup("$name PASSED", Colors.white);
+        }
+        break;
+      case engine.SessionEventType.bluffCalled:
+        // Show who called the bluff
+        if (state.lastEventActorId != null) {
+          HapticFeedback.mediumImpact();
+
+          // Get challenger name
+          String name;
+          final isMe = state.engineState.participants.any(
+            (p) => p.isMe && p.id == state.lastEventActorId,
+          );
+
+          if (isMe) {
+            name = "YOU";
+          } else {
+            final participant = state.engineState.participants.firstWhere(
+              (p) => p.id == state.lastEventActorId,
+              orElse: () => state.engineState.participants.first,
+            );
+            name = participant.name.split(' ').first.toUpperCase();
+          }
+
+          _showTurnPopup("$name CALLS BLUFF", Colors.orange);
+        }
+        break;
+      case engine.SessionEventType.cardsPlayed:
+        // Only animate if cards were actually played (> 0)
+        if (state.lastEventActorId != null && state.lastEventCardCount > 0) {
+          final isMe = state.engineState.participants.any(
+            (p) => p.isMe && p.id == state.lastEventActorId,
+          );
           debugPrint(
-            '🎬 [Session] CardsPlayed by ${state.lastEventActorId} (Me: $isMe)',
+            '🎬 [Session] CardsPlayed by ${state.lastEventActorId} (Me: $isMe, Count: ${state.lastEventCardCount})',
           );
           HapticFeedback.selectionClick();
           _triggerCardAnimation(
@@ -217,9 +290,31 @@ class _SessionScreenState extends State<SessionScreen>
         }
         break;
       case engine.SessionEventType.cardsPickedUp:
+        // Bluff/Challenge Loser picking up cards
         if (state.lastEventActorId != null) {
           HapticFeedback.mediumImpact();
-          // For animation target, if it's me, _avatarKeys[id] should map to 'me' key
+
+          // Determine bluff result color
+          // isBluffSuccessful == true: Bluff was caught (Red)
+          // isBluffSuccessful == false: No bluff, genuine cards (Green)
+          final Color feedbackColor;
+          final String feedbackText;
+
+          if (state.isBluffSuccessful == true) {
+            feedbackColor = Colors.red;
+            feedbackText = "BLUFF CAUGHT!";
+          } else if (state.isBluffSuccessful == false) {
+            feedbackColor = Colors.green;
+            feedbackText = "NO BLUFF!";
+          } else {
+            // Fallback if isBluffSuccessful is null
+            feedbackColor = Colors.orange;
+            feedbackText = "CARDS PICKED UP";
+          }
+
+          _showTurnPopup(feedbackText, feedbackColor);
+
+          // Animate from Pile -> Loser
           _triggerCardAnimation(
             sourceId: 'pile',
             targetId: state.lastEventActorId!,
@@ -313,10 +408,11 @@ class _SessionScreenState extends State<SessionScreen>
     }
   }
 
-  void _showTurnPopup(String text) {
+  void _showTurnPopup(String text, [Color color = const Color(0xFFFFD700)]) {
     _turnPopupTimer?.cancel();
     setState(() {
       _turnPopupText = text;
+      _turnPopupColor = color;
     });
     _turnPopupTimer = Timer(const Duration(milliseconds: 1500), () {
       if (mounted) {
@@ -325,6 +421,27 @@ class _SessionScreenState extends State<SessionScreen>
         });
       }
     });
+  }
+
+  Future<void> _leaveGameAndNavigate(String routeName) async {
+    if (_isNavigating) return;
+    setState(() => _isNavigating = true);
+
+    // ✅ FORCE LEAVE: Explicitly tell server to remove us immediately
+    if (_isWebSocket == true) {
+      try {
+        debugPrint('🚪 [Session] Manual exit - sending LEAVE_ROOM');
+        di.sl.webSocketSessionHandler.leaveRoom('');
+        // Add small delay to allow message to hit network buffer
+        await Future.delayed(const Duration(milliseconds: 100));
+      } catch (e) {
+        debugPrint('🚨 [Session] Failed to send LEAVE_ROOM: $e');
+      }
+    }
+
+    if (!mounted) return;
+    context.read<SessionBloc>().add(const SessionResetRequested());
+    Navigator.of(context).pushNamedAndRemoveUntil(routeName, (route) => false);
   }
 
   @override
@@ -336,6 +453,7 @@ class _SessionScreenState extends State<SessionScreen>
           prev.engineState.activeParticipantId !=
               curr.engineState.activeParticipantId,
       listener: (context, state) {
+        // ... (existing listener logic) ...
         _updateAvatarKeys(state);
 
         final prevActiveId = context
@@ -380,22 +498,57 @@ class _SessionScreenState extends State<SessionScreen>
 
           Widget content = PopScope(
             canPop: false,
-            onPopInvokedWithResult: (didPop, result) {
-              if (didPop) {
-                return;
+            onPopInvokedWithResult: (didPop, result) async {
+              if (didPop) return;
+
+              // ✅ Handle System Back Button: Show dialog or leave
+              final shouldLeave = await showDialog<bool>(
+                context: context,
+                builder: (context) => AlertDialog(
+                  backgroundColor: const Color(0xFF1E1E1E),
+                  title: const Text(
+                    'Leave Game?',
+                    style: TextStyle(color: Colors.white),
+                  ),
+                  content: const Text(
+                    'Are you sure you want to leave the game?',
+                    style: TextStyle(color: Colors.white70),
+                  ),
+                  actions: [
+                    TextButton(
+                      onPressed: () => Navigator.of(context).pop(false),
+                      child: const Text(
+                        'Cancel',
+                        style: TextStyle(color: Colors.grey),
+                      ),
+                    ),
+                    TextButton(
+                      onPressed: () => Navigator.of(context).pop(true),
+                      child: const Text(
+                        'Leave',
+                        style: TextStyle(color: Colors.redAccent),
+                      ),
+                    ),
+                  ],
+                ),
+              );
+
+              if (shouldLeave == true) {
+                _leaveGameAndNavigate('/home');
               }
-              context.read<SessionBloc>().add(const SessionResetRequested());
             },
             child: Scaffold(
               backgroundColor: const Color(0xFF121212),
               body: Stack(
                 children: [
+                  // ... (background and SafeArea) ...
                   const SessionBackground(),
                   SafeArea(
                     child: Column(
                       children: [
                         // Top Bar
                         SlideTransition(
+                          // ...
                           position:
                               Tween<Offset>(
                                 begin: const Offset(0, -0.5),
@@ -411,6 +564,7 @@ class _SessionScreenState extends State<SessionScreen>
                                 ),
                               ),
                           child: FadeTransition(
+                            // ...
                             opacity: CurvedAnimation(
                               parent: _entryController,
                               curve: const Interval(
@@ -428,7 +582,7 @@ class _SessionScreenState extends State<SessionScreen>
                             ),
                           ),
                         ),
-
+                        // ... (Opponents, Pile, Staging, Bottom Controls) ...
                         // Opponents
                         SlideTransition(
                           position:
@@ -594,8 +748,8 @@ class _SessionScreenState extends State<SessionScreen>
                         state.engineState.winnerId!,
                       ),
                       coinsEarned: state.engineState.winnerId == 'me'
-                          ? 400 // Winner gets pot (5 players × 100 - their boot)
-                          : -100, // Loser paid boot
+                          ? 400
+                          : -100,
                       gameLog: state.gameLog,
                       matchStats: state.gameStartTime != null
                           ? state.matchStats.copyWith(
@@ -604,36 +758,16 @@ class _SessionScreenState extends State<SessionScreen>
                               ),
                             )
                           : state.matchStats,
-                      onBackToHome: () {
-                        if (_isNavigating) return;
-                        setState(() => _isNavigating = true);
-                        context.read<SessionBloc>().add(
-                          const SessionResetRequested(),
-                        );
-                        Navigator.of(
-                          context,
-                        ).pushNamedAndRemoveUntil('/home', (route) => false);
-                      },
-                      onPlayAgain: () {
-                        if (_isNavigating) return;
-                        setState(() => _isNavigating = true);
-                        // Reset and navigate back to matchmaking
-                        context.read<SessionBloc>().add(
-                          const SessionResetRequested(),
-                        );
-                        Navigator.of(context).pushNamedAndRemoveUntil(
-                          '/matchmaking',
-                          (route) => false,
-                        );
-                      },
+                      onBackToHome: () => _leaveGameAndNavigate('/home'),
+                      onPlayAgain: () => _leaveGameAndNavigate('/matchmaking'),
                     ),
 
-                  if (state.isRevealingBluff && state.lastMove != null)
-                    BluffRevealOverlay(
-                      cards: state.lastMove!.actualUnits,
-                      declaredRank: state.lastMove!.declaredRank,
-                    ),
-
+                  // Bluff reveal now uses simple popup instead of full-screen overlay
+                  // if (state.isRevealingBluff && state.lastMove != null)
+                  //   BluffRevealOverlay(
+                  //     cards: state.lastMove!.actualUnits,
+                  //     declaredRank: state.lastMove!.declaredRank,
+                  //   ),
                   Positioned.fill(
                     child: IgnorePointer(
                       child: Stack(
@@ -646,7 +780,7 @@ class _SessionScreenState extends State<SessionScreen>
                     ),
                   ),
 
-                  // Voice Overlay - only when voice is enabled
+                  // Voice Overlay
                   if (di.sl.voiceSessionHandler != null &&
                       FeatureFlags.enableVoiceChat)
                     Positioned.fill(
@@ -655,53 +789,85 @@ class _SessionScreenState extends State<SessionScreen>
                       ),
                     ),
 
-                  // Turn Transition Overlay
+                  // Turn Transition Overlay - Card-style popup in staging area
                   if (_turnPopupText != null)
-                    IgnorePointer(
-                      child: Center(
-                        child: TweenAnimationBuilder<double>(
-                          duration: const Duration(milliseconds: 300),
-                          tween: Tween(begin: 0.0, end: 1.0),
-                          builder: (context, value, child) {
-                            return Transform.scale(
-                              scale: 0.8 + (0.2 * value),
-                              child: Opacity(
-                                opacity: value,
-                                child: Container(
-                                  padding: const EdgeInsets.symmetric(
-                                    horizontal: 32,
-                                    vertical: 16,
-                                  ),
-                                  decoration: BoxDecoration(
-                                    color: Colors.black.withValues(alpha: 0.8),
-                                    borderRadius: BorderRadius.circular(40),
-                                    border: Border.all(
-                                      color: const Color(0xFFFFD700),
-                                      width: 2,
+                    Positioned(
+                      bottom: MediaQuery.of(context).size.height * 0.30,
+                      left: 0,
+                      right: 0,
+                      child: IgnorePointer(
+                        child: Center(
+                          child: TweenAnimationBuilder<double>(
+                            duration: const Duration(milliseconds: 300),
+                            tween: Tween(begin: 0.0, end: 1.0),
+                            builder: (context, value, child) {
+                              return Transform.scale(
+                                scale: 0.9 + (0.1 * value),
+                                child: Opacity(
+                                  opacity: value,
+                                  child: Container(
+                                    constraints: const BoxConstraints(
+                                      minWidth: 200,
+                                      maxWidth: 320,
                                     ),
-                                    boxShadow: [
-                                      BoxShadow(
-                                        color: const Color(
-                                          0xFFFFD700,
-                                        ).withValues(alpha: 0.3),
-                                        blurRadius: 20,
-                                        spreadRadius: 5,
+                                    padding: const EdgeInsets.symmetric(
+                                      horizontal: 24,
+                                      vertical: 18,
+                                    ),
+                                    decoration: BoxDecoration(
+                                      gradient: LinearGradient(
+                                        begin: Alignment.topLeft,
+                                        end: Alignment.bottomRight,
+                                        colors: [
+                                          Colors.black.withValues(alpha: 0.95),
+                                          Colors.black.withValues(alpha: 0.85),
+                                        ],
                                       ),
-                                    ],
-                                  ),
-                                  child: Text(
-                                    _turnPopupText!,
-                                    style: const TextStyle(
-                                      color: Color(0xFFFFD700),
-                                      fontSize: 24,
-                                      fontWeight: FontWeight.w900,
-                                      letterSpacing: 4,
+                                      borderRadius: BorderRadius.circular(12),
+                                      border: Border.all(
+                                        color: _turnPopupColor,
+                                        width: 3,
+                                      ),
+                                      boxShadow: [
+                                        BoxShadow(
+                                          color: _turnPopupColor.withValues(
+                                            alpha: 0.4,
+                                          ),
+                                          blurRadius: 24,
+                                          spreadRadius: 2,
+                                        ),
+                                        BoxShadow(
+                                          color: Colors.black.withValues(
+                                            alpha: 0.6,
+                                          ),
+                                          blurRadius: 12,
+                                          offset: const Offset(0, 4),
+                                        ),
+                                      ],
+                                    ),
+                                    child: Text(
+                                      _turnPopupText!,
+                                      textAlign: TextAlign.center,
+                                      style: TextStyle(
+                                        color: _turnPopupColor,
+                                        fontSize: 22,
+                                        fontWeight: FontWeight.w900,
+                                        letterSpacing: 3,
+                                        shadows: [
+                                          Shadow(
+                                            color: _turnPopupColor.withValues(
+                                              alpha: 0.5,
+                                            ),
+                                            blurRadius: 8,
+                                          ),
+                                        ],
+                                      ),
                                     ),
                                   ),
                                 ),
-                              ),
-                            );
-                          },
+                              );
+                            },
+                          ),
                         ),
                       ),
                     ),
