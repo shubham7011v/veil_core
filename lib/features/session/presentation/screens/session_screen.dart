@@ -102,8 +102,19 @@ class _SessionScreenState extends State<SessionScreen>
       if (p.isMe) {
         // Map my actual ID to the 'me' key used by HandView
         _avatarKeys[p.id] = _avatarKeys['me']!;
-      } else if (!_avatarKeys.containsKey(p.id)) {
-        _avatarKeys[p.id] = GlobalKey();
+        // Also map sessionId to the same key
+        if (p.sessionId != null) {
+          _avatarKeys[p.sessionId!] = _avatarKeys['me']!;
+        }
+      } else {
+        // If we don't have a key for this participant, create one
+        if (!_avatarKeys.containsKey(p.id)) {
+          _avatarKeys[p.id] = GlobalKey();
+        }
+        // Map sessionId to the same key so we can find them by either ID
+        if (p.sessionId != null && _avatarKeys.containsKey(p.id)) {
+          _avatarKeys[p.sessionId!] = _avatarKeys[p.id]!;
+        }
       }
     }
   }
@@ -228,9 +239,7 @@ class _SessionScreenState extends State<SessionScreen>
     switch (event) {
       case engine.SessionEventType.passed:
         if (state.lastEventActorId != null) {
-          final isMe = state.engineState.participants.any(
-            (p) => p.isMe && p.sessionId == state.lastEventActorId,
-          );
+          final isMe = state.lastEventActorId == 'me';
           HapticFeedback.lightImpact();
 
           // Get clean player name from participant object
@@ -251,7 +260,7 @@ class _SessionScreenState extends State<SessionScreen>
                 '❌ [Pass] No participant found for ID: ${state.lastEventActorId}',
               );
               debugPrint(
-                'Available IDs: ${state.engineState.participants.map((p) => p.sessionId).join(", ")}',
+                'Available sessionIds: ${state.engineState.participants.map((p) => "${p.name}:${p.sessionId}").join(", ")}',
               );
               name = "PLAYER";
             }
@@ -267,9 +276,7 @@ class _SessionScreenState extends State<SessionScreen>
 
           // Get challenger name
           String name;
-          final isMe = state.engineState.participants.any(
-            (p) => p.isMe && p.sessionId == state.lastEventActorId,
-          );
+          final isMe = state.lastEventActorId == 'me';
 
           if (isMe) {
             name = "YOU";
@@ -287,7 +294,7 @@ class _SessionScreenState extends State<SessionScreen>
                 '❌ [Bluff] No participant found for ID: ${state.lastEventActorId}',
               );
               debugPrint(
-                'Available IDs: ${state.engineState.participants.map((p) => p.id).join(", ")}',
+                'Available sessionIds: ${state.engineState.participants.map((p) => "${p.name}:${p.sessionId}").join(", ")}',
               );
               name = "PLAYER";
             }
@@ -297,12 +304,9 @@ class _SessionScreenState extends State<SessionScreen>
         }
         break;
       case engine.SessionEventType.cardsPlayed:
-        // Only animate if cards were actually played (> 0)
         // Ensure strictly positive count and valid actor
         if (state.lastEventActorId != null && state.lastEventCardCount > 0) {
-          final isMe = state.engineState.participants.any(
-            (p) => p.isMe && p.sessionId == state.lastEventActorId,
-          );
+          final isMe = state.lastEventActorId == 'me';
           debugPrint(
             '🎬 [Session] CardsPlayed by ${state.lastEventActorId} (Me: $isMe, Count: ${state.lastEventCardCount})',
           );
@@ -325,6 +329,10 @@ class _SessionScreenState extends State<SessionScreen>
           final Color feedbackColor;
           final String feedbackText;
 
+          debugPrint(
+            '🤔 [Session] PickedUp. isBluffSuccessful: ${state.isBluffSuccessful}',
+          );
+
           if (state.isBluffSuccessful == true) {
             feedbackColor = Colors.red;
             feedbackText = "BLUFF CAUGHT!";
@@ -337,6 +345,7 @@ class _SessionScreenState extends State<SessionScreen>
             feedbackText = "CARDS PICKED UP";
           }
 
+          debugPrint('📢 [Session] Showing result popup: $feedbackText');
           _showTurnPopup(feedbackText, feedbackColor);
 
           // Animate from Pile -> Loser
