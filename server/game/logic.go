@@ -9,7 +9,7 @@ import (
 
 // PlayCards attempts to play cards for the current user
 func (g *Game) PlayCards(playerID string, cardIDs []string, declaredRank Rank) error {
-	if g.Phase != PhaseThinking {
+	if g.Phase != PhaseThinking && g.Phase != PhaseChallenging {
 		return errors.New("not thinking phase")
 	}
 	if g.ActivePlayerID() != playerID {
@@ -146,6 +146,9 @@ func (g *Game) ResolveChallenge(challengerID string) string {
 }
 
 func (g *Game) Pass(playerID string) error {
+	if g.Phase != PhaseThinking && g.Phase != PhaseChallenging {
+		return errors.New("cannot pass now")
+	}
 	if g.ActivePlayerID() != playerID {
 		return errors.New("not your turn")
 	}

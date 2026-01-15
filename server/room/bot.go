@@ -102,18 +102,15 @@ func (b *Bot) Run() {
 			}
 
 			switch phase {
-			case string(game.PhaseThinking):
-				// It's my turn to play!
-				go b.decideMove()
-			case string(game.PhaseChallenging):
-				// It's my turn to challenge!
-				go b.decideChallenge()
+			case string(game.PhaseThinking), string(game.PhaseChallenging):
+				// It's my turn to act!
+				go b.decideTurn(phase)
 			}
 		}
 	}
 }
 
-func (b *Bot) decideMove() {
+func (b *Bot) decideTurn(phase string) {
 	// Artificial Delay (Fixed 10s + small variance for human feel)
 	delay := time.Duration(10000+rand.Intn(1500)) * time.Millisecond
 	time.Sleep(delay)
@@ -122,6 +119,18 @@ func (b *Bot) decideMove() {
 	if room == nil {
 		return
 	}
+
+	if phase == string(game.PhaseChallenging) {
+		if b.executeChallengeDecision(room) {
+			return // Challenged, turn over
+		}
+	}
+
+	// If thinking OR if challenging phase and we didn't challenge -> Play or Pass
+	b.decideMove(room)
+}
+
+func (b *Bot) decideMove(room *Room) {
 
 	room.mu.RLock()
 	g := room.game
@@ -266,14 +275,10 @@ func (b *Bot) executePass(room *Room) {
 	})
 }
 
-func (b *Bot) decideChallenge() {
-	// Artificial Delay (Fixed 10s + small variance for suspense)
-	delay := time.Duration(10000+rand.Intn(1500)) * time.Millisecond
-	time.Sleep(delay)
+func (b *Bot) executeChallengeDecision(room *Room) bool {
 
-	room := b.Client.CurrentRoom
 	if room == nil {
-		return
+		return false
 	}
 
 	room.mu.RLock()
@@ -283,7 +288,7 @@ func (b *Bot) decideChallenge() {
 	room.mu.RUnlock()
 
 	if lastMove == nil || player == nil || lastMove.PlayerID == b.Client.ID {
-		return
+		return false
 	}
 
 	// 1. Base Challenge Probability based on Personality (Matching Dart logic)
@@ -315,19 +320,19 @@ func (b *Bot) decideChallenge() {
 	}
 
 	// Final Decision
-	action := protocol.MsgTypePass
 	if rand.Float64() < chance {
-		action = protocol.MsgTypeChallenge
 		log.Printf("Bot %s (%s) is CHALLENGING %s", b.Client.ID, b.Personality, lastMove.PlayerID)
+		room.HandleAction(GameAction{
+			Client: b.Client,
+			Message: protocol.BaseMessage{
+				Type: protocol.MsgTypeChallenge,
+				Data: []byte("null"),
+			},
+		})
+		return true
 	}
 
-	room.HandleAction(GameAction{
-		Client: b.Client,
-		Message: protocol.BaseMessage{
-			Type: action,
-			Data: []byte("null"),
-		},
-	})
+	return false
 }
 
 func generateRandomString(n int) string {

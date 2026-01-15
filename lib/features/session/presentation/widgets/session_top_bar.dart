@@ -351,7 +351,7 @@ Good luck! May your bluffs be bold! 🎴✨""",
       builder: (context, snapshot) {
         final now = DateTime.now().toUtc().millisecondsSinceEpoch ~/ 1000;
         final elapsed = now - state.engineState.turnStartTime!;
-        final remaining = (25 - elapsed).clamp(0, 25);
+        final remaining = (30 - elapsed).clamp(0, 30);
 
         return Text(
           "00:${remaining.toString().padLeft(2, '0')}",

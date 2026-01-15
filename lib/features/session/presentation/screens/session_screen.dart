@@ -1,5 +1,7 @@
+import 'dart:async';
 import 'dart:math' as math;
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import '../bloc/session_bloc.dart';
 import '../bloc/session_state.dart';
@@ -35,18 +37,7 @@ class _SessionScreenState extends State<SessionScreen>
     with TickerProviderStateMixin {
   late AnimationController _entryController;
 
-  final Map<String, GlobalKey> _avatarKeys = {
-    'me': GlobalKey(),
-    'p1': GlobalKey(),
-    'p2': GlobalKey(),
-    'p3': GlobalKey(),
-    'p4': GlobalKey(),
-    'p5': GlobalKey(),
-    'p6': GlobalKey(),
-    'p7': GlobalKey(),
-    'p8': GlobalKey(),
-    'p9': GlobalKey(),
-  };
+  final Map<String, GlobalKey> _avatarKeys = {'me': GlobalKey()};
   final GlobalKey _pileKey = GlobalKey();
   final GlobalKey _stagingKey = GlobalKey();
   final List<FlyingCard> _flyingCards = [];
@@ -55,6 +46,8 @@ class _SessionScreenState extends State<SessionScreen>
   final List<FloatingEmoji> _activeEmojis = [];
   bool? _isWebSocket;
   bool _isNavigating = false;
+  String? _turnPopupText;
+  Timer? _turnPopupTimer;
 
   @override
   void initState() {
@@ -87,16 +80,30 @@ class _SessionScreenState extends State<SessionScreen>
         debugPrint('🚨 [Session] Error leaving room on dispose: $e');
       }
     }
+    _turnPopupTimer?.cancel();
     _entryController.dispose();
     super.dispose();
   }
 
   Offset _getCenterOffset(GlobalKey key) {
+    if (key.currentContext == null) return Offset.zero;
     final renderBox = key.currentContext?.findRenderObject() as RenderBox?;
     if (renderBox == null) return Offset.zero;
     final size = renderBox.size;
     final position = renderBox.localToGlobal(Offset.zero);
     return Offset(position.dx + size.width / 2, position.dy + size.height / 2);
+  }
+
+  void _updateAvatarKeys(SessionBlocState state) {
+    // Ensure all participants have GlobalKeys
+    for (var p in state.engineState.participants) {
+      if (p.isMe) {
+        // Map my actual ID to the 'me' key used by HandView
+        _avatarKeys[p.id] = _avatarKeys['me']!;
+      } else if (!_avatarKeys.containsKey(p.id)) {
+        _avatarKeys[p.id] = GlobalKey();
+      }
+    }
   }
 
   void _triggerCardAnimation({
@@ -146,9 +153,9 @@ class _SessionScreenState extends State<SessionScreen>
       }
 
       if (start == Offset.zero || end == Offset.zero) {
-        if (retryCount < 15) {
+        if (retryCount < 30) {
           // Retry more times if the layout isn't ready
-          Future.delayed(const Duration(milliseconds: 100), () {
+          Future.delayed(const Duration(milliseconds: 50), () {
             _triggerCardAnimation(
               sourceId: sourceId,
               targetId: targetId,
@@ -191,7 +198,10 @@ class _SessionScreenState extends State<SessionScreen>
     switch (event) {
       case engine.SessionEventType.cardsPlayed:
         if (state.lastEventActorId != null) {
-          final isMe = state.lastEventActorId == 'me';
+          final isMe = state.engineState.participants.any(
+            (p) => p.isMe && p.id == state.lastEventActorId,
+          );
+          HapticFeedback.selectionClick();
           _triggerCardAnimation(
             sourceId: isMe ? 'staging' : state.lastEventActorId!,
             targetId: 'pile',
@@ -201,6 +211,8 @@ class _SessionScreenState extends State<SessionScreen>
         break;
       case engine.SessionEventType.cardsPickedUp:
         if (state.lastEventActorId != null) {
+          HapticFeedback.mediumImpact();
+          // For animation target, if it's me, _avatarKeys[id] should map to 'me' key
           _triggerCardAnimation(
             sourceId: 'pile',
             targetId: state.lastEventActorId!,
@@ -209,6 +221,7 @@ class _SessionScreenState extends State<SessionScreen>
         }
         break;
       case engine.SessionEventType.shuffling:
+        HapticFeedback.lightImpact();
         // Check user setting for shuffle animation
         final shouldAnimate =
             di.sl.storageService.getBool('pref_shuffle_animation') ?? true;
@@ -293,13 +306,52 @@ class _SessionScreenState extends State<SessionScreen>
     }
   }
 
+  void _showTurnPopup(String text) {
+    _turnPopupTimer?.cancel();
+    setState(() {
+      _turnPopupText = text;
+    });
+    _turnPopupTimer = Timer(const Duration(milliseconds: 1500), () {
+      if (mounted) {
+        setState(() {
+          _turnPopupText = null;
+        });
+      }
+    });
+  }
+
   @override
   Widget build(BuildContext context) {
     return BlocListener<SessionBloc, SessionBlocState>(
       listenWhen: (prev, curr) =>
-          curr.lastEvent != engine.SessionEventType.none &&
-          prev.lastEventTimestamp != curr.lastEventTimestamp,
+          (curr.lastEvent != engine.SessionEventType.none &&
+              prev.lastEventTimestamp != curr.lastEventTimestamp) ||
+          prev.engineState.activeParticipantId !=
+              curr.engineState.activeParticipantId,
       listener: (context, state) {
+        _updateAvatarKeys(state);
+
+        final prevActiveId = context
+            .read<SessionBloc>()
+            .state
+            .engineState
+            .activeParticipantId;
+
+        // Handle Turn Change Feedback
+        if (state.engineState.activeParticipantId != prevActiveId &&
+            state.engineState.activeParticipantId != null) {
+          if (state.engineState.activeParticipantId == 'me') {
+            HapticFeedback.mediumImpact();
+            _showTurnPopup("YOUR TURN");
+          } else {
+            HapticFeedback.lightImpact();
+            final name = state.getPlayerName(
+              state.engineState.activeParticipantId!,
+            );
+            _showTurnPopup("${name.toUpperCase()}'S TURN");
+          }
+        }
+
         // Handle Failures
         if (state.failure != null) {
           context.read<AppNotificationBloc>().add(
@@ -315,6 +367,8 @@ class _SessionScreenState extends State<SessionScreen>
       },
       child: BlocBuilder<SessionBloc, SessionBlocState>(
         builder: (context, state) {
+          _updateAvatarKeys(state);
+
           final showSpectatorView = state.engineState.isSpectator;
 
           Widget content = PopScope(
@@ -591,6 +645,57 @@ class _SessionScreenState extends State<SessionScreen>
                     Positioned.fill(
                       child: VoiceOverlay(
                         sessionHandler: di.sl.voiceSessionHandler!,
+                      ),
+                    ),
+
+                  // Turn Transition Overlay
+                  if (_turnPopupText != null)
+                    IgnorePointer(
+                      child: Center(
+                        child: TweenAnimationBuilder<double>(
+                          duration: const Duration(milliseconds: 300),
+                          tween: Tween(begin: 0.0, end: 1.0),
+                          builder: (context, value, child) {
+                            return Transform.scale(
+                              scale: 0.8 + (0.2 * value),
+                              child: Opacity(
+                                opacity: value,
+                                child: Container(
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 32,
+                                    vertical: 16,
+                                  ),
+                                  decoration: BoxDecoration(
+                                    color: Colors.black.withValues(alpha: 0.8),
+                                    borderRadius: BorderRadius.circular(40),
+                                    border: Border.all(
+                                      color: const Color(0xFFFFD700),
+                                      width: 2,
+                                    ),
+                                    boxShadow: [
+                                      BoxShadow(
+                                        color: const Color(
+                                          0xFFFFD700,
+                                        ).withValues(alpha: 0.3),
+                                        blurRadius: 20,
+                                        spreadRadius: 5,
+                                      ),
+                                    ],
+                                  ),
+                                  child: Text(
+                                    _turnPopupText!,
+                                    style: const TextStyle(
+                                      color: Color(0xFFFFD700),
+                                      fontSize: 24,
+                                      fontWeight: FontWeight.w900,
+                                      letterSpacing: 4,
+                                    ),
+                                  ),
+                                ),
+                              ),
+                            );
+                          },
+                        ),
                       ),
                     ),
                 ],
