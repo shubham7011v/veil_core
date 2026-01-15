@@ -1121,6 +1121,9 @@ class WebSocketSessionHandler extends GameSessionHandler
     // Parse rich event data
     final lastEvent = stateData['lastEvent'] as String?;
     final actorId = stateData['lastEventActorId'] as String?;
+    if (lastEvent != null) {
+      debugPrint('🎬 [WebSocket] Last Event: $lastEvent by $actorId');
+    }
     final cardCount = stateData['lastEventCardCount'] as int? ?? 0;
     _isBluffSuccessful = stateData['isBluffSuccessful'] as bool?;
 
@@ -1129,6 +1132,12 @@ class WebSocketSessionHandler extends GameSessionHandler
     if (logData != null) {
       _gameLog.clear();
       _gameLog.addAll(logData.map((e) => e.toString()));
+      debugPrint(
+        '📜 [WebSocket] Game Log History (${_gameLog.length} entries):',
+      );
+      for (final entry in _gameLog) {
+        debugPrint('   - $entry');
+      }
     }
 
     // Map actor IDs to 'me'
@@ -1178,6 +1187,9 @@ class WebSocketSessionHandler extends GameSessionHandler
     _currentState = newState;
     if (!_stateController.isClosed) {
       _stateController.add(newState);
+      debugPrint(
+        '🧑 [WebSocket] Active Player: ${newState.activeParticipantId}',
+      );
     }
 
     // Emit events based on lastEvent from server
@@ -1236,7 +1248,7 @@ class WebSocketSessionHandler extends GameSessionHandler
 
       if (action == null) return;
 
-      debugPrint('⚙️ [WebSocket] Game Action: $action');
+      debugPrint('⚙️ [WebSocket] Game Action: $action | Data: $data');
 
       final myId = sl.authRepository.currentUser?.uid;
 

@@ -86,7 +86,7 @@ func NewRoom(id string) *Room {
 		maxPlayers:      game.MaxPlayers, // Default
 		voice:           game.NewVoiceState(),
 		webRTC:          game.NewWebRTCManager(),
-		turnDuration:    25 * time.Second, // 20s + buffer
+		turnDuration:    30 * time.Second, // 30s baseline
 		gracePeriod:     60 * time.Second, // ✅ Increased from 30s to 60s for better mobile stability
 		disconnectTimes: make(map[string]time.Time),
 		lastFullSync:    time.Now(), // Initialize for periodic sync
@@ -465,7 +465,7 @@ func (r *Room) Run() {
 			if tickCount == 0 && (r.game.Phase == game.PhaseThinking || r.game.Phase == game.PhaseChallenging) {
 				if r.game.TurnStartTime > 0 {
 					elapsed := time.Now().Unix() - r.game.TurnStartTime
-					if elapsed > 25 { // 25s limit
+					if elapsed > 30 { // 30s limit
 						r.handleTurnTimeout()
 					}
 				}
@@ -477,8 +477,8 @@ func (r *Room) Run() {
 				activeID := r.game.ActivePlayerID()
 				if p := r.game.PlayerMap[activeID]; p != nil && p.IsBot {
 					// Add delay so bot doesn't play instantly (human-like)
-					// Verify TurnStartTime + 2s < Now
-					if time.Now().Unix() >= r.game.TurnStartTime+2 { // 2s thinking time
+					// Verify TurnStartTime + 10s < Now
+					if time.Now().Unix() >= r.game.TurnStartTime+10 { // 10s thinking time
 						r.processBotMove(p)
 					}
 				}

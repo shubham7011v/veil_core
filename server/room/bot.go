@@ -114,8 +114,8 @@ func (b *Bot) Run() {
 }
 
 func (b *Bot) decideMove() {
-	// Artificial Delay (1.5s - 3.5s)
-	delay := time.Duration(1500+rand.Intn(2000)) * time.Millisecond
+	// Artificial Delay (Fixed 10s + small variance for human feel)
+	delay := time.Duration(10000+rand.Intn(1500)) * time.Millisecond
 	time.Sleep(delay)
 
 	room := b.Client.CurrentRoom
@@ -267,8 +267,8 @@ func (b *Bot) executePass(room *Room) {
 }
 
 func (b *Bot) decideChallenge() {
-	// Artificial Delay (2s - 4s) for suspense
-	delay := time.Duration(2000+rand.Intn(2000)) * time.Millisecond
+	// Artificial Delay (Fixed 10s + small variance for suspense)
+	delay := time.Duration(10000+rand.Intn(1500)) * time.Millisecond
 	time.Sleep(delay)
 
 	room := b.Client.CurrentRoom
