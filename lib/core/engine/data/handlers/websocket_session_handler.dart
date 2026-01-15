@@ -208,23 +208,8 @@ class WebSocketSessionHandler extends GameSessionHandler
     switch (state) {
       case AppLifecycleState.paused:
       case AppLifecycleState.inactive:
-        // App backgrounded - close connection gracefully
-        if (_connectionStatus == ConnectionStatus.connected) {
-          debugPrint('📱 App backgrounded, disconnecting WebSocket');
-
-          // ✅ FIX: Cancel all timers to prevent memory leak and battery drain
-          _heartbeatTimer?.cancel();
-          _heartbeatTimer = null;
-          _authTimeoutTimer?.cancel();
-          _authTimeoutTimer = null;
-          _reconnectTimer?.cancel();
-          _reconnectTimer = null;
-          _reconnectScheduleTimer?.cancel();
-          _reconnectScheduleTimer = null;
-
-          _channel?.sink.close(1000, 'App backgrounded');
-          _updateConnectionStatus(ConnectionStatus.disconnected);
-        }
+        // Keep connection alive in background/inactive state indefinitely
+        debugPrint('📱 App backgrounded/inactive, keeping connection alive');
         break;
 
       case AppLifecycleState.resumed:
@@ -736,12 +721,12 @@ class WebSocketSessionHandler extends GameSessionHandler
       final msg = jsonDecode(data as String) as Map<String, dynamic>;
       final type = msg['type'] as String;
 
-      debugPrint('📥 [WebSocket] Received: $type');
+      if (type != 'PONG') {
+        debugPrint('📥 [WebSocket] Received: $type');
+      }
 
       if (type == 'PONG') {
-        debugPrint(
-          '🏓 [WebSocket] PONG received',
-        ); // Debug to verify server responding
+        debugPrint('🏓 [WebSocket] PONG'); // Concise PONG
         return; // Heartbeat response
       }
 
@@ -933,6 +918,9 @@ class WebSocketSessionHandler extends GameSessionHandler
               msg['data'] as Map<String, dynamic>,
               currentUserId: currentUserId,
             );
+            debugPrint(
+              '🏠 [WebSocket] Room Update: ${evt.participants.length} players',
+            );
             if (!_roomEventController.isClosed) {
               _roomEventController.add(evt);
             }
@@ -1030,8 +1018,14 @@ class WebSocketSessionHandler extends GameSessionHandler
   }
 
   void _handleGameState(Map<String, dynamic> stateData) {
-    // Parse phase
+    // Standardize logs
     final phaseStr = stateData['phase'] as String;
+    final players = (stateData['participants'] as List?)?.length ?? 0;
+    debugPrint(
+      '📊 [WebSocket] GAME_STATE: Phase: $phaseStr, Players: $players',
+    );
+
+    // Parse phase
     final phase = SessionPhase.values.firstWhere(
       (p) => p.name == phaseStr,
       orElse: () => SessionPhase.lobby,
@@ -1242,7 +1236,7 @@ class WebSocketSessionHandler extends GameSessionHandler
 
       if (action == null) return;
 
-      debugPrint('Game Action: $action');
+      debugPrint('⚙️ [WebSocket] Game Action: $action');
 
       final myId = sl.authRepository.currentUser?.uid;
 
