@@ -82,22 +82,22 @@ class _OpponentCarouselState extends State<OpponentCarousel> {
 
     return SizedBox(
       height: 100,
-      child: ListView.builder(
+      child: SingleChildScrollView(
         controller: _scrollController,
         scrollDirection: Axis.horizontal,
         padding: const EdgeInsets.symmetric(horizontal: 20),
-        itemCount: participants.length,
-        itemBuilder: (context, index) {
-          final p = participants[index];
-          return Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 8),
-            child: ParticipantAvatar(
-              key: widget.avatarKeys[p.id],
-              participant: p,
-              size: 65,
-            ),
-          );
-        },
+        child: Row(
+          children: participants.map((p) {
+            return Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 8),
+              child: ParticipantAvatar(
+                key: widget.avatarKeys[p.id],
+                participant: p,
+                size: 65,
+              ),
+            );
+          }).toList(),
+        ),
       ),
     );
   }

@@ -141,6 +141,10 @@ class _SessionScreenState extends State<SessionScreen>
           customEndOffset ??
           (targetKey != null ? _getCenterOffset(targetKey) : Offset.zero);
 
+      debugPrint(
+        '🎬 [Animation] $sourceId -> $targetId | Start: $start, End: $end',
+      );
+
       if (randomOffset) {
         final rnd = math.Random();
         if (customStartOffset == null) {
@@ -200,6 +204,9 @@ class _SessionScreenState extends State<SessionScreen>
         if (state.lastEventActorId != null) {
           final isMe = state.engineState.participants.any(
             (p) => p.isMe && p.id == state.lastEventActorId,
+          );
+          debugPrint(
+            '🎬 [Session] CardsPlayed by ${state.lastEventActorId} (Me: $isMe)',
           );
           HapticFeedback.selectionClick();
           _triggerCardAnimation(

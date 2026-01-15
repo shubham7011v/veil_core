@@ -32,15 +32,18 @@ class _SplashScreenState extends State<SplashScreen> {
     final onboardingRepo = di.sl.onboardingRepository;
 
     // 1. If currently Unauthenticated or AuthInitial, attempt silent sign-in
+    debugPrint('🔍 [SplashScreen] Initial State: ${authBloc.state}');
     if (authBloc.state is Unauthenticated || authBloc.state is AuthInitial) {
+      debugPrint('🔍 [SplashScreen] Attempting Silent Sign-in...');
       authBloc.add(AuthSilentSignInRequested());
 
       // Wait for AuthBloc to resolve (timeout after 2s for safety)
       try {
         await authBloc.stream
-            .firstWhere(
-              (state) => state is! AuthLoading && state is! AuthInitial,
-            )
+            .firstWhere((state) {
+              debugPrint('🔍 [SplashScreen] Stream State Update: $state');
+              return state is! AuthLoading && state is! AuthInitial;
+            })
             .timeout(const Duration(seconds: 2));
       } catch (e) {
         // Log or handle timeout
@@ -54,9 +57,10 @@ class _SplashScreenState extends State<SplashScreen> {
     FlutterNativeSplash.remove();
 
     final state = authBloc.state;
+    debugPrint('🔍 [SplashScreen] Final State Decision: $state');
 
     if (state is Authenticated) {
-      Navigator.of(context).pushReplacementNamed('/home');
+      Navigator.of(context).pushReplacementNamed('/court_entry');
     } else {
       final hasSeenIntro = onboardingRepo.hasSeenIntro();
       if (!hasSeenIntro) {

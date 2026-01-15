@@ -104,6 +104,17 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
     AuthSilentSignInRequested event,
     Emitter<AuthState> emit,
   ) async {
+    // STARTUP FIX: Check if we are already authenticated via Firebase
+    // This prevents this event (queued during AuthInitial) from clobbering
+    // an Authenticated state established by a preceding AuthCheckRequested.
+    final currentUser = _authRepository.currentUser;
+    if (currentUser != null) {
+      // Ensure data is synced, then confirm authentication
+      await _userRepository.syncUser(currentUser);
+      emit(Authenticated(currentUser));
+      return;
+    }
+
     emit(AuthLoading());
     try {
       final userCredential = await _authRepository.signInSilently();
