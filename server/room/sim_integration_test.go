@@ -432,9 +432,10 @@ func TestPrivateConnection(t *testing.T) {
 	case msg := <-m1:
 		var bm protocol.BaseMessage
 		json.Unmarshal(msg, &bm)
-		if bm.Type == protocol.MsgTypePlayerJoined { // Or GAME_STATE depending on impl
+		switch bm.Type {
+		case protocol.MsgTypePlayerJoined:
 			log.Printf("Host saw player join")
-		} else if bm.Type == protocol.MsgTypeGameState {
+		case protocol.MsgTypeGameState:
 			log.Printf("Host received updated state")
 		}
 	case <-time.After(2 * time.Second):
@@ -580,13 +581,14 @@ func TestGameFlow(t *testing.T) {
 			var bm protocol.BaseMessage
 			json.Unmarshal(msg, &bm)
 			// Might be GAME_ACTION or GAME_STATE
-			if bm.Type == protocol.MsgTypeGameAction {
+			switch bm.Type {
+			case protocol.MsgTypeGameAction:
 				var data map[string]interface{}
 				json.Unmarshal(bm.Data, &data)
 				if data["action"] == "PLAY_CARDS" {
 					verifiedPlay = true
 				}
-			} else if bm.Type == protocol.MsgTypeGameState {
+			case protocol.MsgTypeGameState:
 				var state map[string]interface{}
 				json.Unmarshal(bm.Data, &state)
 				if state["lastEvent"] == "cardsPlayed" {
@@ -768,7 +770,8 @@ GAME_STARTED:
 				var bm protocol.BaseMessage
 				json.Unmarshal(msg, &bm)
 				// Look for GameAction or State Update with LastEvent
-				if bm.Type == protocol.MsgTypeGameAction {
+				switch bm.Type {
+				case protocol.MsgTypeGameAction:
 					var data map[string]interface{}
 					json.Unmarshal(bm.Data, &data)
 					log.Printf("Action Received: %v", data["action"])
@@ -776,7 +779,7 @@ GAME_STARTED:
 						activePlayerID = data["nextPlayerId"].(string)
 					}
 					eventReceived = true
-				} else if bm.Type == protocol.MsgTypeGameState {
+				case protocol.MsgTypeGameState:
 					var state map[string]interface{}
 					json.Unmarshal(bm.Data, &state)
 					lastEvent := state["lastEvent"]

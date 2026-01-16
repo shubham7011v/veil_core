@@ -418,12 +418,13 @@ func TestNetworkEdgeCases(t *testing.T) {
 		if err == nil {
 			var bm protocol.BaseMessage
 			json.Unmarshal(msg, &bm)
-			if bm.Type == protocol.MsgTypeError {
+			switch bm.Type {
+			case protocol.MsgTypeError:
 				t.Logf("SUCCESS: Server rejected invalid action with error: %s", string(bm.Data))
-			} else if bm.Type == protocol.MsgTypeGameState {
+			case protocol.MsgTypeGameState:
 				// Ignored and sent state update? Acceptable.
 				t.Log("Server sent state update (likely ignored action).")
-			} else {
+			default:
 				t.Logf("Received %s (Action likely ignored)", bm.Type)
 			}
 		} else {
