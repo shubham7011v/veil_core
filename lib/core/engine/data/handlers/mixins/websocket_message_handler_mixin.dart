@@ -16,6 +16,11 @@ import '../../../../utils/app_logger.dart';
 import 'websocket_handler_base.dart';
 
 mixin WebSocketMessageHandlerMixin on WebSocketHandlerBase {
+  SessionEventType _lastEventType = SessionEventType.none;
+  int _lastEventTimestamp = 0;
+
+  SessionEventType get lastEventType => _lastEventType;
+  int get lastEventTimestamp => _lastEventTimestamp;
   void handleMessage(dynamic data) {
     lastMessageTime = DateTime.now(); // Reset watchdog
 
@@ -498,21 +503,33 @@ mixin WebSocketMessageHandlerMixin on WebSocketHandlerBase {
 
         switch (lastEvent) {
           case 'cardsPlayed':
+            _lastEventType = SessionEventType.cardsPlayed;
+            _lastEventTimestamp = DateTime.now().millisecondsSinceEpoch;
             eventController.add(SessionEventType.cardsPlayed);
             break;
           case 'passed':
+            _lastEventType = SessionEventType.passed;
+            _lastEventTimestamp = DateTime.now().millisecondsSinceEpoch;
             eventController.add(SessionEventType.passed);
             break;
           case 'bluffCalled':
+            _lastEventType = SessionEventType.bluffCalled;
+            _lastEventTimestamp = DateTime.now().millisecondsSinceEpoch;
             eventController.add(SessionEventType.bluffCalled);
             break;
           case 'pileDiscarded':
+            _lastEventType = SessionEventType.pileDiscarded;
+            _lastEventTimestamp = DateTime.now().millisecondsSinceEpoch;
             eventController.add(SessionEventType.pileDiscarded);
             break;
           case 'cardsPickedUp':
+            _lastEventType = SessionEventType.cardsPickedUp;
+            _lastEventTimestamp = DateTime.now().millisecondsSinceEpoch;
             eventController.add(SessionEventType.cardsPickedUp);
             break;
           case 'shuffling':
+            _lastEventType = SessionEventType.shuffling;
+            _lastEventTimestamp = DateTime.now().millisecondsSinceEpoch;
             eventController.add(SessionEventType.shuffling);
             break;
         }
@@ -589,6 +606,8 @@ mixin WebSocketMessageHandlerMixin on WebSocketHandlerBase {
           lastCountClaimed = count;
 
           if (!eventController.isClosed) {
+            _lastEventType = SessionEventType.cardsPlayed;
+            _lastEventTimestamp = DateTime.now().millisecondsSinceEpoch;
             eventController.add(SessionEventType.cardsPlayed);
           }
           break;
@@ -610,6 +629,8 @@ mixin WebSocketMessageHandlerMixin on WebSocketHandlerBase {
           activeEventActorId = playerId == myId ? 'me' : playerId;
 
           if (!eventController.isClosed) {
+            _lastEventType = SessionEventType.passed;
+            _lastEventTimestamp = DateTime.now().millisecondsSinceEpoch;
             eventController.add(SessionEventType.passed);
           }
           break;

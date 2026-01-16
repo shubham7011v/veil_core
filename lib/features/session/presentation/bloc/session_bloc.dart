@@ -345,6 +345,11 @@ class SessionBloc extends Bloc<SessionEvent, SessionBlocState> {
         lastMove: _handler.lastMove,
         clearLastMove: _handler.lastMove == null,
         gameLog: _handler.gameLog,
+        // SYNC LAST EVENT: Crucial for replaying 'shuffling' if missed
+        lastEvent: _handler.lastEventType,
+        lastEventTimestamp: _handler.lastEventTimestamp,
+        lastEventActorId: _handler.activeEventActorId,
+        lastEventCardCount: _handler.lastCountClaimed,
       ),
     );
   }

@@ -57,6 +57,10 @@ type Room struct {
 	// ✅ FIX #3: Track pending challenge timer for cancellation
 	pendingChallengeTimer *time.Timer
 
+	// Client-Ready Protocol: Track which clients have signaled they're ready for game start
+	readyClients   map[string]bool
+	startGameTimer *time.Timer
+
 	// Broadcaster handles message distribution
 	broadcaster *Broadcaster
 
@@ -90,6 +94,7 @@ func NewRoom(id string) *Room {
 		gracePeriod:     60 * time.Second, // ✅ Increased from 30s to 60s for better mobile stability
 		disconnectTimes: make(map[string]time.Time),
 		lastFullSync:    time.Now(), // Initialize for periodic sync
+		readyClients:    make(map[string]bool),
 	}
 	// Initialize broadcaster with reference to this room
 	r.broadcaster = NewBroadcaster(r)
@@ -750,6 +755,15 @@ func (r *Room) processAction(action GameAction) {
 			r.broadcast <- bytes
 		}
 
+	case "CLIENT_READY":
+		// Client has signaled their UI is ready for game start
+		log.Printf("Client %s signaled ready in room %s", client.ID, r.ID)
+		r.readyClients[client.ID] = true
+
+		// Check if all players are ready
+		r.checkAllPlayersReady()
+		return // No broadcast needed
+
 	case protocol.MsgTypeTyping:
 		var payload protocol.TypingMessage
 		if json.Unmarshal(msg.Data, &payload) == nil {
@@ -965,5 +979,50 @@ func (r *Room) processBotMove(bot *game.Player) {
 				"turnStartTime": r.game.TurnStartTime,
 			})
 		}
+	}
+}
+
+
+// checkAllPlayersReady checks if all players have signaled ready and starts the game
+// This is called after a client sends CLIENT_READY message
+func (r *Room) checkAllPlayersReady() {
+	// Only applicable during PhaseStarting
+	if r.game.Phase != game.PhaseStarting {
+		return
+	}
+
+	// Check if all players (non-spectators) are ready
+	totalPlayers := len(r.game.Players)
+	readyCount := 0
+
+	for _, player := range r.game.Players {
+		if r.readyClients[player.ID] {
+			readyCount++
+		}
+	}
+
+	log.Printf("[Client-Ready] Room %s: %d/%d players ready", r.ID, readyCount, totalPlayers)
+
+	// If all players are ready, start immediately
+	if readyCount >= totalPlayers {
+		log.Printf("✅ [Client-Ready] All players ready in room %s! Starting game now.", r.ID)
+
+		// Cancel timeout timer if it exists
+		if r.startGameTimer != nil {
+			r.startGameTimer.Stop()
+			r.startGameTimer = nil
+		}
+
+		// Start the game
+		if err := r.game.Start(); err != nil {
+			log.Printf("Failed to start game after all ready: %v", err)
+			r.game.Phase = game.PhaseLobby
+		} else {
+			log.Printf("🎮 Game started in room %s (all clients ready)", r.ID)
+		}
+		r.broadcaster.BroadcastStateLocked()
+
+		// Clear ready tracking for next game
+		r.readyClients = make(map[string]bool)
 	}
 }

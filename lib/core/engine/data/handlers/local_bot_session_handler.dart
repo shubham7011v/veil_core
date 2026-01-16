@@ -12,6 +12,11 @@ class LocalBotSessionHandler extends BaseAuthoritativeHandler {
   final _chatController = StreamController<Map<String, dynamic>>.broadcast();
   String _currentSessionId = '';
 
+  @override
+  SessionEventType get lastEventType => SessionEventType.none;
+  @override
+  int get lastEventTimestamp => 0;
+
   LocalBotSessionHandler({BotBrain? brain})
     : _brain = brain ?? DefaultBotBrain();
 
@@ -127,6 +132,11 @@ class LocalBotSessionHandler extends BaseAuthoritativeHandler {
 
   @override
   void setTypingStatus(bool isTyping) {}
+
+  @override
+  void signalClientReady() {
+    // No-op for local games - instant start
+  }
 
   String _getBotName(int index) {
     const names = [

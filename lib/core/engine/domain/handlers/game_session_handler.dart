@@ -12,6 +12,8 @@ abstract class GameSessionHandler {
 
   // Optional: detailed getters if needed for specialized UI updates
   String? get activeEventActorId;
+  SessionEventType get lastEventType;
+  int get lastEventTimestamp;
   UnitRank? get lastRankClaimed;
   int get lastCountClaimed;
   List<String> get gameLog;
@@ -37,6 +39,9 @@ abstract class GameSessionHandler {
   void sendChatMessage(String message);
   void sendEmojiMessage(String emojiId);
   void setTypingStatus(bool isTyping);
+
+  /// Signal to server that client UI is ready for game start
+  void signalClientReady();
 
   /// Manual & Auto Sorting
   void sortHand();

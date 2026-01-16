@@ -460,6 +460,14 @@ class WebSocketSessionHandler extends GameSessionHandler
   }
 
   @override
+  void signalClientReady() {
+    AppLogger.sessionEvent(
+      '📤 [Client-Ready] Signaling server that UI is ready',
+    );
+    sendMessage({'type': 'CLIENT_READY'});
+  }
+
+  @override
   void resetGameSession() {
     _friends = [];
     _gameLog.clear();
