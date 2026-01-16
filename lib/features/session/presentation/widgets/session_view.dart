@@ -6,7 +6,7 @@ import '../../../../core/di/service_locator.dart' as di;
 import '../bloc/session_state.dart';
 import '../utils/session_constants.dart';
 import '../widgets/session_top_bar.dart';
-import '../widgets/opponent_carousel.dart';
+import '../widgets/opponent_row.dart';
 import '../widgets/game_table_view.dart';
 import '../widgets/session_background.dart';
 import '../widgets/game_win_overlay.dart';
@@ -16,6 +16,7 @@ import '../widgets/flying_cards_layer.dart';
 import '../widgets/floating_emoji_layer.dart';
 import '../../../game/presentation/widgets/chat_widget.dart';
 import '../../../game/presentation/widgets/emoji_picker.dart';
+import '../widgets/rank_selector_modal.dart';
 import 'package:veil_core/features/voice/presentation/widgets/voice_overlay.dart';
 import '../managers/card_animation_manager.dart';
 import '../managers/turn_popup_manager.dart';
@@ -89,7 +90,7 @@ class SessionView extends StatelessWidget {
                     curve: Curves.easeOutCubic,
                   ),
                   slideBegin: const Offset(0, -0.2),
-                  child: OpponentCarousel(
+                  child: OpponentRow(
                     state: visualState,
                     avatarKeys: cardAnimations.avatarKeys,
                   ),
@@ -188,6 +189,9 @@ class SessionView extends StatelessWidget {
           _buildEmojiOverlay(context),
         if (!showSpectatorView && FeatureFlags.enableGameChat)
           _buildEmojiToggle(context),
+
+        // Rank Selection Modal
+        RankSelectorModal(state: state),
       ],
     );
   }

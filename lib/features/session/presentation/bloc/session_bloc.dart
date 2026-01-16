@@ -14,6 +14,7 @@ class SessionBloc extends Bloc<SessionEvent, SessionBlocState> {
   StreamSubscription? _eventSub;
   StreamSubscription? _chatSub;
   StreamSubscription? _errorSub;
+  bool _myLastPlayWasBluff = false;
 
   SessionBloc({engine.GameSessionHandler? handler})
     : _handler = handler ?? di.sl.gameSessionHandler,
@@ -80,31 +81,90 @@ class SessionBloc extends Bloc<SessionEvent, SessionBlocState> {
       );
     });
     on<EngineEventReceived>((event, emit) {
-      // Only sync lastMove if it's NOT null.
-      // If it IS null (round reset), we wait for EngineStateUpdated to clear it.
-      // This preserves state.lastMove so EngineStateUpdated can detect the transition
-      // (wasInRound -> isNewRound) and trigger the rank selector auto-flip.
       final shouldSync = _handler.lastMove != null;
-
-      // Track match statistics
       var updatedStats = state.matchStats;
 
       switch (event.type) {
         case engine.SessionEventType.cardsPlayed:
+          // Check for successful bluff (if we played before and now someone else is playing)
+          if (_myLastPlayWasBluff) {
+            updatedStats = updatedStats.copyWith(
+              successfulBluffs: state.matchStats.successfulBluffs + 1,
+            );
+            _myLastPlayWasBluff = false;
+          }
+
           updatedStats = updatedStats.copyWith(
             totalTurns: state.matchStats.totalTurns + 1,
             totalCardsPlayed:
                 state.matchStats.totalCardsPlayed + event.cardCount,
           );
           break;
+
+        case engine.SessionEventType.passed:
+        case engine.SessionEventType.pileDiscarded:
+          // If the round ended (discard) or someone passed, our bluff survived
+          if (_myLastPlayWasBluff) {
+            updatedStats = updatedStats.copyWith(
+              successfulBluffs: state.matchStats.successfulBluffs + 1,
+            );
+            _myLastPlayWasBluff = false;
+          }
+          break;
+
         case engine.SessionEventType.bluffCalled:
           updatedStats = updatedStats.copyWith(
             totalChallenges: state.matchStats.totalChallenges + 1,
           );
+          // If we are being challenged, our bluffing outcome is decided by cardsPickedUp
+          if (event.actorId != 'me') {
+            // If we acted, and someone ELSE called bluff (on us?)
+            // Actually activeEventActorId is the Challenger.
+            // If Challenger != Me, and LastMover == Me?
+            // We can just rely on the fact that if we get challenged, _myLastPlayWasBluff
+            // will be resolved in cardsPickedUp (caught) or we win (false alarm).
+            // But validly, if we get challenged, we didn't "sneak" it past.
+            if (_handler.lastMove?.playerId == 'me') {
+              _myLastPlayWasBluff =
+                  false; // Reset pending flag, result handled in PickUp
+            }
+          }
           break;
+
+        case engine.SessionEventType.cardsPickedUp:
+          // Resolution of a challenge
+          final winner = _handler.lastBluffWinnerId;
+          final loser = _handler.lastBluffLoserId;
+          final wasBluff = _handler.isBluffSuccessful ?? false;
+
+          if (winner == 'me') {
+            if (wasBluff) {
+              // We caught someone!
+              updatedStats = updatedStats.copyWith(
+                bluffsCaught: state.matchStats.bluffsCaught + 1,
+              );
+            }
+            // If !wasBluff (False Alarm), we won as the accused (honest player). No stat increment for that.
+          }
+
+          if (loser == 'me') {
+            if (wasBluff) {
+              // We were caught bluffing!
+              updatedStats = updatedStats.copyWith(
+                bluffsCaughtByOthers: state.matchStats.bluffsCaughtByOthers + 1,
+              );
+            } else {
+              // We challenged and it was a false alarm (we lost)
+              updatedStats = updatedStats.copyWith(
+                falseAlarms: state.matchStats.falseAlarms + 1,
+              );
+            }
+          }
+          break;
+
         case engine.SessionEventType.shuffling:
-          // Game started, reset stats and record start time
           updatedStats = const MatchStats();
+          _myLastPlayWasBluff = false;
           emit(
             state.copyWith(
               lastEvent: event.type,
@@ -121,6 +181,7 @@ class SessionBloc extends Bloc<SessionEvent, SessionBlocState> {
             ),
           );
           return;
+
         default:
           break;
       }
@@ -134,11 +195,7 @@ class SessionBloc extends Bloc<SessionEvent, SessionBlocState> {
           isRevealingBluff: _handler.isRevealingBluff,
           isBluffSuccessful: _handler.isBluffSuccessful,
           gameLog: _handler.gameLog,
-          lastMove: shouldSync
-              ? _handler.lastMove
-              : state
-                    .lastMove, // Preserve existing lastMove instead of clearing
-          // IMPORTANT: Never clearLastMove here. Let EngineStateUpdated do it.
+          lastMove: shouldSync ? _handler.lastMove : state.lastMove,
           clearLastMove: false,
           matchStats: updatedStats,
         ),
@@ -259,6 +316,14 @@ class SessionBloc extends Bloc<SessionEvent, SessionBlocState> {
     // OPTIMISTIC UPDATE: Remove cards from local hand immediately
     final playedIds = List<String>.from(state.selectedUnitIds);
     final currentHand = List<engine.Unit>.from(state.engineState.myHand);
+
+    // Check bluff status BEFORE removing cards
+    final playedUnits = currentHand
+        .where((u) => playedIds.contains(u.id))
+        .toList();
+    final isBluff = playedUnits.any((u) => u.rank != rankToPlay);
+    _myLastPlayWasBluff = isBluff;
+
     final updatedHand = currentHand
         .where((u) => !playedIds.contains(u.id))
         .toList();
@@ -273,7 +338,7 @@ class SessionBloc extends Bloc<SessionEvent, SessionBlocState> {
     );
 
     AppLogger.sessionEvent(
-      '🎯 Optimistic UI: Removed ${playedIds.length} cards locally',
+      '🎯 Optimistic UI: Removed ${playedIds.length} cards locally. Bluffing: $_myLastPlayWasBluff',
     );
 
     // Trigger server action
