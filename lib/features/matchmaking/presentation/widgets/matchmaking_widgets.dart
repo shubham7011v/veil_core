@@ -61,6 +61,7 @@ class ParticipantCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
+      constraints: BoxConstraints.expand(width: 120, height: 160),
       decoration: BoxDecoration(
         color: const Color(0xFF1E1E1E),
         borderRadius: BorderRadius.circular(16),
@@ -118,15 +119,18 @@ class ParticipantCard extends StatelessWidget {
                 : null,
           ),
           const SizedBox(height: 12),
-          Text(
-            participant.isMe ? 'Me' : participant.name,
-            style: GoogleFonts.inter(
-              color: Colors.white,
-              fontSize: 14,
-              fontWeight: FontWeight.w600,
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 8.0),
+            child: Text(
+              participant.isMe ? 'Me' : participant.name,
+              style: GoogleFonts.inter(
+                color: Colors.white,
+                fontSize: 14,
+                fontWeight: FontWeight.w600,
+              ),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
             ),
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
           ),
           const SizedBox(height: 8),
           if (participant.rank != null)
@@ -159,6 +163,8 @@ class EmptySlot extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
+      constraints: BoxConstraints.expand(width: 120, height: 160),
+
       decoration: BoxDecoration(
         color: const Color(0xFF0F0F0F),
         borderRadius: BorderRadius.circular(16),
