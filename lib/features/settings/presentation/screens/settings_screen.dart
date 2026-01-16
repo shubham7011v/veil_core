@@ -9,6 +9,7 @@ import '../../../../core/config/app_config.dart';
 import '../../../../core/constants/dimens.dart';
 import '../../../auth/auth.dart';
 import '../../../../core/di/service_locator.dart';
+import '../../../../core/utils/app_logger.dart';
 import '../../../../core/services/audio/audio_service_interface.dart';
 import '../../../../core/constants/sound_assets.dart';
 import 'package:package_info_plus/package_info_plus.dart';
@@ -76,7 +77,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
         });
       }
     } catch (e) {
-      debugPrint('Failed to get package info: $e');
+      AppLogger.error('Failed to get package info', exception: e);
     }
   }
 

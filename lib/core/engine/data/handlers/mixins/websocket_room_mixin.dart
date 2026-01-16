@@ -1,4 +1,4 @@
-import 'package:flutter/widgets.dart';
+import '../../../../utils/app_logger.dart';
 import 'websocket_handler_base.dart';
 
 /// Mixin that handles room and matchmaking operations for WebSocket handler.
@@ -67,7 +67,7 @@ mixin WebSocketRoomMixin on WebSocketHandlerBase {
     // Check if we are already in an active room (session restoration)
     if (currentSessionState.roomId != '0' &&
         currentSessionState.roomId != '000') {
-      debugPrint(
+      AppLogger.warning(
         '⚠️ joinMatchmaking skipped: Already in room ${currentSessionState.roomId}',
       );
       return;
@@ -75,7 +75,7 @@ mixin WebSocketRoomMixin on WebSocketHandlerBase {
 
     // Prevent duplicate matchmaking joins
     if (isJoiningMatchmaking) {
-      debugPrint('⚠️ joinMatchmaking skipped: already joining');
+      AppLogger.warning('⚠️ joinMatchmaking skipped: already joining');
       return;
     }
     isJoiningMatchmaking = true;
@@ -91,6 +91,6 @@ mixin WebSocketRoomMixin on WebSocketHandlerBase {
   void cancelMatchmaking() {
     sendMessage({'type': 'CANCEL_MATCHMAKING'});
     isJoiningMatchmaking = false;
-    debugPrint('📤 CANCEL_MATCHMAKING sent');
+    AppLogger.sessionEvent('📤 CANCEL_MATCHMAKING sent');
   }
 }

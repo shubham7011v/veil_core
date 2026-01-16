@@ -1,7 +1,7 @@
 import 'dart:async';
-import 'package:flutter/foundation.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import '../../../../core/engine/engine.dart' as engine;
+import '../../../../core/utils/app_logger.dart';
 import 'session_event.dart';
 import 'session_state.dart';
 import '../../domain/models/match_stats.dart';
@@ -272,7 +272,9 @@ class SessionBloc extends Bloc<SessionEvent, SessionBlocState> {
       ),
     );
 
-    debugPrint('🎯 Optimistic UI: Removed ${playedIds.length} cards locally');
+    AppLogger.sessionEvent(
+      '🎯 Optimistic UI: Removed ${playedIds.length} cards locally',
+    );
 
     // Trigger server action
     _handler.playCards(playedIds, rankToPlay);

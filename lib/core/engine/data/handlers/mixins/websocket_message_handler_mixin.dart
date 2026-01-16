@@ -1,5 +1,4 @@
 import 'dart:convert';
-import 'package:flutter/widgets.dart';
 import '../../../../di/service_locator.dart';
 import '../../../../error/failure.dart';
 import '../../../../../../features/auth/domain/models/user_stats.dart';
@@ -13,6 +12,7 @@ import '../../../domain/models/room_event.dart';
 import '../../../domain/models/session_enums.dart';
 import '../../../domain/models/session_state.dart';
 import '../../../domain/models/unit.dart';
+import '../../../../utils/app_logger.dart';
 import 'websocket_handler_base.dart';
 
 mixin WebSocketMessageHandlerMixin on WebSocketHandlerBase {
@@ -24,18 +24,20 @@ mixin WebSocketMessageHandlerMixin on WebSocketHandlerBase {
       final type = msg['type'] as String;
 
       if (type != 'PONG') {
-        debugPrint('📥 [WebSocket] Received: $type');
+        AppLogger.sessionEvent('📥 [WebSocket] Received: $type');
       }
 
       if (type == 'PONG') {
-        debugPrint('🏓 [WebSocket] PONG'); // Heartbeat response
+        AppLogger.sessionEvent('🏓 [WebSocket] PONG'); // Heartbeat response
         return;
       }
 
       switch (type) {
         case 'AUTH_OK':
           authTimeoutTimer?.cancel();
-          debugPrint('✅ Auth successful: ${msg['data']} (ID: $connectionId)');
+          AppLogger.sessionEvent(
+            '✅ Auth successful: ${msg['data']} (ID: $connectionId)',
+          );
           connectionStatus = ConnectionStatus.connected;
 
           if (connectionCompleter != null &&
@@ -107,8 +109,11 @@ mixin WebSocketMessageHandlerMixin on WebSocketHandlerBase {
           break;
       }
     } catch (e, stack) {
-      debugPrint('Error handling WebSocket message: $e');
-      debugPrint('Stack trace: $stack');
+      AppLogger.sessionError(
+        'Error handling WebSocket message',
+        exception: e,
+        stackTrace: stack,
+      );
     }
   }
 
@@ -119,14 +124,14 @@ mixin WebSocketMessageHandlerMixin on WebSocketHandlerBase {
       if (!statsController.isClosed) {
         statsController.add(stats);
       }
-      debugPrint('Stats updated: ${stats.wins} wins, ${stats.rank} rank');
+      AppLogger.info('Stats updated: ${stats.wins} wins, ${stats.rank} rank');
     } catch (e) {
-      debugPrint('Failed to parse stats update: $e');
+      AppLogger.sessionError('Failed to parse stats update', exception: e);
     }
   }
 
   void _processAuthFail(Map<String, dynamic> data) {
-    debugPrint('Auth failed: $data');
+    AppLogger.warning('Auth failed: $data');
     if (!errorController.isClosed) {
       errorController.add(
         AuthFailure(data['message'] ?? 'Authentication failed', data),
@@ -135,7 +140,7 @@ mixin WebSocketMessageHandlerMixin on WebSocketHandlerBase {
   }
 
   void _processError(Map<String, dynamic> errorData) {
-    debugPrint('Server Error: ${errorData['message']}');
+    AppLogger.sessionError('Server Error: ${errorData['message']}');
     if (!errorController.isClosed) {
       errorController.add(
         ServerFailure(
@@ -155,7 +160,7 @@ mixin WebSocketMessageHandlerMixin on WebSocketHandlerBase {
         leaderboardController.add(leaderboard);
       }
     } catch (e) {
-      debugPrint('Failed to parse leaderboard: $e');
+      AppLogger.sessionError('Failed to parse leaderboard', exception: e);
     }
   }
 
@@ -168,7 +173,7 @@ mixin WebSocketMessageHandlerMixin on WebSocketHandlerBase {
         friendsController.add(friends);
       }
     } catch (e) {
-      debugPrint('Failed to parse friend list: $e');
+      AppLogger.sessionError('Failed to parse friend list', exception: e);
     }
   }
 
@@ -179,7 +184,7 @@ mixin WebSocketMessageHandlerMixin on WebSocketHandlerBase {
         roomEventController.add(evt);
       }
     } catch (e) {
-      debugPrint('Failed to parse ROOM_CREATED: $e');
+      AppLogger.sessionError('Failed to parse ROOM_CREATED', exception: e);
     }
   }
 
@@ -190,7 +195,7 @@ mixin WebSocketMessageHandlerMixin on WebSocketHandlerBase {
         roomEventController.add(evt);
       }
     } catch (e) {
-      debugPrint('Failed to parse ROOM_JOINED: $e');
+      AppLogger.sessionError('Failed to parse ROOM_JOINED', exception: e);
     }
   }
 
@@ -198,14 +203,14 @@ mixin WebSocketMessageHandlerMixin on WebSocketHandlerBase {
     try {
       final currentUserId = sl.authRepository.currentUser?.uid;
       final evt = RoomUpdated.fromJson(data, currentUserId: currentUserId);
-      debugPrint(
+      AppLogger.sessionEvent(
         '🏠 [WebSocket] Room Update: ${evt.participants.length} players',
       );
       if (!roomEventController.isClosed) {
         roomEventController.add(evt);
       }
     } catch (e) {
-      debugPrint('Failed to parse ROOM_UPDATE: $e');
+      AppLogger.sessionError('Failed to parse ROOM_UPDATE', exception: e);
     }
   }
 
@@ -218,7 +223,7 @@ mixin WebSocketMessageHandlerMixin on WebSocketHandlerBase {
         challengesController.add(challenges);
       }
     } catch (e) {
-      debugPrint('Failed to parse challenges: $e');
+      AppLogger.sessionError('Failed to parse challenges', exception: e);
     }
   }
 
@@ -229,7 +234,10 @@ mixin WebSocketMessageHandlerMixin on WebSocketHandlerBase {
       }
       sl.audioService.playSfx(SoundAssets.turnAlert);
     } catch (e) {
-      debugPrint('Failed to parse challenge claim reward: $e');
+      AppLogger.sessionError(
+        'Failed to parse challenge claim reward',
+        exception: e,
+      );
     }
   }
 
@@ -240,7 +248,7 @@ mixin WebSocketMessageHandlerMixin on WebSocketHandlerBase {
         chatController.add(data);
       }
     } catch (e) {
-      debugPrint('Failed to parse chat message: $e');
+      AppLogger.sessionError('Failed to parse chat message', exception: e);
     }
   }
 
@@ -252,7 +260,7 @@ mixin WebSocketMessageHandlerMixin on WebSocketHandlerBase {
       }
       sl.audioService.playEmojiSound(data['emojiId'] as String);
     } catch (e) {
-      debugPrint('Failed to parse emoji message: $e');
+      AppLogger.sessionError('Failed to parse emoji message', exception: e);
     }
   }
 
@@ -263,7 +271,7 @@ mixin WebSocketMessageHandlerMixin on WebSocketHandlerBase {
 
       onTypingStatusChanged(senderId, isTyping);
     } catch (e) {
-      debugPrint('Failed to parse typing message: $e');
+      AppLogger.sessionError('Failed to parse typing message', exception: e);
     }
   }
 
@@ -271,7 +279,7 @@ mixin WebSocketMessageHandlerMixin on WebSocketHandlerBase {
     // Standardize logs
     final phaseStr = stateData['phase'] as String;
     final players = (stateData['participants'] as List?)?.length ?? 0;
-    debugPrint(
+    AppLogger.sessionEvent(
       '📊 [WebSocket] GAME_STATE: Phase: $phaseStr, Players: $players',
     );
 
@@ -293,7 +301,7 @@ mixin WebSocketMessageHandlerMixin on WebSocketHandlerBase {
           sl.audioService.playSfx(SoundAssets.turnAlert);
           sl.audioService.triggerHaptic(HapticType.heavy);
         } catch (e) {
-          debugPrint('Audio error (turn alert): $e');
+          AppLogger.sessionError('Audio error (turn alert)', exception: e);
         }
       }
     }
@@ -304,7 +312,7 @@ mixin WebSocketMessageHandlerMixin on WebSocketHandlerBase {
         sl.audioService.playSfx(SoundAssets.challenge);
         sl.audioService.triggerHaptic(HapticType.error); // Alert vibration
       } catch (e) {
-        debugPrint('Audio error (challenge): $e');
+        AppLogger.sessionError('Audio error (challenge)', exception: e);
       }
     }
 
@@ -313,14 +321,14 @@ mixin WebSocketMessageHandlerMixin on WebSocketHandlerBase {
       try {
         sl.audioService.stopBgm();
       } catch (e) {
-        debugPrint('Audio error (stop bgm): $e');
+        AppLogger.sessionError('Audio error (stop bgm)', exception: e);
       }
     }
     if (previousPhase != SessionPhase.lobby && phase == SessionPhase.lobby) {
       try {
         sl.audioService.playBgm(SoundAssets.lobbyAmbience);
       } catch (e) {
-        debugPrint('Audio error (resume bgm): $e');
+        AppLogger.sessionError('Audio error (resume bgm)', exception: e);
       }
     }
 
@@ -369,7 +377,9 @@ mixin WebSocketMessageHandlerMixin on WebSocketHandlerBase {
     final lastEvent = stateData['lastEvent'] as String?;
     final actorId = stateData['lastEventActorId'] as String?;
     if (lastEvent != null) {
-      debugPrint('🎬 [WebSocket] Last Event: $lastEvent by $actorId');
+      AppLogger.sessionEvent(
+        '🎬 [WebSocket] Last Event: $lastEvent by $actorId',
+      );
     }
     final cardCount = stateData['lastEventCardCount'] as int? ?? 0;
     isBluffSuccessful = stateData['isBluffSuccessful'] as bool?;
@@ -379,11 +389,11 @@ mixin WebSocketMessageHandlerMixin on WebSocketHandlerBase {
     if (logData != null) {
       gameLog.clear();
       gameLog.addAll(logData.map((e) => e.toString()));
-      debugPrint(
+      AppLogger.sessionEvent(
         '📜 [WebSocket] Game Log History (${gameLog.length} entries):',
       );
       for (final entry in gameLog) {
-        debugPrint('   - $entry');
+        AppLogger.info('   - $entry');
       }
     }
 
@@ -434,7 +444,7 @@ mixin WebSocketMessageHandlerMixin on WebSocketHandlerBase {
     currentSessionState = newState;
     if (!stateStreamController.isClosed) {
       stateStreamController.add(newState);
-      debugPrint(
+      AppLogger.sessionEvent(
         '🧑 [WebSocket] Active Player: ${newState.activeParticipantId}',
       );
     }
@@ -490,7 +500,9 @@ mixin WebSocketMessageHandlerMixin on WebSocketHandlerBase {
 
       if (action == null) return;
 
-      debugPrint('⚙️ [WebSocket] Game Action: $action | Data: $data');
+      AppLogger.sessionEvent(
+        '⚙️ [WebSocket] Game Action: $action | Data: $data',
+      );
 
       final myId = sl.authRepository.currentUser?.uid;
 
@@ -567,10 +579,10 @@ mixin WebSocketMessageHandlerMixin on WebSocketHandlerBase {
           break;
 
         default:
-          debugPrint('Unknown game action: $action');
+          AppLogger.warning('Unknown game action: $action');
       }
     } catch (e) {
-      debugPrint('❌ Error patching game action: $e');
+      AppLogger.sessionError('❌ Error patching game action', exception: e);
     }
   }
 

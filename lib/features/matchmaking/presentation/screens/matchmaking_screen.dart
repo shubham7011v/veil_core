@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:google_fonts/google_fonts.dart';
+import '../../../../core/utils/app_logger.dart';
 import '../../../session/session.dart';
 import '../../../../core/engine/engine.dart';
 import '../../../../core/config/app_config.dart';
@@ -39,6 +40,8 @@ class _MatchmakingViewState extends State<_MatchmakingView>
   @override
   void initState() {
     super.initState();
+    AppLogger.info('🎬 [MatchmakingScreen] Initializing screen...');
+
     _controller = AnimationController(
       duration: const Duration(seconds: 4),
       vsync: this,
@@ -52,12 +55,14 @@ class _MatchmakingViewState extends State<_MatchmakingView>
 
   @override
   void dispose() {
+    AppLogger.info('🛑 [MatchmakingScreen] Disposing screen...');
     _controller.dispose();
     _pulseController.dispose();
     super.dispose();
   }
 
   void _onManualPop() {
+    AppLogger.info('👈 [MatchmakingScreen] Manual pop triggered');
     _isManualPop = true;
     context.read<MatchmakingBloc>().add(CancelMatchmaking());
     Navigator.of(context).pop();
@@ -65,6 +70,7 @@ class _MatchmakingViewState extends State<_MatchmakingView>
 
   void _showTimeoutDialog() {
     if (!mounted) return;
+    AppLogger.info('⏰ [MatchmakingScreen] Showing timeout dialog');
     _hasShownTimeoutDialog = true;
 
     showDialog(
@@ -110,11 +116,17 @@ class _MatchmakingViewState extends State<_MatchmakingView>
         // Swap handler with SessionBloc when connection is established
         if (state.connectionStatus == ConnectionStatus.connected &&
             !state.isConnecting) {
+          AppLogger.info(
+            '🔄 [MatchmakingScreen] Swapping handler with SessionBloc',
+          );
           final bloc = context.read<MatchmakingBloc>();
           context.read<SessionBloc>().add(SessionHandlerSwapped(bloc.handler));
         }
 
         if (state.isMatchFound) {
+          AppLogger.info(
+            '🎉 [MatchmakingScreen] Match found! Navigating to session...',
+          );
           Future.delayed(
             Duration(seconds: AppConfig.instance.matchmakingDelaySeconds),
             () {
@@ -133,6 +145,9 @@ class _MatchmakingViewState extends State<_MatchmakingView>
             state.secondsRemaining > 0 &&
             !_hasShownTimeoutDialog &&
             !state.isMatchFound) {
+          AppLogger.info(
+            '⏰ [MatchmakingScreen] 15 seconds remaining, showing dialog',
+          );
           _showTimeoutDialog();
         }
 
@@ -141,6 +156,10 @@ class _MatchmakingViewState extends State<_MatchmakingView>
         }
 
         if (state.error != null) {
+          AppLogger.error(
+            '❌ [MatchmakingScreen] Error occurred',
+            exception: state.error!,
+          );
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
               content: Text(state.error!),

@@ -3,6 +3,7 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
+import '../../../../core/utils/app_logger.dart';
 import '../bloc/session_bloc.dart';
 import '../bloc/session_state.dart';
 import '../bloc/session_event.dart';
@@ -61,7 +62,7 @@ class _SessionScreenState extends State<SessionScreen>
       vsync: this,
       duration: SessionDurations.entryAnimationDuration,
     );
-    debugPrint('🎮 [Session] Screen initialized');
+    AppLogger.sessionEvent('Screen initialized');
     _entryController.forward();
   }
 
@@ -79,10 +80,10 @@ class _SessionScreenState extends State<SessionScreen>
     // Leave online room to clean up server state
     if (_isWebSocket == true) {
       try {
-        debugPrint('🚪 [Session] Leaving online room on dispose');
+        AppLogger.sessionEvent('Leaving online room on dispose');
         di.sl.webSocketSessionHandler.leaveRoom('');
       } catch (e) {
-        debugPrint('🚨 [Session] Error leaving room on dispose: $e');
+        AppLogger.sessionError('Error leaving room on dispose', exception: e);
       }
     }
     _turnPopupTimer?.cancel();
@@ -185,8 +186,14 @@ class _SessionScreenState extends State<SessionScreen>
         }
       }
 
-      debugPrint(
-        '🎬 [Animation] $sourceId -> $targetId | Start: $start, End: $end',
+      AppLogger.sessionEvent(
+        '$sourceId -> $targetId animation started',
+        data: {
+          'source': sourceId,
+          'target': targetId,
+          'start': start,
+          'end': end,
+        },
       );
 
       if (randomOffset) {
@@ -242,7 +249,7 @@ class _SessionScreenState extends State<SessionScreen>
     engine.SessionEventType event,
     SessionBlocState state,
   ) {
-    debugPrint('🎲 [Session] Handling event: $event');
+    AppLogger.sessionEvent('Handling event: $event');
     switch (event) {
       case engine.SessionEventType.passed:
         if (state.lastEventActorId != null) {
@@ -259,14 +266,15 @@ class _SessionScreenState extends State<SessionScreen>
                 (p) => p.sessionId == state.lastEventActorId,
               );
               name = participant.name.split(' ').first.toUpperCase();
-              debugPrint(
-                '✅ [Pass] Found participant: ${participant.name} for ID: ${state.lastEventActorId}',
+              AppLogger.sessionEvent(
+                'Pass: Found participant: ${participant.name}',
               );
             } catch (e) {
-              debugPrint(
-                '❌ [Pass] No participant found for ID: ${state.lastEventActorId}',
+              AppLogger.sessionError(
+                'Pass: No participant found',
+                exception: e,
               );
-              debugPrint(
+              AppLogger.info(
                 'Available sessionIds: ${state.engineState.participants.map((p) => "${p.name}:${p.sessionId}").join(", ")}',
               );
               name = "PLAYER";
@@ -293,14 +301,15 @@ class _SessionScreenState extends State<SessionScreen>
                 (p) => p.sessionId == state.lastEventActorId,
               );
               name = participant.name.split(' ').first.toUpperCase();
-              debugPrint(
-                '✅ [Bluff] Found participant: ${participant.name} for ID: ${state.lastEventActorId}',
+              AppLogger.sessionEvent(
+                'Bluff: Found participant: ${participant.name}',
               );
             } catch (e) {
-              debugPrint(
-                '❌ [Bluff] No participant found for ID: ${state.lastEventActorId}',
+              AppLogger.sessionError(
+                'Bluff: No participant found',
+                exception: e,
               );
-              debugPrint(
+              AppLogger.info(
                 'Available sessionIds: ${state.engineState.participants.map((p) => "${p.name}:${p.sessionId}").join(", ")}',
               );
               name = "PLAYER";
@@ -314,8 +323,13 @@ class _SessionScreenState extends State<SessionScreen>
         // Ensure strictly positive count and valid actor
         if (state.lastEventActorId != null && state.lastEventCardCount > 0) {
           final isMe = state.lastEventActorId == SessionIds.me;
-          debugPrint(
-            '🎬 [Session] CardsPlayed by ${state.lastEventActorId} (Me: $isMe, Count: ${state.lastEventCardCount})',
+          AppLogger.sessionEvent(
+            'CardsPlayed',
+            data: {
+              'actor': state.lastEventActorId,
+              'isMe': isMe,
+              'count': state.lastEventCardCount,
+            },
           );
           HapticFeedback.selectionClick();
           _triggerCardAnimation(
@@ -335,9 +349,9 @@ class _SessionScreenState extends State<SessionScreen>
           // isBluffSuccessful == false: No bluff, genuine cards (Green)
           final Color feedbackColor;
           final String feedbackText;
-
-          debugPrint(
-            '🤔 [Session] PickedUp. isBluffSuccessful: ${state.isBluffSuccessful}',
+          AppLogger.sessionEvent(
+            'PickedUp',
+            data: {'isBluffSuccessful': state.isBluffSuccessful},
           );
 
           if (state.isBluffSuccessful == true) {
@@ -351,8 +365,7 @@ class _SessionScreenState extends State<SessionScreen>
             feedbackColor = Colors.orange;
             feedbackText = "CARDS PICKED UP";
           }
-
-          debugPrint('📢 [Session] Showing result popup: $feedbackText');
+          AppLogger.sessionEvent('Showing result popup: $feedbackText');
           _showTurnPopup(feedbackText, feedbackColor);
 
           // Animate from Pile -> Loser
@@ -473,12 +486,12 @@ class _SessionScreenState extends State<SessionScreen>
     // ✅ FORCE LEAVE: Explicitly tell server to remove us immediately
     if (_isWebSocket == true) {
       try {
-        debugPrint('🚪 [Session] Manual exit - sending LEAVE_ROOM');
+        AppLogger.sessionEvent('Manual exit - sending LEAVE_ROOM');
         di.sl.webSocketSessionHandler.leaveRoom('');
         // Add small delay to allow message to hit network buffer
         await Future.delayed(const Duration(milliseconds: 100));
       } catch (e) {
-        debugPrint('🚨 [Session] Failed to send LEAVE_ROOM: $e');
+        AppLogger.sessionError('Failed to send LEAVE_ROOM', exception: e);
       }
     }
 

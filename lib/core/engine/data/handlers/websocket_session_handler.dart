@@ -13,6 +13,7 @@ import '../../../../features/social/domain/models/friend_record.dart';
 import '../../domain/models/room_event.dart';
 import '../../../../features/challenges/domain/models/daily_challenge.dart';
 import '../../../../features/voice/data/voice_audio_manager.dart';
+import '../../../../core/utils/app_logger.dart';
 import '../../../../core/di/service_locator.dart';
 import '../../../../core/constants/sound_assets.dart';
 import '../../../../core/error/failure.dart';
@@ -394,13 +395,15 @@ class WebSocketSessionHandler extends GameSessionHandler
           _statsController.add(stats);
         }
       } catch (e) {
-        debugPrint('Error parsing stats: $e');
+        AppLogger.error('Error parsing stats', exception: e);
       }
     }
 
     try {
       sl.audioService.playBgm(SoundAssets.lobbyAmbience);
-    } catch (e) {}
+    } catch (e) {
+      AppLogger.error('Failed to play lobby music', exception: e);
+    }
 
     if (_connectionCompleter != null && !_connectionCompleter!.isCompleted) {
       _connectionCompleter!.complete();

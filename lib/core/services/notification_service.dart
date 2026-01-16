@@ -1,5 +1,5 @@
 import 'package:firebase_messaging/firebase_messaging.dart';
-import 'package:flutter/foundation.dart';
+import 'package:veil_core/core/utils/app_logger.dart';
 import 'package:veil_core/core/di/service_locator.dart';
 import 'package:veil_core/core/notifications/bloc/app_notification_event.dart';
 import 'package:veil_core/core/config/app_config.dart';
@@ -9,7 +9,7 @@ import 'package:veil_core/core/engine/domain/models/session_enums.dart';
 Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
   // If you're going to use other Firebase services in the background, such as Firestore,
   // make sure you call `await Firebase.initializeApp()` here.
-  debugPrint("Handling a background message: ${message.messageId}");
+  AppLogger.info("Handling a background message: ${message.messageId}");
 }
 
 class NotificationService {
@@ -32,22 +32,22 @@ class NotificationService {
     );
 
     if (settings.authorizationStatus == AuthorizationStatus.authorized) {
-      debugPrint('User granted notification permission');
+      AppLogger.info('User granted notification permission');
     } else if (settings.authorizationStatus ==
         AuthorizationStatus.provisional) {
-      debugPrint('User granted provisional permission');
+      AppLogger.info('User granted provisional permission');
     } else {
-      debugPrint('User declined or has not accepted permission');
+      AppLogger.info('User declined or has not accepted permission');
       return;
     }
 
     // 2. Set Foreground Notification Handler
     FirebaseMessaging.onMessage.listen((RemoteMessage message) {
-      debugPrint('Got a message whilst in the foreground!');
-      debugPrint('Message data: ${message.data}');
+      AppLogger.info('Got a message whilst in the foreground!');
+      AppLogger.info('Message data: ${message.data}');
 
       if (message.notification != null) {
-        debugPrint(
+        AppLogger.info(
           'Message also contained a notification: ${message.notification}',
         );
 
@@ -66,12 +66,12 @@ class NotificationService {
         _firebaseMessagingBackgroundHandler,
       );
       _backgroundHandlerRegistered = true;
-      debugPrint('FCM Background Handler registered');
+      AppLogger.info('FCM Background Handler registered');
     }
 
     // 4. Handle notification tap when app is in background but opened
     FirebaseMessaging.onMessageOpenedApp.listen((RemoteMessage message) {
-      debugPrint('A new onMessageOpenedApp event was published!');
+      AppLogger.info('A new onMessageOpenedApp event was published!');
       _handleMessageInteraction(message);
     });
 
@@ -83,14 +83,14 @@ class NotificationService {
 
     // 6. Get Token
     final token = await _fcm.getToken();
-    debugPrint("FCM Token: $token");
+    AppLogger.info("FCM Token: $token");
     if (token != null) {
       sl.webSocketSessionHandler.setFcmToken(token);
     }
   }
 
   Future<void> _handleMessageInteraction(RemoteMessage message) async {
-    debugPrint('📬 Notification tapped: ${message.data}');
+    AppLogger.info('📬 Notification tapped: ${message.data}');
 
     // Give Firebase Auth time to reinitialize if app was terminated
     // This is critical because auth state may not be ready immediately
@@ -100,14 +100,14 @@ class NotificationService {
     final handler = sl.webSocketSessionHandler;
     final currentStatus = handler.connectionStatus;
 
-    debugPrint('📊 Current connection status: $currentStatus');
+    AppLogger.info('📊 Current connection status: $currentStatus');
 
     if (currentStatus != ConnectionStatus.connected) {
-      debugPrint('🔌 Reconnecting WebSocket after notification tap...');
+      AppLogger.info('🔌 Reconnecting WebSocket after notification tap...');
       try {
         final user = sl.authRepository.currentUser;
         if (user == null) {
-          debugPrint('❌ No user found, cannot reconnect');
+          AppLogger.info('❌ No user found, cannot reconnect');
           return;
         }
 
@@ -118,12 +118,12 @@ class NotificationService {
         if (token != null) {
           final serverUrl = AppConfig.instance.serverUrl;
           await handler.connect(serverUrl, token, displayName: displayName);
-          debugPrint('✅ WebSocket reconnected successfully');
+          AppLogger.info('✅ WebSocket reconnected successfully');
         } else {
-          debugPrint('❌ Failed to get auth token');
+          AppLogger.info('❌ Failed to get auth token');
         }
       } catch (e) {
-        debugPrint('❌ Failed to reconnect WebSocket: $e');
+        AppLogger.error('❌ Failed to reconnect WebSocket', exception: e);
         // Show error notification to user
         sl.notificationBloc.add(
           ShowErrorNotification('Failed to connect to server'),
@@ -138,13 +138,13 @@ class NotificationService {
       if (type == 'game_invite') {
         // TODO: Navigate to lobby or join room
         final roomId = message.data['roomId'];
-        debugPrint("Navigate to game invite for room: $roomId");
+        AppLogger.info("Navigate to game invite for room: $roomId");
         // Future work: Add navigation after connection is established
       } else if (type == 'game_start') {
-        debugPrint("Game started notification");
+        AppLogger.info("Game started notification");
         // Future work: Navigate to active game
       } else if (type == 'game_end') {
-        debugPrint("Game ended notification");
+        AppLogger.info("Game ended notification");
       }
     }
   }

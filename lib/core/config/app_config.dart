@@ -1,6 +1,7 @@
 import 'package:flutter/foundation.dart';
 import 'dart:io' show Platform;
 import 'package:flutter_dotenv/flutter_dotenv.dart';
+import '../utils/app_logger.dart';
 import 'remote_config_service.dart';
 import '../../main_common.dart' show bootStep;
 
@@ -158,9 +159,9 @@ class AppConfig {
     // 1. Try to load .env file
     try {
       await dotenv.load(fileName: ".env");
-      debugPrint('.env file loaded successfully');
+      AppLogger.info('.env file loaded successfully');
     } catch (e) {
-      debugPrint('No .env file found or failed to load: $e');
+      AppLogger.info('No .env file found or failed to load: $e');
     }
 
     // 2. Set environment & app name (priority: injected > .env > String.fromEnvironment)
@@ -416,13 +417,13 @@ class AppConfig {
   }
 
   void _logConfig() {
-    debugPrint('=== AppConfig Loaded ===');
-    debugPrint('Environment: $environment');
-    debugPrint('Server URL: $serverUrl');
-    debugPrint('API Base URL: $apiBaseUrl');
-    debugPrint('Max Reconnect Attempts: $maxReconnectAttempts');
-    debugPrint('Debug Mode: $enableDebugMode');
-    debugPrint('=======================');
+    AppLogger.info('=== AppConfig Loaded ===');
+    AppLogger.info('Environment: $environment');
+    AppLogger.info('Server URL: $serverUrl');
+    AppLogger.info('API Base URL: $apiBaseUrl');
+    AppLogger.info('Max Reconnect Attempts: $maxReconnectAttempts');
+    AppLogger.info('Debug Mode: $enableDebugMode');
+    AppLogger.info('=======================');
   }
 
   int _getIntConfig(String rcKey, String envKey, int defaultValue) {

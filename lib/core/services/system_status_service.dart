@@ -1,6 +1,6 @@
 import 'dart:async';
 import 'dart:io';
-import 'package:flutter/foundation.dart';
+import '../utils/app_logger.dart';
 import '../models/system_status.dart';
 import '../engine/domain/models/session_enums.dart';
 import '../engine/data/handlers/websocket_session_handler.dart';
@@ -80,7 +80,7 @@ class SystemStatusService {
         );
       }
       _consecutiveFailures++;
-      debugPrint(
+      AppLogger.networkEvent(
         'Connection lost. Next ping in ${_currentPingInterval.inSeconds}s',
       );
     }

@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:veil_core/core/utils/app_logger.dart';
 import '../../../../core/engine/engine.dart';
 import '../../../../core/di/service_locator.dart';
 import '../../../../core/config/app_config.dart';
@@ -40,7 +41,15 @@ class MatchmakingBloc extends Bloc<MatchmakingEvent, MatchmakingState> {
     StartMatchmaking event,
     Emitter<MatchmakingState> emit,
   ) async {
-    if (state.isConnecting) return;
+    if (state.isConnecting) {
+      AppLogger.info(
+        '🎯 [MatchmakingBloc] Already connecting, ignoring StartMatchmaking',
+      );
+      return;
+    }
+
+    AppLogger.info('🚀 [MatchmakingBloc] Starting matchmaking...');
+
     emit(
       state.copyWith(
         isConnecting: true,
@@ -50,6 +59,9 @@ class MatchmakingBloc extends Bloc<MatchmakingEvent, MatchmakingState> {
 
     try {
       if (_handler.connectionStatus != ConnectionStatus.connected) {
+        AppLogger.info(
+          '🔌 [MatchmakingBloc] Not connected, attempting connection...',
+        );
         final user = FirebaseAuth.instance.currentUser;
         final token = user != null
             ? await user.getIdToken()
@@ -63,8 +75,15 @@ class MatchmakingBloc extends Bloc<MatchmakingEvent, MatchmakingState> {
               token!,
               displayName: user?.displayName,
             );
-            if (_handler.connectionStatus == ConnectionStatus.connected) break;
+            if (_handler.connectionStatus == ConnectionStatus.connected) {
+              AppLogger.info('✅ [MatchmakingBloc] Connection successful');
+              break;
+            }
           } catch (e) {
+            AppLogger.warning(
+              '⚠️ [MatchmakingBloc] Connection attempt ${retries + 1} failed',
+              data: {'error': e.toString()},
+            );
             retries++;
             if (retries >= 3) rethrow;
             await Future.delayed(const Duration(milliseconds: 1000));
@@ -73,20 +92,29 @@ class MatchmakingBloc extends Bloc<MatchmakingEvent, MatchmakingState> {
       }
 
       _handler.resetGameSession();
+      AppLogger.info('🔄 [MatchmakingBloc] Game session reset');
+
       _setupSubscriptions();
 
       if (_handler.connectionStatus == ConnectionStatus.connected) {
+        AppLogger.info('🎲 [MatchmakingBloc] Joining matchmaking queue...');
         _handler.joinMatchmaking();
         _startTimeoutTimer();
       }
 
       emit(state.copyWith(isConnecting: false));
     } catch (e) {
+      AppLogger.error(
+        '❌ [MatchmakingBloc] Error during matchmaking start',
+        exception: e,
+      );
       emit(state.copyWith(isConnecting: false, error: e.toString()));
     }
   }
 
   void _setupSubscriptions() {
+    AppLogger.info('📡 [MatchmakingBloc] Setting up stream subscriptions...');
+
     _statsSubscription?.cancel();
     _sessionStateSubscription?.cancel();
     _connectionStatusSubscription?.cancel();
@@ -98,12 +126,17 @@ class MatchmakingBloc extends Bloc<MatchmakingEvent, MatchmakingState> {
     });
 
     _errorSubscription = _handler.errorStream.listen((failure) {
+      AppLogger.warning(
+        '⚠️ [MatchmakingBloc] Error received',
+        data: {'message': failure.message},
+      );
       add(TriggerError(failure.message));
     });
 
     _connectionStatusSubscription = _handler.connectionStatusStream.listen((
       status,
     ) {
+      AppLogger.info('🔌 [MatchmakingBloc] Connection status changed: $status');
       add(UpdateConnectionStatus(status));
       if (status == ConnectionStatus.connected && !state.isMatchFound) {
         if (_handler.currentState.roomId == '000') {
@@ -115,6 +148,10 @@ class MatchmakingBloc extends Bloc<MatchmakingEvent, MatchmakingState> {
     _sessionStateSubscription = _handler.sessionStateStream.listen((
       sessionState,
     ) {
+      AppLogger.info(
+        '📊 [MatchmakingBloc] Session state updated',
+        data: {'participants': sessionState.participants.length},
+      );
       add(UpdateParticipants(sessionState.participants));
 
       if (sessionState.createdAt != null &&
@@ -124,6 +161,9 @@ class MatchmakingBloc extends Bloc<MatchmakingEvent, MatchmakingState> {
 
       if (sessionState.currentPhase == SessionPhase.thinking &&
           !state.isMatchFound) {
+        AppLogger.info(
+          '🎉 [MatchmakingBloc] Match found! Transitioning to game...',
+        );
         add(MatchFound());
       }
     });
@@ -189,6 +229,10 @@ class MatchmakingBloc extends Bloc<MatchmakingEvent, MatchmakingState> {
     UpdateParticipants event,
     Emitter<MatchmakingState> emit,
   ) {
+    AppLogger.info(
+      '👥 [MatchmakingBloc] Participants updated',
+      data: {'count': event.participants.length},
+    );
     emit(state.copyWith(participants: event.participants));
   }
 
@@ -204,6 +248,7 @@ class MatchmakingBloc extends Bloc<MatchmakingEvent, MatchmakingState> {
   }
 
   void _onMatchFound(MatchFound event, Emitter<MatchmakingState> emit) {
+    AppLogger.info('✅ [MatchmakingBloc] Match found, canceling timers');
     _timeoutTimer?.cancel();
     _waitTimer?.cancel();
     emit(state.copyWith(isMatchFound: true));
@@ -217,6 +262,7 @@ class MatchmakingBloc extends Bloc<MatchmakingEvent, MatchmakingState> {
     CancelMatchmaking event,
     Emitter<MatchmakingState> emit,
   ) {
+    AppLogger.info('🛑 [MatchmakingBloc] Matchmaking canceled');
     _handler.cancelMatchmaking();
     emit(const MatchmakingState());
   }

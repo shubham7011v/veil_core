@@ -1,6 +1,6 @@
-import 'package:flutter/foundation.dart';
 import 'package:flutter_webrtc/flutter_webrtc.dart';
 import 'package:permission_handler/permission_handler.dart';
+import '../../../../core/utils/app_logger.dart';
 import '../../../../core/engine/engine.dart';
 
 class VoiceAudioManager {
@@ -32,7 +32,10 @@ class VoiceAudioManager {
       await _getUserMedia();
       await _connect();
     } catch (e) {
-      debugPrint("VoiceAudioManager initialization failed: $e");
+      AppLogger.voiceError(
+        "VoiceAudioManager initialization failed",
+        exception: e,
+      );
       _onError?.call("Voice initialization failed", e);
     }
   }
@@ -61,7 +64,7 @@ class VoiceAudioManager {
           });
         }
       } catch (e) {
-        debugPrint("Error sending IceCandidate: $e");
+        AppLogger.voiceError("Error sending IceCandidate", exception: e);
       }
     };
 
@@ -71,7 +74,7 @@ class VoiceAudioManager {
           event.streams[0].getAudioTracks()[0].enabled = true;
         }
       } catch (e) {
-        debugPrint("Error handling remote track: $e");
+        AppLogger.voiceError("Error handling remote track", exception: e);
       }
     };
   }
@@ -90,7 +93,7 @@ class VoiceAudioManager {
         _localStream!,
       );
     } catch (e) {
-      debugPrint("Error getting user media: $e");
+      AppLogger.voiceError("Error getting user media", exception: e);
     }
   }
 
@@ -132,7 +135,7 @@ class VoiceAudioManager {
       );
       await _peerConnection?.addCandidate(candidate);
     } catch (e) {
-      debugPrint("Error handling candidate: $e");
+      AppLogger.voiceError("Error handling candidate", exception: e);
     }
   }
 
@@ -152,7 +155,7 @@ class VoiceAudioManager {
         try {
           track.stop();
         } catch (e) {
-          debugPrint("Error stopping track: $e");
+          AppLogger.voiceError("Error stopping track", exception: e);
         }
       }
     }
@@ -160,14 +163,14 @@ class VoiceAudioManager {
     try {
       await _localStream?.dispose();
     } catch (e) {
-      debugPrint("Error disposing local stream: $e");
+      AppLogger.voiceError("Error disposing local stream", exception: e);
     }
 
     try {
       await _peerConnection?.close(); // use close() before dispose()
       await _peerConnection?.dispose();
     } catch (e) {
-      debugPrint("Error disposing peer connection: $e");
+      AppLogger.voiceError("Error disposing peer connection", exception: e);
     }
 
     _localStream = null;

@@ -57,12 +57,17 @@ class AppLogger {
     debugPrint('[$timestamp] INFO: $message ${data != null ? '- $data' : ''}');
   }
 
-  static void warning(String message, {Map<String, dynamic>? data}) {
+  static void warning(
+    String message, {
+    Object? exception,
+    Map<String, dynamic>? data,
+  }) {
     if (!_enableLogging) return;
     final timestamp = DateTime.now().toIso8601String();
     debugPrint(
       '[$timestamp] WARNING: $message ${data != null ? '- $data' : ''}',
     );
+    if (exception != null) debugPrint('Exception: $exception');
   }
 
   static void error(

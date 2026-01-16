@@ -1,4 +1,4 @@
-import 'package:flutter/widgets.dart';
+import '../../../../utils/app_logger.dart';
 import 'websocket_handler_base.dart';
 import '../../../domain/models/unit.dart';
 import '../../../../../core/di/service_locator.dart';
@@ -25,7 +25,7 @@ mixin WebSocketGameActionsMixin on WebSocketHandlerBase {
       sl.audioService.playSfx(SoundAssets.cardSlide);
       sl.audioService.triggerHaptic(HapticType.light);
     } catch (e) {
-      debugPrint('Audio/Haptic error (playCards): $e');
+      AppLogger.sessionError('Audio/Haptic error (playCards)', exception: e);
     }
   }
 
@@ -36,7 +36,7 @@ mixin WebSocketGameActionsMixin on WebSocketHandlerBase {
       sl.audioService.playSfx(SoundAssets.buttonTap);
       sl.audioService.triggerHaptic(HapticType.medium);
     } catch (e) {
-      debugPrint('Audio/Haptic error (passTurn): $e');
+      AppLogger.sessionError('Audio/Haptic error (passTurn)', exception: e);
     }
   }
 
@@ -47,7 +47,10 @@ mixin WebSocketGameActionsMixin on WebSocketHandlerBase {
       sl.audioService.playSfx(SoundAssets.buttonTap);
       sl.audioService.triggerHaptic(HapticType.heavy);
     } catch (e) {
-      debugPrint('Audio/Haptic error (raiseChallenge): $e');
+      AppLogger.sessionError(
+        'Audio/Haptic error (raiseChallenge)',
+        exception: e,
+      );
     }
   }
 

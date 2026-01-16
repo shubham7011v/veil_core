@@ -7,6 +7,7 @@ import 'package:web_socket_channel/web_socket_channel.dart';
 import '../../../../di/service_locator.dart';
 import '../../../../error/failure.dart';
 import '../../../domain/models/session_enums.dart';
+import '../../../../utils/app_logger.dart';
 import 'websocket_handler_base.dart';
 
 mixin WebSocketConnectionMixin on WebSocketHandlerBase, WidgetsBindingObserver {
@@ -35,7 +36,7 @@ mixin WebSocketConnectionMixin on WebSocketHandlerBase, WidgetsBindingObserver {
     if (isConnecting &&
         connectionCompleter != null &&
         !connectionCompleter!.isCompleted) {
-      debugPrint('⌛ Waiting for existing connection attempt...');
+      AppLogger.networkEvent('⌛ Waiting for existing connection attempt...');
       return connectionCompleter!.future;
     }
 
@@ -55,7 +56,7 @@ mixin WebSocketConnectionMixin on WebSocketHandlerBase, WidgetsBindingObserver {
   }) async {
     // ✅ FIX: Connection mutex to prevent duplicate attempts
     if (isConnecting) {
-      debugPrint(
+      AppLogger.warning(
         '⚠️ Connection already in progress, skipping duplicate attempt',
       );
       return;
@@ -87,7 +88,9 @@ mixin WebSocketConnectionMixin on WebSocketHandlerBase, WidgetsBindingObserver {
           channel = null;
         }
 
-        debugPrint('Connecting to WebSocket (ID: $currentId): $lastUrl');
+        AppLogger.networkEvent(
+          'Connecting to WebSocket (ID: $currentId): $lastUrl',
+        );
         channel = WebSocketChannel.connect(Uri.parse(lastUrl!));
 
         // ✅ FIX: Wait for handshake before sending AUTH
@@ -96,11 +99,13 @@ mixin WebSocketConnectionMixin on WebSocketHandlerBase, WidgetsBindingObserver {
 
         // If we were interrupted by a newer connection, stop here
         if (currentId != connectionId) {
-          debugPrint('🚫 Connection ID $currentId superseded by $connectionId');
+          AppLogger.networkEvent(
+            '🚫 Connection ID $currentId superseded by $connectionId',
+          );
           return;
         }
 
-        debugPrint(
+        AppLogger.networkEvent(
           '✅ WebSocket Handshake Ready (ID: $currentId) - Sending AUTH',
         );
 
@@ -108,11 +113,17 @@ mixin WebSocketConnectionMixin on WebSocketHandlerBase, WidgetsBindingObserver {
         sendAuthRequest(firebaseToken, displayName: displayName);
       } catch (e) {
         if (currentId != connectionId) return;
-        debugPrint('🚨 [WebSocket] Connection Error (ID: $currentId): $e');
+        AppLogger.networkError(
+          '🚨 [WebSocket] Connection Error (ID: $currentId)',
+          exception: e,
+        );
         handleConnectionFailure(firebaseToken, displayName: displayName);
       }
     } catch (e) {
-      debugPrint('🚨 [WebSocket] Unexpected error in _attemptConnection: $e');
+      AppLogger.networkError(
+        '🚨 [WebSocket] Unexpected error in _attemptConnection',
+        exception: e,
+      );
       if (currentId == connectionId) {
         handleConnectionFailure(firebaseToken, displayName: displayName);
       }
@@ -131,7 +142,7 @@ mixin WebSocketConnectionMixin on WebSocketHandlerBase, WidgetsBindingObserver {
     authTimeoutTimer?.cancel();
     authTimeoutTimer = Timer(_authTimeout, () {
       if (connectionStatus != ConnectionStatus.connected) {
-        debugPrint('❌ AUTH_OK timeout - no response from server');
+        AppLogger.networkError('❌ AUTH_OK timeout - no response from server');
         // Check if channel is still open before closing
         if (channel != null) {
           channel?.sink.close(1008, 'Auth timeout');
@@ -172,7 +183,7 @@ mixin WebSocketConnectionMixin on WebSocketHandlerBase, WidgetsBindingObserver {
       final jitter = Duration(milliseconds: random.nextInt(500));
       final delay = baseDelay + jitter;
 
-      debugPrint(
+      AppLogger.networkEvent(
         'Reconnecting in ${delay.inSeconds}s (attempt $reconnectAttempts/$_maxReconnectAttempts)',
       );
 
@@ -184,7 +195,7 @@ mixin WebSocketConnectionMixin on WebSocketHandlerBase, WidgetsBindingObserver {
 
       updateConnectionStatus(ConnectionStatus.reconnecting);
     } else {
-      debugPrint('Max reconnection attempts reached');
+      AppLogger.networkError('Max reconnection attempts reached');
       updateConnectionStatus(ConnectionStatus.failed);
 
       // Final failure - complete the completer with error
@@ -205,7 +216,9 @@ mixin WebSocketConnectionMixin on WebSocketHandlerBase, WidgetsBindingObserver {
   void updateConnectionStatus(ConnectionStatus status) {
     final previousStatus = connectionStatus;
     connectionStatus = status;
-    debugPrint('🔌 [WebSocket] Status changed: $previousStatus -> $status');
+    AppLogger.networkEvent(
+      '🔌 [WebSocket] Status changed: $previousStatus -> $status',
+    );
 
     if (!connectionStatusController.isClosed) {
       connectionStatusController.add(status);
@@ -222,11 +235,11 @@ mixin WebSocketConnectionMixin on WebSocketHandlerBase, WidgetsBindingObserver {
     // Provide user-friendly feedback based on status changes
     if (status == ConnectionStatus.connected &&
         previousStatus != ConnectionStatus.connected) {
-      debugPrint('✅ Connected to server');
+      AppLogger.networkEvent('✅ Connected to server');
     } else if (status == ConnectionStatus.reconnecting) {
-      debugPrint('🔄 Attempting to reconnect...');
+      AppLogger.networkEvent('🔄 Attempting to reconnect...');
     } else if (status == ConnectionStatus.failed) {
-      debugPrint('❌ Connection failed');
+      AppLogger.networkEvent('❌ Connection failed');
       // Emit error to notify user
       if (!errorController.isClosed) {
         errorController.add(
@@ -237,7 +250,7 @@ mixin WebSocketConnectionMixin on WebSocketHandlerBase, WidgetsBindingObserver {
       }
     } else if (status == ConnectionStatus.disconnected &&
         previousStatus == ConnectionStatus.connected) {
-      debugPrint('📡 Disconnected from server');
+      AppLogger.networkEvent('📡 Disconnected from server');
     }
   }
 
@@ -248,7 +261,7 @@ mixin WebSocketConnectionMixin on WebSocketHandlerBase, WidgetsBindingObserver {
       if (!force && isQueuable(message['type'] as String?)) {
         queueMessage(message);
       } else {
-        debugPrint('⚠️ Cannot send message: WebSocket channel is null');
+        AppLogger.warning('⚠️ Cannot send message: WebSocket channel is null');
       }
       return;
     }
@@ -257,10 +270,10 @@ mixin WebSocketConnectionMixin on WebSocketHandlerBase, WidgetsBindingObserver {
       if (isQueuable(message['type'] as String?)) {
         queueMessage(message);
       } else {
-        debugPrint(
+        AppLogger.warning(
           '⚠️ Cannot send message: Not connected (status: $connectionStatus)',
         );
-        debugPrint('   Dropped message type: ${message['type']}');
+        AppLogger.info('   Dropped message type: ${message['type']}');
       }
       return;
     }
@@ -269,13 +282,13 @@ mixin WebSocketConnectionMixin on WebSocketHandlerBase, WidgetsBindingObserver {
       // ✅ FIX #8: Add sequence number for ordering validation
       message['seq'] = nextSequence++;
       final encoded = jsonEncode(message);
-      debugPrint(
+      AppLogger.networkEvent(
         '📤 [WebSocket] Sending: ${message['type']} (seq: ${message['seq']})',
       );
       channel!.sink.add(encoded);
     } catch (e) {
-      debugPrint('❌ Failed to send message: $e');
-      debugPrint('   Message type: ${message['type']}');
+      AppLogger.networkError('❌ Failed to send message', exception: e);
+      AppLogger.info('   Message type: ${message['type']}');
 
       if (isQueuable(message['type'] as String?)) {
         queueMessage(message);
@@ -309,7 +322,7 @@ mixin WebSocketConnectionMixin on WebSocketHandlerBase, WidgetsBindingObserver {
     // Deduplicate: remove existing message of same type
     messageQueue.removeWhere((m) => m['type'] == message['type']);
     messageQueue.add(message);
-    debugPrint(
+    AppLogger.info(
       '📫 Queued message: ${message['type']} (${messageQueue.length} in queue)',
     );
   }
@@ -320,7 +333,7 @@ mixin WebSocketConnectionMixin on WebSocketHandlerBase, WidgetsBindingObserver {
       return;
     }
 
-    debugPrint('📤 Processing ${messageQueue.length} queued messages...');
+    AppLogger.info('📤 Processing ${messageQueue.length} queued messages...');
     final currentQueue = List<Map<String, dynamic>>.from(messageQueue);
     messageQueue.clear();
 
@@ -345,7 +358,7 @@ mixin WebSocketConnectionMixin on WebSocketHandlerBase, WidgetsBindingObserver {
             jsonEncode({'type': 'PING', 'seq': nextSequence++}),
           );
         } catch (e) {
-          debugPrint('⚠️ Heartbeat send failed: $e');
+          AppLogger.networkError('⚠️ Heartbeat send failed', exception: e);
         }
       }
 
@@ -361,7 +374,7 @@ mixin WebSocketConnectionMixin on WebSocketHandlerBase, WidgetsBindingObserver {
       }
 
       if (idleTime > currentTimeout) {
-        debugPrint(
+        AppLogger.networkError(
           '! Watchdog: No server activity for ${idleTime.inSeconds}s (Limit: ${currentTimeout.inSeconds}s). Reconnecting...',
         );
         // Stop heartbeat BEFORE closing to prevent send-after-close errors
@@ -382,18 +395,20 @@ mixin WebSocketConnectionMixin on WebSocketHandlerBase, WidgetsBindingObserver {
   }
 
   void handleLifecycleChange(AppLifecycleState state) {
-    debugPrint('🔄 App lifecycle changed: $state');
+    AppLogger.info('🔄 App lifecycle changed: $state');
 
     switch (state) {
       case AppLifecycleState.paused:
       case AppLifecycleState.inactive:
         // Keep connection alive in background/inactive state indefinitely
-        debugPrint('📱 App backgrounded/inactive, keeping connection alive');
+        AppLogger.info(
+          '📱 App backgrounded/inactive, keeping connection alive',
+        );
         break;
 
       case AppLifecycleState.resumed:
         // App foregrounded - attempt reconnection with delay
-        debugPrint('📱 App resumed, scheduling connection check');
+        AppLogger.info('📱 App resumed, scheduling connection check');
         scheduleReconnectIfNeeded();
         break;
 
@@ -416,13 +431,15 @@ mixin WebSocketConnectionMixin on WebSocketHandlerBase, WidgetsBindingObserver {
         try {
           if (connectionStatus != ConnectionStatus.connected &&
               connectionStatus != ConnectionStatus.connecting) {
-            debugPrint('🔄 Scheduled reconnection triggered');
+            AppLogger.info('🔄 Scheduled reconnection triggered');
             await attemptAutoReconnect();
           } else {
-            debugPrint('⚠️ Reconnect skipped: Already connected or connecting');
+            AppLogger.info(
+              '⚠️ Reconnect skipped: Already connected or connecting',
+            );
           }
         } catch (e) {
-          debugPrint('❌ Scheduled reconnect error: $e');
+          AppLogger.error('❌ Scheduled reconnect error', exception: e);
         }
       },
     );
@@ -430,9 +447,9 @@ mixin WebSocketConnectionMixin on WebSocketHandlerBase, WidgetsBindingObserver {
 
   /// Force reconnection attempt (e.g., from notification handler)
   Future<void> forceReconnect() async {
-    debugPrint('🔄 Force reconnect requested');
+    AppLogger.info('🔄 Force reconnect requested');
     if (connectionStatus == ConnectionStatus.connected) {
-      debugPrint('⚠️ Already connected, skipping force reconnect');
+      AppLogger.info('⚠️ Already connected, skipping force reconnect');
       return;
     }
     return attemptAutoReconnect();
@@ -443,14 +460,14 @@ mixin WebSocketConnectionMixin on WebSocketHandlerBase, WidgetsBindingObserver {
     if (connectionStatus == ConnectionStatus.connected ||
         connectionStatus == ConnectionStatus.connecting ||
         isConnecting) {
-      debugPrint('⚠️ Auto-reconnect skipped: Already connected/connecting');
+      AppLogger.info('⚠️ Auto-reconnect skipped: Already connected/connecting');
       return;
     }
 
     try {
       final user = sl.authRepository.currentUser;
       if (user == null) {
-        debugPrint('❌ No user found for auto-reconnect');
+        AppLogger.warning('❌ No user found for auto-reconnect');
         return;
       }
 
@@ -459,13 +476,13 @@ mixin WebSocketConnectionMixin on WebSocketHandlerBase, WidgetsBindingObserver {
       final displayName = user.displayName;
 
       if (token != null && lastUrl != null) {
-        debugPrint('🔄 Auto-reconnecting with fresh token...');
+        AppLogger.info('🔄 Auto-reconnecting with fresh token...');
         // Reset attempts to 0 for a fresh start on resume
         reconnectAttempts = 0;
         await connect(lastUrl!, token, displayName: displayName);
       }
     } catch (e) {
-      debugPrint('❌ Auto-reconnect failed: $e');
+      AppLogger.error('❌ Auto-reconnect failed', exception: e);
       // If token refresh fails, user needs to re-authenticate
       if (!errorController.isClosed) {
         errorController.add(

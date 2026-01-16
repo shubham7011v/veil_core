@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
+import 'core/utils/app_logger.dart';
 import 'core/config/app_config.dart';
 import 'core/theme/app_theme.dart';
 import 'core/theme/bloc/theme_bloc.dart';
@@ -38,17 +39,16 @@ Future<void> mainCommon({required String env, required String appName}) async {
   GlobalErrorHandler.run(() async {
     try {
       _bootStep = 'Initializing $env environment';
-      debugPrint('🚀 [STARTUP] $_bootStep...');
+      AppLogger.info('🚀 [STARTUP] $_bootStep...');
 
       // Bindings are initialized inside GlobalErrorHandler.run
       FlutterNativeSplash.preserve(widgetsBinding: WidgetsBinding.instance);
 
       // Initialize Core Configuration Singleton
       _bootStep = '1. Initializing AppConfig';
-      debugPrint('🚀 [STARTUP] $_bootStep...');
       try {
         await AppConfig.initialize(env: env, appName: appName);
-        debugPrint('🚀 [STARTUP] 1. AppConfig initialized');
+        AppLogger.info('🚀 [STARTUP] 1. AppConfig initialized');
       } catch (e) {
         throw 'AppConfig Initialization Failed: $e';
       }
@@ -60,19 +60,21 @@ Future<void> mainCommon({required String env, required String appName}) async {
           : dev.DefaultFirebaseOptions.currentPlatform;
 
       _bootStep = '2. Initializing Firebase';
-      debugPrint('🚀 [STARTUP] $_bootStep...');
+      AppLogger.info('🚀 [STARTUP] $_bootStep...');
       try {
         // Check if Firebase is already initialized to prevent duplicate-app error
         if (Firebase.apps.isEmpty) {
           await Firebase.initializeApp(options: options);
-          debugPrint('🚀 [STARTUP] 2. Firebase initialized');
+          AppLogger.info('🚀 [STARTUP] 2. Firebase initialized');
         } else {
-          debugPrint('🚀 [STARTUP] 2. Firebase already initialized, skipping');
+          AppLogger.info(
+            '🚀 [STARTUP] 2. Firebase already initialized, skipping',
+          );
         }
       } on FirebaseException catch (e) {
         // Handle duplicate app error gracefully
         if (e.code == 'duplicate-app') {
-          debugPrint(
+          AppLogger.info(
             '🚀 [STARTUP] 2. Firebase app already exists, using existing instance',
           );
         } else {
@@ -84,27 +86,27 @@ Future<void> mainCommon({required String env, required String appName}) async {
 
       // Initialize Remote Config Service (Fetch values from Firebase)
       _bootStep = '3. Initializing Remote Config';
-      debugPrint('🚀 [STARTUP] $_bootStep...');
       try {
         await RemoteConfigService.instance.initialize().timeout(
           const Duration(seconds: 10),
-          onTimeout: () =>
-              debugPrint('🚀 [STARTUP] 3. Remote Config Timeout (continuing)'),
+          onTimeout: () => AppLogger.info(
+            '🚀 [STARTUP] 3. Remote Config Timeout (continuing)',
+          ),
         );
-        debugPrint('🚀 [STARTUP] 3. Remote Config initialized');
+        AppLogger.info('🚀 [STARTUP] 3. Remote Config initialized');
       } catch (e) {
         // Non-fatal, continue
-        debugPrint('🚀 [STARTUP] 3. Remote Config Failed (continuing): $e');
+        AppLogger.info('🚀 [STARTUP] 3. Remote Config Failed (continuing): $e');
       }
 
       // Fully load config
       _bootStep = '4. Loading Config';
       config.load();
-      debugPrint('🚀 [STARTUP] 4. Config loaded');
+      AppLogger.info('🚀 [STARTUP] 4. Config loaded');
 
       // Connectivity Doctor & Server Config Sync
       _bootStep = '5. Syncing Server Config';
-      debugPrint('🚀 [STARTUP] $_bootStep...');
+      AppLogger.info('🚀 [STARTUP] $_bootStep...');
       try {
         final client = HttpClient();
         client.connectionTimeout = const Duration(seconds: 5);
@@ -117,20 +119,20 @@ Future<void> mainCommon({required String env, required String appName}) async {
           final body = await response.transform(utf8.decoder).join();
           final serverData = json.decode(body) as Map<String, dynamic>;
           config.updateFromServer(serverData);
-          debugPrint('🚀 [STARTUP] 5. Server Config Synced: $serverData');
+          AppLogger.info('🚀 [STARTUP] 5. Server Config Synced: $serverData');
         } else {
-          debugPrint(
+          AppLogger.info(
             '🚀 [STARTUP] 5. Server Config Fetch Failed: Status ${response.statusCode}',
           );
         }
       } catch (e) {
-        debugPrint(
+        AppLogger.info(
           '🚀 [STARTUP] 5. Server Config Sync Failed (continuing): $e',
         );
       }
 
       _bootStep = '6. Activating App Check';
-      debugPrint('🚀 [STARTUP] $_bootStep...');
+      AppLogger.info('🚀 [STARTUP] $_bootStep...');
       try {
         // Only run App Check if Firebase is initialized
         if (Firebase.apps.isNotEmpty) {
@@ -142,40 +144,42 @@ Future<void> mainCommon({required String env, required String appName}) async {
                 providerApple: const AppleDeviceCheckProvider(),
               )
               .timeout(const Duration(seconds: 5));
-          debugPrint('🚀 [STARTUP] 6. App Check activated');
+          AppLogger.info('🚀 [STARTUP] 6. App Check activated');
         }
       } catch (e) {
         // App Check failure can be fatal or non-fatal depending on security requirements.
         // For debugging, let's catch it but log clearly.
-        debugPrint('🚀 [STARTUP] 6. App Check Failed (WARNING): $e');
+        AppLogger.info('🚀 [STARTUP] 6. App Check Failed (WARNING): $e');
       }
 
       // Initialize Service Locator
       _bootStep = '7. Setting up Service Locator';
-      debugPrint('🚀 [STARTUP] $_bootStep...');
       await di.sl.setup();
-      debugPrint('🚀 [STARTUP] 7. Service Locator ready');
+      AppLogger.info('🚀 [STARTUP] 7. Service Locator ready');
 
       // Initialize Notifications
       _bootStep = '8. Initializing Notifications';
-      debugPrint('🚀 [STARTUP] $_bootStep...');
+      AppLogger.info('🚀 [STARTUP] $_bootStep...');
       try {
         await di.sl.notificationService.initialize().timeout(
           const Duration(seconds: 5),
         );
-        debugPrint('🚀 [STARTUP] 8. Notifications initialized');
+        AppLogger.info('🚀 [STARTUP] 8. Notifications initialized');
       } catch (e) {
-        debugPrint(
+        AppLogger.info(
           "🚀 [STARTUP] 8. Notification initialization failed (continuing): $e",
         );
       }
 
       _bootStep = '9. Running App';
-      debugPrint('🚀 [STARTUP] runApp() called');
+      AppLogger.info('🚀 [STARTUP] runApp() called');
       runApp(const BluffApp());
     } catch (e, stack) {
-      debugPrint('🔥 CRITICAL STARTUP ERROR: $e');
-      debugPrintStack(stackTrace: stack);
+      AppLogger.error(
+        '🔥 CRITICAL STARTUP ERROR: $e',
+        exception: e,
+        stackTrace: stack,
+      );
 
       // Report to Crashlytics if available and initialized
       try {

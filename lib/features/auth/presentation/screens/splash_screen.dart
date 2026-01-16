@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_native_splash/flutter_native_splash.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import '../../../../core/navigation/fade_route.dart';
+import '../../../../core/utils/app_logger.dart';
 import '../bloc/auth_bloc.dart';
 import '../bloc/auth_event.dart';
 import '../bloc/auth_state.dart';
@@ -32,22 +33,22 @@ class _SplashScreenState extends State<SplashScreen> {
     final onboardingRepo = di.sl.onboardingRepository;
 
     // 1. If currently Unauthenticated or AuthInitial, attempt silent sign-in
-    debugPrint('🔍 [SplashScreen] Initial State: ${authBloc.state}');
+    AppLogger.info('🔍 [SplashScreen] Initial State: ${authBloc.state}');
     if (authBloc.state is Unauthenticated || authBloc.state is AuthInitial) {
-      debugPrint('🔍 [SplashScreen] Attempting Silent Sign-in...');
+      AppLogger.info('🔍 [SplashScreen] Attempting Silent Sign-in...');
       authBloc.add(AuthSilentSignInRequested());
 
       // Wait for AuthBloc to resolve (timeout after 2s for safety)
       try {
         await authBloc.stream
             .firstWhere((state) {
-              debugPrint('🔍 [SplashScreen] Stream State Update: $state');
+              AppLogger.info('🔍 [SplashScreen] Stream State Update: $state');
               return state is! AuthLoading && state is! AuthInitial;
             })
             .timeout(const Duration(seconds: 2));
       } catch (e) {
         // Log or handle timeout
-        debugPrint('Silent sign-in timed out or failed: $e');
+        AppLogger.error('Silent sign-in timed out or failed', exception: e);
       }
     }
 
@@ -57,7 +58,7 @@ class _SplashScreenState extends State<SplashScreen> {
     FlutterNativeSplash.remove();
 
     final state = authBloc.state;
-    debugPrint('🔍 [SplashScreen] Final State Decision: $state');
+    AppLogger.info('🔍 [SplashScreen] Final State Decision: $state');
 
     if (state is Authenticated) {
       Navigator.of(context).pushReplacementNamed('/court_entry');

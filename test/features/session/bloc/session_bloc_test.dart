@@ -4,6 +4,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:mocktail/mocktail.dart';
 import 'package:veil_core/features/session/session.dart';
 import 'package:veil_core/core/engine/engine.dart' as engine;
+import 'package:veil_core/core/error/failure.dart';
 
 class MockGameSessionHandler extends Mock
     implements engine.GameSessionHandler {}
@@ -12,11 +13,15 @@ void main() {
   late MockGameSessionHandler mockHandler;
   late StreamController<engine.SessionState> stateController;
   late StreamController<engine.SessionEventType> eventController;
+  late StreamController<Map<String, dynamic>> chatController;
+  late StreamController<Failure> errorController;
 
   setUp(() {
     mockHandler = MockGameSessionHandler();
     stateController = StreamController<engine.SessionState>.broadcast();
     eventController = StreamController<engine.SessionEventType>.broadcast();
+    chatController = StreamController<Map<String, dynamic>>.broadcast();
+    errorController = StreamController<Failure>.broadcast();
 
     when(
       () => mockHandler.sessionStateStream,
@@ -24,6 +29,11 @@ void main() {
     when(
       () => mockHandler.eventStream,
     ).thenAnswer((_) => eventController.stream);
+    when(() => mockHandler.chatStream).thenAnswer((_) => chatController.stream);
+    when(
+      () => mockHandler.errorStream,
+    ).thenAnswer((_) => errorController.stream);
+    when(() => mockHandler.typingStatus).thenReturn({});
     when(() => mockHandler.lastMove).thenReturn(null);
     when(() => mockHandler.isRevealingBluff).thenReturn(false);
     when(() => mockHandler.pNames).thenReturn({'me': 'You'});
@@ -39,6 +49,8 @@ void main() {
   tearDown(() {
     stateController.close();
     eventController.close();
+    chatController.close();
+    errorController.close();
   });
 
   group('SessionBloc', () {

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../../../../core/config/feature_flags.dart';
+import '../../../../core/utils/app_logger.dart';
 import '../../../../core/theme/colors.dart';
 import '../../../../core/navigation/app_router.dart';
 import '../../../../core/theme/bloc/theme_bloc.dart';
@@ -42,7 +43,9 @@ class _HomeScreenState extends State<HomeScreen> {
       }
     } else {
       // Fallback: If for some reason it's not ready (e.g. error in init), log it.
-      debugPrint('AudioService not initialized yet. Skipping auto-play.');
+      AppLogger.warning(
+        'AudioService not initialized yet. Skipping auto-play.',
+      );
     }
   }
 
