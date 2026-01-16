@@ -22,6 +22,7 @@ const (
 	MsgTypeJoinPrivateRoom   = "JOIN_PRIVATE_ROOM"
 	MsgTypeStartPrivateGame  = "START_PRIVATE_GAME"
 	MsgTypeLeaveRoom         = "LEAVE_ROOM"
+	MsgTypeClientReady       = "CLIENT_READY" // Client-ready protocol
 
 	// Server -> Client
 	MsgTypeAuthOk          = "AUTH_OK"

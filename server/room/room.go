@@ -755,7 +755,7 @@ func (r *Room) processAction(action GameAction) {
 			r.broadcast <- bytes
 		}
 
-	case "CLIENT_READY":
+	case protocol.MsgTypeClientReady:
 		// Client has signaled their UI is ready for game start
 		log.Printf("Client %s signaled ready in room %s", client.ID, r.ID)
 		r.readyClients[client.ID] = true
@@ -849,6 +849,7 @@ func isValidGameMessageType(msgType string) bool {
 		protocol.MsgTypeEmoji:            true,
 		protocol.MsgTypeTyping:           true,
 		protocol.MsgTypeLeaveRoom:        true,
+		protocol.MsgTypeClientReady:      true,
 	}
 	return validTypes[msgType]
 }
@@ -981,7 +982,6 @@ func (r *Room) processBotMove(bot *game.Player) {
 		}
 	}
 }
-
 
 // checkAllPlayersReady checks if all players have signaled ready and starts the game
 // This is called after a client sends CLIENT_READY message
