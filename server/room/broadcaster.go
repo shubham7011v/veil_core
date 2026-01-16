@@ -144,11 +144,10 @@ func (b *Broadcaster) BroadcastStateLocked() {
 	}()
 
 	// OPTIMIZATION: Build shared state once instead of per-client
-	sharedState := map[string]interface{}{
+	sharedBaseState := map[string]interface{}{
 		"phase":              b.room.game.Phase,
 		"startTime":          b.room.game.StartTime,
-		"turnStartTime":      b.room.game.TurnStartTime, // ✅ FIX #8: Include turnStartTime
-		"participants":       b.room.game.Participants,
+		"turnStartTime":      b.room.game.TurnStartTime,
 		"pileCount":          b.room.game.PileCount,
 		"activePlayerId":     b.room.game.ActivePlayerID(),
 		"declaredRank":       b.room.game.DeclaredRank,
@@ -163,19 +162,23 @@ func (b *Broadcaster) BroadcastStateLocked() {
 
 	// Add lastMove if exists
 	if b.room.game.LastMove != nil {
-		sharedState["lastMove"] = map[string]interface{}{
+		sharedBaseState["lastMove"] = map[string]interface{}{
 			"playerId":     b.room.game.LastMove.PlayerID,
 			"declaredRank": b.room.game.LastMove.DeclaredRank,
 		}
 	}
 
 	for client := range b.room.clients {
+		// Personalized participants for this client
+		participants := b.room.game.GetParticipantsView(client.ID)
+
 		if client.IsSpectator {
 			// Spectators get shared state + empty hand
 			view := make(map[string]interface{})
-			for k, v := range sharedState {
+			for k, v := range sharedBaseState {
 				view[k] = v
 			}
+			view["participants"] = participants
 			view["myHand"] = []interface{}{}
 			view["isSpectator"] = true
 
@@ -192,9 +195,10 @@ func (b *Broadcaster) BroadcastStateLocked() {
 		}
 
 		view := make(map[string]interface{})
-		for k, v := range sharedState {
+		for k, v := range sharedBaseState {
 			view[k] = v
 		}
+		view["participants"] = participants
 		view["myHand"] = player.Hand
 		view["isSpectator"] = false
 
@@ -214,21 +218,23 @@ func (b *Broadcaster) BroadcastRoomInfo() {
 // BroadcastRoomInfoLocked sends private room information to all clients
 // Caller must hold room.mu
 func (b *Broadcaster) BroadcastRoomInfoLocked() {
-	info := map[string]interface{}{
-		"roomCode":     b.room.code,
-		"roomName":     b.room.name,
-		"hostId":       b.room.hostID,
-		"maxPlayers":   b.room.maxPlayers,
-		"bootAmount":   b.room.bootAmount,
-		"participants": b.room.game.Participants,
-		"phase":        b.room.game.Phase,
-		"createdAt":    b.room.CreationTime,
-	}
-
-	msg := protocol.NewMessage(protocol.MsgTypeRoomUpdate, info)
-	bytes, _ := json.Marshal(msg)
-
 	for client := range b.room.clients {
+		// Personalized participants for this client
+		participants := b.room.game.GetParticipantsView(client.ID)
+
+		info := map[string]interface{}{
+			"roomCode":     b.room.code,
+			"roomName":     b.room.name,
+			"hostId":       b.room.hostID,
+			"maxPlayers":   b.room.maxPlayers,
+			"bootAmount":   b.room.bootAmount,
+			"participants": participants,
+			"phase":        b.room.game.Phase,
+			"createdAt":    b.room.CreationTime,
+		}
+
+		msg := protocol.NewMessage(protocol.MsgTypeRoomUpdate, info)
+		bytes, _ := json.Marshal(msg)
 		b.sendToClient(client, bytes, true) // Room info is critical
 	}
 }

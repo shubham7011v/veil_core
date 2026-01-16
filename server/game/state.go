@@ -85,7 +85,7 @@ func (g *Game) AddPlayer(id, name, avatar string) error {
 	p := NewPlayer(id, name, avatar)
 	g.Players = append(g.Players, p)
 	g.PlayerMap[id] = p
-	g.SyncParticipants("") // Public view initially
+	g.SyncParticipants() // Public view initially
 	return nil
 }
 
@@ -125,7 +125,7 @@ func (g *Game) RemovePlayer(id string) {
 		g.ActiveIdx = 0
 	}
 
-	g.SyncParticipants("")
+	g.SyncParticipants()
 }
 
 func (g *Game) Start() error {
@@ -173,49 +173,49 @@ func (g *Game) Start() error {
 	if len(g.TurnOrder) > 0 {
 		g.CurrentPlayerID = g.TurnOrder[0]
 	}
-	g.SyncParticipants("") // Refresh with new turn order
+	g.SyncParticipants() // Refresh with new turn order
 
 	return nil
 }
 
-// SyncParticipants updates the public view struct.
+// GetParticipantsView generates a personalized view of participants for a specific owner.
 // ownerID is the ID of the player this view is being generated for.
-// If empty, it's a generic public view (spectator).
-func (g *Game) SyncParticipants(ownerID string) {
-	g.Participants = make([]PublicParticipant, 0, len(g.Players))
+func (g *Game) GetParticipantsView(ownerID string) []PublicParticipant {
 	activeID := ""
 	if len(g.TurnOrder) > 0 {
 		activeID = g.TurnOrder[g.ActiveIdx]
 	}
 
-	// ✅ FIX: Build participants list
-	// if Game is active -> Use TurnOrder (for correct gameplay order)
-	// if Lobby (TurnOrder empty) -> Use g.Players (for joining order)
+	participants := make([]PublicParticipant, 0, len(g.Players))
 	if len(g.TurnOrder) > 0 {
 		for _, playerID := range g.TurnOrder {
 			p := g.PlayerMap[playerID]
 			if p == nil {
 				continue
 			}
-			g.appendParticipant(p, ownerID, activeID)
+			participants = append(participants, g.createPublicParticipant(p, ownerID, activeID))
 		}
 	} else {
-		// Fallback for Lobby Phase
 		for _, p := range g.Players {
-			g.appendParticipant(p, ownerID, activeID)
+			participants = append(participants, g.createPublicParticipant(p, ownerID, activeID))
 		}
 	}
+	return participants
 }
 
-// Helper to avoid duplication
-func (g *Game) appendParticipant(p *Player, ownerID, activeID string) {
-	// Only include real ID if it's the owner's own data
+// SyncParticipants updates the public shared view (spectator view).
+func (g *Game) SyncParticipants() {
+	g.Participants = g.GetParticipantsView("")
+}
+
+// createPublicParticipant creates a PublicParticipant struct, optionally revealing ID to the owner.
+func (g *Game) createPublicParticipant(p *Player, ownerID, activeID string) PublicParticipant {
 	var displayID string
 	if p.ID == ownerID {
 		displayID = p.ID
 	}
 
-	g.Participants = append(g.Participants, PublicParticipant{
+	return PublicParticipant{
 		ID:             displayID,
 		SessionID:      p.SessionID,
 		Name:           p.Name,
@@ -224,7 +224,7 @@ func (g *Game) appendParticipant(p *Player, ownerID, activeID string) {
 		IsDisconnected: p.IsDisconnected,
 		UnitCount:      len(p.Hand),
 		IsActive:       (p.ID == activeID) && (g.Phase != PhaseFinished),
-	})
+	}
 }
 
 // Helper (Duplicate of db.CalculateRank to avoid package cycle if needed, or move to common)

@@ -20,7 +20,8 @@ type GameEngine interface {
 	Start() error
 
 	// Sync & Helpers
-	SyncParticipants(ownerID string)
+	SyncParticipants()
+	GetParticipantsView(ownerID string) []PublicParticipant
 	AddToLog(msg string)
 }
 
@@ -54,4 +55,9 @@ func (g *GameEngineImpl) GetPlayerHand(playerID string) []Card {
 		return p.Hand
 	}
 	return []Card{}
+}
+
+// GetParticipantsView returns a personalized view of participants
+func (g *GameEngineImpl) GetParticipantsView(ownerID string) []PublicParticipant {
+	return g.Game.GetParticipantsView(ownerID)
 }

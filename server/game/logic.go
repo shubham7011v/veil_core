@@ -62,7 +62,7 @@ func (g *Game) PlayCards(playerID string, cardIDs []string, declaredRank Rank) e
 
 	g.AddToLog(fmt.Sprintf("%s claimed %d %s(s)", g.PlayerMap[playerID].Name, len(cardIDs), declaredRank))
 
-	g.SyncParticipants("")
+	g.SyncParticipants()
 
 	// CHECK WIN CONDITION: Player reaches 0 cards
 	if len(p.Hand) == 0 {
@@ -132,7 +132,7 @@ func (g *Game) ResolveChallenge(challengerID string) string {
 	pileCount := g.PileCount
 	g.GivePileTo(loserID)
 	g.ResetRound()
-	g.SyncParticipants("")
+	g.SyncParticipants()
 
 	g.SetTurnMessages(winnerID)
 
@@ -184,7 +184,7 @@ func (g *Game) Pass(playerID string) error {
 		g.AdvanceTurn()
 	}
 
-	g.SyncParticipants("")
+	g.SyncParticipants()
 	return nil
 }
 

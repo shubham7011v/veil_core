@@ -38,10 +38,12 @@ class OpponentRow extends StatelessWidget {
         child: Row(
           mainAxisAlignment: MainAxisAlignment.spaceEvenly,
           children: opponents.map((p) {
-            return ParticipantAvatar(
-              key: avatarKeys[p.id],
-              participant: p,
-              size: 65,
+            return Flexible(
+              child: ParticipantAvatar(
+                key: avatarKeys[p.id],
+                participant: p,
+                size: 60,
+              ),
             );
           }).toList(),
         ),
