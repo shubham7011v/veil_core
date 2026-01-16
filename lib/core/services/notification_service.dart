@@ -3,7 +3,7 @@ import 'package:flutter/foundation.dart';
 import 'package:veil_core/core/di/service_locator.dart';
 import 'package:veil_core/core/notifications/bloc/app_notification_event.dart';
 import 'package:veil_core/core/config/app_config.dart';
-import 'package:veil_core/core/engine/data/handlers/websocket_session_handler.dart';
+import 'package:veil_core/core/engine/domain/models/session_enums.dart';
 
 @pragma('vm:entry-point')
 Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {

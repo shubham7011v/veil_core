@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:io';
 import 'package:flutter/foundation.dart';
 import '../models/system_status.dart';
+import '../engine/domain/models/session_enums.dart';
 import '../engine/data/handlers/websocket_session_handler.dart';
 import '../../../features/auth/auth.dart';
 

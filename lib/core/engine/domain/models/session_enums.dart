@@ -1,3 +1,11 @@
+enum ConnectionStatus {
+  disconnected,
+  connecting,
+  connected,
+  reconnecting,
+  failed,
+}
+
 enum BotPersonality { conservative, aggressive, balanced, ghost }
 
 enum SessionEventType {

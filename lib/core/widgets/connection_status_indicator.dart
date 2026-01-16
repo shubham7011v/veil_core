@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import '../engine/data/handlers/websocket_session_handler.dart';
+import '../engine/domain/models/session_enums.dart';
 
 class ConnectionStatusIndicator extends StatelessWidget {
   final Stream<ConnectionStatus> statusStream;
