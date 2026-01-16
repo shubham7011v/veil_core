@@ -141,6 +141,19 @@ func (r *Room) Leave(client *Client) {
 }
 
 func (r *Room) HandleAction(action GameAction) {
+	defer func() {
+		if rec := recover(); rec != nil {
+			log.Printf("Warn: Dropped action from %s because room %s is closed (recovered: %v)", action.Client.ID, r.ID, rec)
+		}
+	}()
+
+	// Check if room is effectively closed to avoid panic where possible
+	select {
+	case <-r.quit:
+		return
+	default:
+	}
+
 	r.actions <- action
 }
 
@@ -276,8 +289,8 @@ func (r *Room) Run() {
 	tickCount := 0
 	defer func() {
 		if rec := recover(); rec != nil {
-			log.Printf("CRITICAL: Room %s panicked: %v", r.ID, rec)
-			// Optional: Try to restart or notify users of crash
+			log.Printf("CRITICAL: Room %s panicked: %v. Sending cleanup signal.", r.ID, rec)
+			// Ensure we don't just exit silently on panic, though the defer block continues below
 		}
 
 		// NOTIFY CLIENTS: Room is shutting down
@@ -358,11 +371,19 @@ func (r *Room) Run() {
 
 				// Check auto-start for public rooms
 				if !r.isPrivate && len(r.game.Players) >= r.maxPlayers && r.game.Phase == game.PhaseLobby {
-					// FORCE 4s delay as per user request to ensure clients load screen
-					const startDelay = 4
-					log.Printf("Lobby full in room %s. Starting %ds countdown...", r.ID, startDelay)
+					// ✅ UPDATED: Wait for CLIENT_READY signal from all players
+					// Use 15s as a fallback timeout, but checkAllPlayersReady() should trigger start earlier
+					const startDelay = 15
+					log.Printf("Lobby full in room %s. Starting %ds fallback countdown...", r.ID, startDelay)
 					r.game.Phase = game.PhaseStarting
 					r.game.StartTime = time.Now().Unix() + int64(startDelay)
+
+					// Pre-mark all Bots as ready immediately
+					for _, p := range r.game.Players {
+						if p.IsBot {
+							r.readyClients[p.ID] = true
+						}
+					}
 				}
 			}
 
