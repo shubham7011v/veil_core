@@ -53,7 +53,9 @@ class _SessionScreenState extends State<SessionScreen>
   Color _turnPopupColor = const Color(0xFFFFD700); // Default Gold
   Timer? _turnPopupTimer;
   // Track previous active player ID for turn change detection
-  String? _previousActivePlayerId;
+  String? _previousActivePlayerId; // Tracks state updates for popups
+  String? _visualActivePlayerId; // Tracks visual updates for UI masking
+  Timer? _visualUpdateTimer;
 
   @override
   void initState() {
@@ -102,6 +104,7 @@ class _SessionScreenState extends State<SessionScreen>
       }
     }
     _turnPopupTimer?.cancel();
+    _visualUpdateTimer?.cancel();
     _entryController.dispose();
     super.dispose();
   }
@@ -563,9 +566,42 @@ class _SessionScreenState extends State<SessionScreen>
         if (state.lastEvent != engine.SessionEventType.none) {
           _handleGameEvents(state.lastEvent, state);
         }
+
+        // SYNC VISUALS: Delay visual update if cards were just played
+        // This prevents the "Active Player" highlight from jumping to the next player
+        // while the previous player's cards are still flying.
+        _visualUpdateTimer?.cancel();
+        if (state.lastEvent == engine.SessionEventType.cardsPlayed) {
+          // Keep OLD ID (don't update _visualActivePlayerId yet)
+          // Schedule update after animation completes (approx 1s)
+          _visualUpdateTimer = Timer(const Duration(milliseconds: 1000), () {
+            if (mounted) {
+              setState(() {
+                _visualActivePlayerId = state.engineState.activeParticipantId;
+              });
+            }
+          });
+        } else {
+          // Immediate update for other events
+          setState(() {
+            _visualActivePlayerId = state.engineState.activeParticipantId;
+          });
+        }
       },
       child: BlocBuilder<SessionBloc, SessionBlocState>(
         builder: (context, state) {
+          // Initialize visual ID on first build if null
+          _visualActivePlayerId ??= state.engineState.activeParticipantId;
+
+          // Create masked state for UI rendering
+          final visualState = state.copyWith(
+            engineState: state.engineState.copyWith(
+              activeParticipantId:
+                  _visualActivePlayerId ??
+                  state.engineState.activeParticipantId,
+            ),
+          );
+
           // Note: _updateAvatarKeys is in listener, not here (avoid side effects in build)
 
           final showSpectatorView = state.engineState.isSpectator;
@@ -648,7 +684,7 @@ class _SessionScreenState extends State<SessionScreen>
                               ),
                             ),
                             child: SessionTopBar(
-                              state: state,
+                              state: visualState,
                               onChatTap: () => setState(() {
                                 _showChat = !_showChat;
                                 if (_showChat) _showEmoji = false;
@@ -683,7 +719,7 @@ class _SessionScreenState extends State<SessionScreen>
                               ),
                             ),
                             child: OpponentCarousel(
-                              state: state,
+                              state: visualState,
                               avatarKeys: _avatarKeys,
                             ),
                           ),
@@ -707,7 +743,7 @@ class _SessionScreenState extends State<SessionScreen>
                                     ),
                                   ),
                                   child: GameTableView(
-                                    state: state,
+                                    state: visualState,
                                     pileKey: _pileKey,
                                   ),
                                 ),
@@ -825,7 +861,7 @@ class _SessionScreenState extends State<SessionScreen>
                               ),
                               child: SessionStagingArea(
                                 key: _stagingKey,
-                                state: state,
+                                state: visualState,
                                 myAvatarKey: _avatarKeys[SessionIds.me]!,
                               ),
                             ),
@@ -859,7 +895,7 @@ class _SessionScreenState extends State<SessionScreen>
                                 ),
                               ),
                               child: SessionBottomControls(
-                                state: state,
+                                state: visualState,
                                 myAvatarKey: _avatarKeys[SessionIds.me]!,
                               ),
                             ),
