@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
+import '../../../../core/utils/app_logger.dart';
 import '../bloc/session_bloc.dart';
 import '../bloc/session_event.dart';
 import '../bloc/session_state.dart';
@@ -15,7 +16,7 @@ class GameTableView extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    debugPrint(
+    AppLogger.info(
       "GameTableView build: shouldShowRankSelector=${state.shouldShowRankSelector}, isRoundSet=${state.isRoundSet}, isSelectingRank=${state.isSelectingRank}",
     );
     return LayoutBuilder(

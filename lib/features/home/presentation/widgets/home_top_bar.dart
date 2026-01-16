@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import '../../../../core/theme/colors.dart';
+import '../../../../core/utils/app_logger.dart';
 import '../../../../core/di/service_locator.dart';
 import '../../../auth/domain/models/user_stats.dart';
 import '../../../../core/models/system_status.dart';
@@ -85,7 +86,10 @@ class HomeTopBar extends StatelessWidget {
                     : null,
                 onBackgroundImageError: (exception, stackTrace) {
                   // Silently handle the error
-                  // debugPrint('Failed to load profile image: $exception');
+                  AppLogger.warning(
+                    'Failed to load profile image',
+                    exception: exception,
+                  );
                 },
                 child: photoUrl.isEmpty
                     ? Icon(Icons.person, size: 20, color: palette.primary)

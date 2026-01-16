@@ -3,6 +3,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_crashlytics/firebase_crashlytics.dart';
+import '../utils/app_logger.dart';
 import 'failure.dart';
 
 /// specialized class to handle all uncaught errors in the application.
@@ -33,11 +34,11 @@ class GlobalErrorHandler {
     final message = _getErrorMessage(error);
 
     if (kDebugMode) {
-      debugPrint('--------------------------------');
-      debugPrint('Global Error Caught:');
-      debugPrint(message);
-      debugPrint('$stack');
-      debugPrint('--------------------------------');
+      AppLogger.error('--------------------------------');
+      AppLogger.error('Global Error Caught:');
+      AppLogger.error(message);
+      AppLogger.error('$stack');
+      AppLogger.error('--------------------------------');
     }
 
     // Report to Crashlytics if Firebase is initialized

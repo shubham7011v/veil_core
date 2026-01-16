@@ -1,7 +1,7 @@
 import 'dart:convert';
 import 'package:http/http.dart' as http;
 import 'package:firebase_auth/firebase_auth.dart';
-import 'package:flutter/foundation.dart';
+import '../../../../core/utils/app_logger.dart';
 import '../../../../core/config/app_config.dart';
 
 class AdminRepository {
@@ -26,21 +26,21 @@ class AdminRepository {
 
   Future<void> ping() async {
     final url = '$_baseUrl/admin/ping';
-    debugPrint('🚀 [ADMIN] Pinging: $url');
+    AppLogger.info('🚀 [ADMIN] Pinging: $url');
     final start = DateTime.now();
     try {
       final response = await http
           .get(Uri.parse(url))
           .timeout(const Duration(seconds: 5));
       final duration = DateTime.now().difference(start).inMilliseconds;
-      debugPrint(
+      AppLogger.info(
         '🚀 [ADMIN] Ping Response (${duration}ms): ${response.statusCode}',
       );
       if (response.statusCode != 200) {
         throw Exception('Ping failed: ${response.statusCode}');
       }
     } catch (e) {
-      debugPrint('🚀 [ADMIN] Ping Error: $e');
+      AppLogger.error('🚀 [ADMIN] Ping Error', exception: e);
       rethrow;
     }
   }
@@ -48,7 +48,7 @@ class AdminRepository {
   Future<Map<String, dynamic>> getStats() async {
     final headers = await _getAuthHeaders();
     final url = '$_baseUrl/admin/stats';
-    debugPrint('🚀 [ADMIN] Fetching Stats... ($url)');
+    AppLogger.info('🚀 [ADMIN] Fetching Stats... ($url)');
     final start = DateTime.now();
     try {
       final response = await http
@@ -56,18 +56,18 @@ class AdminRepository {
           .timeout(const Duration(seconds: 20));
 
       final duration = DateTime.now().difference(start).inMilliseconds;
-      debugPrint(
+      AppLogger.info(
         '🚀 [ADMIN] Stats Response (${duration}ms): ${response.statusCode}',
       );
 
       if (response.statusCode == 200) {
         return json.decode(response.body) as Map<String, dynamic>;
       } else {
-        debugPrint('🚀 [ADMIN] Stats Error Body: ${response.body}');
+        AppLogger.error('🚀 [ADMIN] Stats Error Body: ${response.body}');
         throw Exception('Failed to load stats: ${response.statusCode}');
       }
     } catch (e) {
-      debugPrint('🚀 [ADMIN] Stats Exception: $e');
+      AppLogger.error('🚀 [ADMIN] Stats Exception', exception: e);
       rethrow;
     }
   }
@@ -75,7 +75,7 @@ class AdminRepository {
   Future<List<dynamic>> getRooms() async {
     final headers = await _getAuthHeaders();
     final url = '$_baseUrl/admin/rooms';
-    debugPrint('🚀 [ADMIN] Fetching Rooms... ($url)');
+    AppLogger.info('🚀 [ADMIN] Fetching Rooms... ($url)');
     final start = DateTime.now();
     try {
       final response = await http
@@ -83,18 +83,18 @@ class AdminRepository {
           .timeout(const Duration(seconds: 20));
 
       final duration = DateTime.now().difference(start).inMilliseconds;
-      debugPrint(
+      AppLogger.info(
         '🚀 [ADMIN] Rooms Response (${duration}ms): ${response.statusCode}',
       );
 
       if (response.statusCode == 200) {
         return json.decode(response.body) as List<dynamic>;
       } else {
-        debugPrint('🚀 [ADMIN] Rooms Error Body: ${response.body}');
+        AppLogger.error('🚀 [ADMIN] Rooms Error Body: ${response.body}');
         throw Exception('Failed to load rooms: ${response.statusCode}');
       }
     } catch (e) {
-      debugPrint('🚀 [ADMIN] Rooms Exception: $e');
+      AppLogger.error('🚀 [ADMIN] Rooms Exception', exception: e);
       rethrow;
     }
   }

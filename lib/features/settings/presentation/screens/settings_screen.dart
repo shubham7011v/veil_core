@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
-import 'package:firebase_auth/firebase_auth.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../../../../core/theme/colors.dart';
 import '../../../../core/theme/bloc/theme_bloc.dart';
@@ -10,11 +9,20 @@ import '../../../../core/config/app_config.dart';
 import '../../../../core/constants/dimens.dart';
 import '../../../auth/auth.dart';
 import '../../../../core/di/service_locator.dart';
+import '../../../../core/utils/app_logger.dart';
 import '../../../../core/services/audio/audio_service_interface.dart';
 import '../../../../core/constants/sound_assets.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 import 'dart:async';
-import '../../../../core/config/feature_flags.dart';
+import '../widgets/settings_about_section.dart';
+import '../widgets/settings_components.dart';
+import '../widgets/settings_audio_section.dart';
+import '../widgets/settings_gameplay_section.dart';
+import '../widgets/settings_appearance_section.dart';
+import '../widgets/settings_account_section.dart';
+import '../widgets/settings_performance_section.dart';
+import '../widgets/settings_legal_section.dart';
+import '../widgets/settings_support_section.dart';
 
 class SettingsScreen extends StatefulWidget {
   final VoidCallback? onBack;
@@ -69,7 +77,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
         });
       }
     } catch (e) {
-      debugPrint('Failed to get package info: $e');
+      AppLogger.error('Failed to get package info', exception: e);
     }
   }
 
@@ -155,35 +163,150 @@ class _SettingsScreenState extends State<SettingsScreen> {
               ),
               children: [
                 const SizedBox(height: AppDimens.paddingM),
-                _buildSectionHeader('AUDIO', palette),
-                _buildAudioSection(palette),
+                SettingsSectionHeader(title: 'AUDIO', palette: palette),
+                SettingsAudioSection(
+                  palette: palette,
+                  masterVolume: _masterVolume,
+                  voiceVolume: _voiceVolume,
+                  musicVolume: _musicVolume,
+                  sfxVolume: _sfxVolume,
+                  musicEnabled: _music,
+                  sfxEnabled: _sfx,
+                  sfxVariant: _sfxVariant,
+                  onMasterChanged: (v) => setState(() {
+                    _masterVolume = v;
+                    _updateSetting('pref_master_volume', v);
+                    _playVolumePreview();
+                  }),
+                  onVoiceChanged: (v) => setState(() {
+                    _voiceVolume = v;
+                    _updateSetting('pref_voice_volume', v);
+                    _playVolumePreview();
+                  }),
+                  onMusicChanged: (v) => setState(() {
+                    _musicVolume = v;
+                    _updateSetting('pref_music_volume', v);
+                    _playVolumePreview();
+                  }),
+                  onSfxChanged: (v) => setState(() {
+                    _sfxVolume = v;
+                    _updateSetting('pref_sfx_volume', v);
+                    _playVolumePreview();
+                  }),
+                  onMusicToggle: (v) => setState(() {
+                    _music = v;
+                    _updateSetting('pref_music', v);
+                  }),
+                  onSfxToggle: (v) => setState(() {
+                    _sfx = v;
+                    _updateSetting('pref_sfx', v);
+                  }),
+                  onVariantChanged: (index) => setState(() {
+                    _sfxVariant = index;
+                    _updateSetting('pref_sfx_variant', index);
+                  }),
+                ),
 
                 const SizedBox(height: AppDimens.paddingXL),
-                _buildSectionHeader('GAMEPLAY', palette),
-                _buildGameplaySection(palette),
+                SettingsSectionHeader(title: 'GAMEPLAY', palette: palette),
+                SettingsGameplaySection(
+                  palette: palette,
+                  shuffleAnimation: _shuffleAnimation,
+                  haptics: _haptics,
+                  confirmBluff: _confirmBluff,
+                  autoSort: _autoSort,
+                  notifications: _notifications,
+                  showAvatars: _showAvatars,
+                  onShuffleAnimationChanged: (v) => setState(() {
+                    _shuffleAnimation = v;
+                    _updateSetting('pref_shuffle_animation', v);
+                  }),
+                  onHapticsChanged: (v) => setState(() {
+                    _haptics = v;
+                    _updateSetting('pref_haptics', v);
+                  }),
+                  onConfirmBluffChanged: (v) => setState(() {
+                    _confirmBluff = v;
+                    _updateSetting('pref_confirm_bluff', v);
+                  }),
+                  onAutoSortChanged: (v) => setState(() {
+                    _autoSort = v;
+                    _updateSetting('pref_auto_sort', v);
+                  }),
+                  onNotificationsChanged: (v) => setState(() {
+                    _notifications = v;
+                    _updateSetting('pref_notifications', v);
+                  }),
+                  onShowAvatarsChanged: (v) => setState(() {
+                    _showAvatars = v;
+                    _updateSetting('pref_show_avatars', v);
+                  }),
+                ),
 
                 const SizedBox(height: AppDimens.paddingXL),
-                _buildSectionHeader('APPEARANCE', palette),
-                _buildAppearanceSection(themeState, palette),
+                SettingsSectionHeader(title: 'APPEARANCE', palette: palette),
+                SettingsAppearanceSection(
+                  palette: palette,
+                  themeState: themeState,
+                  onThemeChanged: (mode) =>
+                      context.read<ThemeBloc>().add(ThemeChanged(mode)),
+                ),
 
                 const SizedBox(height: AppDimens.paddingXL),
-                _buildSectionHeader('ACCOUNT & SECURITY', palette),
-                _buildAccountSection(palette),
+                SettingsSectionHeader(
+                  title: 'ACCOUNT & SECURITY',
+                  palette: palette,
+                ),
+                SettingsAccountSection(
+                  palette: palette,
+                  onSignOut: _showSignOutConfirm,
+                  onDeleteAccount: _showDeleteAccountConfirm,
+                ),
 
                 const SizedBox(height: AppDimens.paddingXL),
-                _buildSectionHeader('PERFORMANCE', palette),
-                _buildPerformanceSection(palette),
+                SettingsSectionHeader(title: 'PERFORMANCE', palette: palette),
+                SettingsPerformanceSection(
+                  palette: palette,
+                  graphicsQuality: _graphics,
+                  dataSaver: _dataSaver,
+                  onGraphicsChanged: (v) => setState(() {
+                    if (v != null) {
+                      _graphics = v;
+                      _updateSetting('pref_graphics', v);
+                    }
+                  }),
+                  onDataSaverChanged: (v) => setState(() {
+                    _dataSaver = v;
+                    _updateSetting('pref_data_saver', v);
+                  }),
+                ),
 
                 const SizedBox(height: AppDimens.paddingXL),
-                _buildSectionHeader('PRIVACY & LEGAL', palette),
-                _buildLegalSection(palette),
+                SettingsSectionHeader(
+                  title: 'PRIVACY & LEGAL',
+                  palette: palette,
+                ),
+                SettingsLegalSection(palette: palette, onLaunchURL: _launchURL),
 
                 const SizedBox(height: AppDimens.paddingXL),
-                _buildSectionHeader('HELP & SUPPORT', palette),
-                _buildSupportSection(palette),
+                SettingsSectionHeader(
+                  title: 'HELP & SUPPORT',
+                  palette: palette,
+                ),
+                SettingsSupportSection(
+                  palette: palette,
+                  onLaunchURL: _launchURL,
+                ),
 
                 const SizedBox(height: AppDimens.paddingXL),
-                _buildAboutSection(palette),
+                SettingsAboutSection(
+                  palette: palette,
+                  version: _version,
+                  buildNumber: _buildNumber,
+                  onOpenAdmin: () => Navigator.pushNamed(context, '/admin'),
+                  onOpenSoundTest: () =>
+                      Navigator.pushNamed(context, '/sound_test'),
+                ),
 
                 const SizedBox(height: AppDimens.paddingXL),
                 _buildServerInfo(palette),
@@ -219,674 +342,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     );
   }
 
-  Widget _buildSectionHeader(String title, AppColorPalette palette) {
-    return Padding(
-      padding: const EdgeInsets.only(left: 8, bottom: 8),
-      child: Text(
-        title,
-        style: TextStyle(
-          color: palette.textTertiary,
-          fontSize: 11,
-          fontWeight: FontWeight.w800,
-          letterSpacing: 1.5,
-        ),
-      ),
-    );
-  }
-
-  Widget _buildCard({
-    required List<Widget> children,
-    required AppColorPalette palette,
-  }) {
-    return Container(
-      decoration: BoxDecoration(
-        color: palette.surfaceLight,
-        borderRadius: BorderRadius.circular(AppDimens.radiusL),
-        border: Border.all(color: palette.divider.withValues(alpha: 0.1)),
-      ),
-      child: Column(children: children),
-    );
-  }
-
-  // --- AUDIO SECTION ---
-  Widget _buildAudioSection(AppColorPalette palette) {
-    return _buildCard(
-      palette: palette,
-      children: [
-        _buildVolumeSlider('Master Volume', _masterVolume, (v) {
-          setState(() {
-            _masterVolume = v;
-            _updateSetting('pref_master_volume', v);
-            _playVolumePreview();
-          });
-        }, palette),
-        _buildVolumeSlider('Voice Volume', _voiceVolume, (v) {
-          setState(() {
-            _voiceVolume = v;
-            _updateSetting('pref_voice_volume', v);
-            _playVolumePreview();
-          });
-        }, palette),
-        _buildVolumeSlider('Music Volume', _musicVolume, (v) {
-          setState(() {
-            _musicVolume = v;
-            _updateSetting('pref_music_volume', v);
-            _playVolumePreview();
-          });
-        }, palette),
-        _buildVolumeSlider('SFX Volume', _sfxVolume, (v) {
-          setState(() {
-            _sfxVolume = v;
-            _updateSetting('pref_sfx_volume', v);
-            _playVolumePreview();
-          });
-        }, palette),
-        _buildDivider(palette),
-        _buildSwitchTile(
-          icon: Icons.music_note_rounded,
-          title: 'Music',
-          subtitle: 'Background ambient music',
-          value: _music,
-          palette: palette,
-          onChanged: (v) => setState(() {
-            _music = v;
-            _updateSetting('pref_music', v);
-          }),
-        ),
-        _buildDivider(palette),
-        _buildSwitchTile(
-          icon: Icons.graphic_eq_rounded,
-          title: 'Sound Effects',
-          subtitle: 'Card & chip interactions',
-          value: _sfx,
-          palette: palette,
-          onChanged: (v) => setState(() {
-            _sfx = v;
-            _updateSetting('pref_sfx', v);
-          }),
-        ),
-        _buildDivider(palette),
-        _buildVariantSelector(
-          'SFX Style',
-          _sfxVariant,
-          (index) => setState(() {
-            _sfxVariant = index;
-            _updateSetting('pref_sfx_variant', index);
-          }),
-          palette,
-        ),
-      ],
-    );
-  }
-
-  Widget _buildVariantSelector(
-    String label,
-    int currentValue,
-    ValueChanged<int> onChanged,
-    AppColorPalette palette,
-  ) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(
-        horizontal: AppDimens.paddingM,
-        vertical: 12,
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            label,
-            style: TextStyle(
-              color: palette.textPrimary,
-              fontWeight: FontWeight.w600,
-              fontSize: 14,
-            ),
-          ),
-          const SizedBox(height: 12),
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: List.generate(4, (index) {
-              final variant = index + 1;
-              final isSelected = variant == currentValue;
-              return GestureDetector(
-                onTap: () => onChanged(variant),
-                child: Container(
-                  width: 60,
-                  height: 40,
-                  decoration: BoxDecoration(
-                    color: isSelected ? palette.primary : palette.surface,
-                    borderRadius: BorderRadius.circular(8),
-                    border: Border.all(
-                      color: isSelected ? palette.primary : palette.divider,
-                      width: 1.5,
-                    ),
-                    boxShadow: isSelected
-                        ? [
-                            BoxShadow(
-                              color: palette.primary.withValues(alpha: 0.3),
-                              blurRadius: 8,
-                              offset: const Offset(0, 4),
-                            ),
-                          ]
-                        : null,
-                  ),
-                  alignment: Alignment.center,
-                  child: Text(
-                    'V$variant',
-                    style: TextStyle(
-                      color: isSelected ? Colors.white : palette.textSecondary,
-                      fontWeight: isSelected
-                          ? FontWeight.bold
-                          : FontWeight.normal,
-                    ),
-                  ),
-                ),
-              );
-            }),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildVolumeSlider(
-    String label,
-    double value,
-    ValueChanged<double> onChanged,
-    AppColorPalette palette,
-  ) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(
-        horizontal: AppDimens.paddingM,
-        vertical: 8,
-      ),
-      child: Column(
-        children: [
-          Row(
-            children: [
-              Icon(
-                label.contains('Voice')
-                    ? Icons.mic_rounded
-                    : label.contains('Music')
-                    ? Icons.music_note_rounded
-                    : label.contains('SFX')
-                    ? Icons.graphic_eq_rounded
-                    : Icons.volume_up_rounded,
-                color: palette.primary,
-                size: 20,
-              ),
-              const SizedBox(width: 12),
-              Text(
-                label,
-                style: TextStyle(
-                  color: palette.textPrimary,
-                  fontWeight: FontWeight.w600,
-                ),
-              ),
-              const Spacer(),
-              Text(
-                '${value.toInt()}%',
-                style: TextStyle(color: palette.textSecondary, fontSize: 13),
-              ),
-            ],
-          ),
-          SliderTheme(
-            data: SliderTheme.of(context).copyWith(
-              activeTrackColor: palette.primary,
-              inactiveTrackColor: palette.surface,
-              thumbColor: palette.primary,
-              overlayColor: palette.primary.withValues(alpha: 0.2),
-              trackHeight: 4,
-            ),
-            child: Slider(value: value, min: 0, max: 100, onChanged: onChanged),
-          ),
-        ],
-      ),
-    );
-  }
-
-  // --- GAMEPLAY SECTION ---
-  Widget _buildGameplaySection(AppColorPalette palette) {
-    return _buildCard(
-      palette: palette,
-      children: [
-        _buildSwitchTile(
-          icon: Icons.auto_awesome_rounded,
-          title: 'Shuffle Animation',
-          value: _shuffleAnimation,
-          palette: palette,
-          onChanged: (v) => setState(() {
-            _shuffleAnimation = v;
-            _updateSetting('pref_shuffle_animation', v);
-          }),
-        ),
-        _buildDivider(palette),
-        _buildSwitchTile(
-          icon: Icons.vibration_rounded,
-          title: 'Haptic Feedback',
-          value: _haptics,
-          palette: palette,
-          onChanged: (v) => setState(() {
-            _haptics = v;
-            _updateSetting('pref_haptics', v);
-          }),
-        ),
-        _buildDivider(palette),
-        _buildSwitchTile(
-          icon: Icons.warning_amber_rounded,
-          title: 'Confirm Before Bluff',
-          subtitle: 'Prevents accidental taps',
-          value: _confirmBluff,
-          palette: palette,
-          onChanged: (v) => setState(() {
-            _confirmBluff = v;
-            _updateSetting('pref_confirm_bluff', v);
-          }),
-        ),
-        _buildDivider(palette),
-        _buildSwitchTile(
-          icon: Icons.sort_rounded,
-          title: 'Card Auto-Sort',
-          value: _autoSort,
-          palette: palette,
-          onChanged: (v) => setState(() {
-            _autoSort = v;
-            _updateSetting('pref_auto_sort', v);
-          }),
-        ),
-        _buildDivider(palette),
-        _buildSwitchTile(
-          icon: Icons.notifications_rounded,
-          title: 'Game Notifications',
-          value: _notifications,
-          palette: palette,
-          onChanged: (v) => setState(() {
-            _notifications = v;
-            _updateSetting('pref_notifications', v);
-          }),
-        ),
-        _buildDivider(palette),
-        _buildSwitchTile(
-          icon: Icons.face_rounded,
-          title: 'Show Player Avatars',
-          value: _showAvatars,
-          palette: palette,
-          onChanged: (v) => setState(() {
-            _showAvatars = v;
-            _updateSetting('pref_show_avatars', v);
-          }),
-        ),
-      ],
-    );
-  }
-
-  // --- APPEARANCE SECTION ---
-  Widget _buildAppearanceSection(
-    ThemeState themeState,
-    AppColorPalette palette,
-  ) {
-    return _buildCard(
-      palette: palette,
-      children: [
-        Padding(
-          padding: const EdgeInsets.all(AppDimens.paddingM),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                'App Theme',
-                style: TextStyle(
-                  color: palette.textPrimary,
-                  fontWeight: FontWeight.w600,
-                ),
-              ),
-              const SizedBox(height: 12),
-              SingleChildScrollView(
-                scrollDirection: Axis.horizontal,
-                physics: const BouncingScrollPhysics(),
-                child: Row(
-                  children: AppThemeMode.values.map((mode) {
-                    final isSelected = themeState.mode == mode;
-                    final modePalette = AppColors.getPalette(mode);
-                    return Padding(
-                      padding: const EdgeInsets.only(right: 12),
-                      child: GestureDetector(
-                        onTap: () =>
-                            context.read<ThemeBloc>().add(ThemeChanged(mode)),
-                        child: Container(
-                          width: 100,
-                          padding: const EdgeInsets.all(8),
-                          decoration: BoxDecoration(
-                            color: isSelected
-                                ? palette.primary.withValues(alpha: 0.1)
-                                : Colors.transparent,
-                            borderRadius: BorderRadius.circular(12),
-                            border: Border.all(
-                              color: isSelected
-                                  ? palette.primary
-                                  : palette.divider,
-                            ),
-                          ),
-                          child: Column(
-                            children: [
-                              Container(
-                                width: 30,
-                                height: 30,
-                                decoration: BoxDecoration(
-                                  color: modePalette.background,
-                                  shape: BoxShape.circle,
-                                  border: Border.all(
-                                    color: modePalette.divider,
-                                  ),
-                                ),
-                                child: Center(
-                                  child: Container(
-                                    width: 14,
-                                    height: 14,
-                                    decoration: BoxDecoration(
-                                      color: modePalette.primary,
-                                      shape: BoxShape.circle,
-                                    ),
-                                  ),
-                                ),
-                              ),
-                              const SizedBox(height: 8),
-                              Text(
-                                mode.name.toUpperCase(),
-                                style: TextStyle(
-                                  color: isSelected
-                                      ? palette.primary
-                                      : palette.textSecondary,
-                                  fontSize: 10,
-                                  fontWeight: isSelected
-                                      ? FontWeight.bold
-                                      : FontWeight.normal,
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                      ),
-                    );
-                  }).toList(),
-                ),
-              ),
-            ],
-          ),
-        ),
-      ],
-    );
-  }
-
-  // --- ACCOUNT SECTION ---
-  Widget _buildAccountSection(AppColorPalette palette) {
-    final user = FirebaseAuth.instance.currentUser;
-    return _buildCard(
-      palette: palette,
-      children: [
-        ListTile(
-          leading: CircleAvatar(
-            backgroundImage: user?.photoURL != null
-                ? NetworkImage(user!.photoURL!)
-                : null,
-            child: user?.photoURL == null ? const Icon(Icons.person) : null,
-          ),
-          title: Text(
-            user?.displayName ?? 'Guest',
-            style: TextStyle(color: palette.textPrimary),
-          ),
-          subtitle: Text(
-            user?.email ?? user?.uid ?? 'Not logged in',
-            style: TextStyle(color: palette.textTertiary, fontSize: 12),
-          ),
-        ),
-        _buildDivider(palette),
-        _buildActionTile(
-          icon: Icons.logout_rounded,
-          title: 'Sign Out',
-          color: palette.textSecondary,
-          palette: palette,
-          onTap: _showSignOutConfirm,
-        ),
-        _buildDivider(palette),
-        _buildActionTile(
-          icon: Icons.delete_forever_rounded,
-          title: 'Delete Account',
-          color: Colors.redAccent,
-          palette: palette,
-          onTap: _showDeleteAccountConfirm,
-        ),
-      ],
-    );
-  }
-
-  // --- PERFORMANCE SECTION ---
-  Widget _buildPerformanceSection(AppColorPalette palette) {
-    return _buildCard(
-      palette: palette,
-      children: [
-        Padding(
-          padding: const EdgeInsets.symmetric(
-            horizontal: AppDimens.paddingM,
-            vertical: 8,
-          ),
-          child: Row(
-            children: [
-              const Icon(Icons.speed_rounded, size: 20),
-              const SizedBox(width: 12),
-              Text('Graphics', style: TextStyle(color: palette.textPrimary)),
-              const Spacer(),
-              DropdownButton<String>(
-                value: _graphics,
-                dropdownColor: palette.surfaceLight,
-                underline: const SizedBox(),
-                items: ['Low', 'Medium', 'High']
-                    .map(
-                      (e) => DropdownMenuItem(
-                        value: e,
-                        child: Text(
-                          e,
-                          style: TextStyle(
-                            color: palette.textPrimary,
-                            fontSize: 14,
-                          ),
-                        ),
-                      ),
-                    )
-                    .toList(),
-                onChanged: (v) => setState(() {
-                  if (v != null) {
-                    _graphics = v;
-                    _updateSetting('pref_graphics', v);
-                  }
-                }),
-              ),
-            ],
-          ),
-        ),
-        _buildDivider(palette),
-        _buildSwitchTile(
-          icon: Icons.data_usage_rounded,
-          title: 'Data Saver Mode',
-          subtitle: 'Lower bandwidth usage',
-          value: _dataSaver,
-          palette: palette,
-          onChanged: (v) => setState(() {
-            _dataSaver = v;
-            _updateSetting('pref_data_saver', v);
-          }),
-        ),
-      ],
-    );
-  }
-
-  // --- PRIVACY & LEGAL SECTION ---
-  Widget _buildLegalSection(AppColorPalette palette) {
-    return _buildCard(
-      palette: palette,
-      children: [
-        _buildActionTile(
-          icon: Icons.description_rounded,
-          title: 'Terms of Service',
-          palette: palette,
-          onTap: () => _launchURL(AppConfig.instance.termsUrl),
-        ),
-        _buildDivider(palette),
-        _buildActionTile(
-          icon: Icons.privacy_tip_rounded,
-          title: 'Privacy Policy',
-          palette: palette,
-          onTap: () => _launchURL(AppConfig.instance.privacyPolicyUrl),
-        ),
-        _buildDivider(palette),
-        _buildActionTile(
-          icon: Icons.info_outline_rounded,
-          title: 'Data Usage Info',
-          palette: palette,
-          onTap: () => _launchURL(AppConfig.instance.dataUsageUrl),
-        ),
-      ],
-    );
-  }
-
-  // --- SUPPORT SECTION ---
-  Widget _buildSupportSection(AppColorPalette palette) {
-    return _buildCard(
-      palette: palette,
-      children: [
-        _buildActionTile(
-          icon: Icons.help_outline_rounded,
-          title: 'Game Rules',
-          palette: palette,
-          onTap: () => _launchURL(AppConfig.instance.gameRulesUrl),
-        ),
-        _buildDivider(palette),
-        _buildActionTile(
-          icon: Icons.bug_report_rounded,
-          title: 'Report a Bug',
-          palette: palette,
-          onTap: () => _launchURL(
-            'mailto:${AppConfig.instance.supportEmail}?subject=Bug%20Report',
-          ),
-        ),
-        _buildDivider(palette),
-        _buildActionTile(
-          icon: Icons.contact_support_rounded,
-          title: 'Contact Support',
-          palette: palette,
-          onTap: () => _launchURL('mailto:${AppConfig.instance.supportEmail}'),
-        ),
-      ],
-    );
-  }
-
-  // --- ABOUT SECTION ---
-  Widget _buildAboutSection(AppColorPalette palette) {
-    return Column(
-      children: [
-        Text(
-          'BLUFF MULTIPLAYER',
-          style: TextStyle(
-            color: palette.textPrimary.withValues(alpha: 0.5),
-            fontSize: 12,
-            fontWeight: FontWeight.bold,
-            letterSpacing: 2,
-          ),
-        ),
-        const SizedBox(height: 4),
-        Text(
-          'Version $_version • Build $_buildNumber',
-          style: TextStyle(color: palette.textTertiary, fontSize: 10),
-        ),
-        if (FeatureFlags.enableAdminDashboard &&
-            (AppConfig.instance.isAdmin ||
-                AppConfig.instance.adminUids.contains(
-                  FirebaseAuth.instance.currentUser?.uid,
-                ))) ...[
-          const SizedBox(height: 12),
-          TextButton.icon(
-            onPressed: () => Navigator.pushNamed(context, '/admin'),
-            icon: Icon(Icons.security, size: 14, color: palette.textTertiary),
-            label: Text(
-              'ADMIN PANEL',
-              style: TextStyle(
-                color: palette.textTertiary,
-                fontSize: 10,
-                letterSpacing: 1,
-              ),
-            ),
-          ),
-        ],
-        TextButton.icon(
-          onPressed: () => Navigator.pushNamed(context, '/sound_test'),
-          icon: Icon(Icons.music_note, size: 14, color: palette.textTertiary),
-          label: Text(
-            'SOUND TEST',
-            style: TextStyle(
-              color: palette.textTertiary,
-              fontSize: 10,
-              letterSpacing: 1,
-            ),
-          ),
-        ),
-      ],
-    );
-  }
-
   // --- HELPERS ---
-
-  Widget _buildSwitchTile({
-    required IconData icon,
-    required String title,
-    String? subtitle,
-    required bool value,
-    required AppColorPalette palette,
-    required ValueChanged<bool> onChanged,
-  }) {
-    return SwitchListTile(
-      secondary: Icon(icon, color: palette.textSecondary, size: 20),
-      title: Text(
-        title,
-        style: TextStyle(color: palette.textPrimary, fontSize: 15),
-      ),
-      subtitle: subtitle != null
-          ? Text(
-              subtitle,
-              style: TextStyle(color: palette.textTertiary, fontSize: 12),
-            )
-          : null,
-      value: value,
-      onChanged: onChanged,
-      activeThumbColor: palette.primary,
-      contentPadding: const EdgeInsets.symmetric(
-        horizontal: AppDimens.paddingM,
-      ),
-    );
-  }
-
-  Widget _buildActionTile({
-    required IconData icon,
-    required String title,
-    Color? color,
-    required AppColorPalette palette,
-    required VoidCallback onTap,
-  }) {
-    return ListTile(
-      leading: Icon(icon, color: color ?? palette.textSecondary, size: 20),
-      title: Text(
-        title,
-        style: TextStyle(color: color ?? palette.textPrimary, fontSize: 15),
-      ),
-      trailing: Icon(
-        Icons.chevron_right_rounded,
-        color: palette.textTertiary,
-        size: 18,
-      ),
-      onTap: onTap,
-      contentPadding: const EdgeInsets.symmetric(
-        horizontal: AppDimens.paddingM,
-      ),
-    );
-  }
 
   Widget _buildServerInfo(AppColorPalette palette) {
     return Padding(
@@ -934,14 +390,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
           ),
         ],
       ),
-    );
-  }
-
-  Widget _buildDivider(AppColorPalette palette) {
-    return Divider(
-      height: 1,
-      indent: 50,
-      color: palette.divider.withValues(alpha: 0.05),
     );
   }
 

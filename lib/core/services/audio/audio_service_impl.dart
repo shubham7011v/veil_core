@@ -1,8 +1,8 @@
 import 'dart:async';
 import 'package:audioplayers/audioplayers.dart';
 import 'package:flutter/services.dart';
-import 'package:flutter/foundation.dart';
 import 'audio_service_interface.dart';
+import '../../utils/app_logger.dart';
 import '../../di/service_locator.dart';
 
 class AudioServiceImpl implements AudioService {
@@ -72,7 +72,7 @@ class AudioServiceImpl implements AudioService {
       _loadInitialSettings();
       _isInitialized = true;
     } catch (e) {
-      debugPrint('AudioService initialization failed: $e');
+      AppLogger.error('AudioService initialization failed', exception: e);
       // We don't rethrow here to allow app to proceed without audio
     }
   }
@@ -97,9 +97,9 @@ class AudioServiceImpl implements AudioService {
 
     try {
       await _audioCache.loadAll(soundsToCache);
-      debugPrint('Pre-cached ${soundsToCache.length} sound assets');
+      AppLogger.info('Pre-cached ${soundsToCache.length} sound assets');
     } catch (e) {
-      debugPrint('Failed to pre-cache sounds: $e');
+      AppLogger.error('Failed to pre-cache sounds', exception: e);
     }
   }
 
@@ -117,9 +117,9 @@ class AudioServiceImpl implements AudioService {
         isHapticEnabled: storage.getBool('pref_haptics') ?? true,
         sfxVariantIndex: storage.getInt('pref_sfx_variant') ?? 1,
       );
-      debugPrint('Audio settings loaded from storage');
+      AppLogger.info('Audio settings loaded from storage');
     } catch (e) {
-      debugPrint('Error loading audio settings: $e');
+      AppLogger.error('Error loading audio settings', exception: e);
     }
   }
 
@@ -138,12 +138,15 @@ class AudioServiceImpl implements AudioService {
     }
 
     try {
-      debugPrint('Playing BGM: filename=$filename');
+      AppLogger.info('Playing BGM: filename=$filename');
       await _bgmPlayer.play(AssetSource('$_musicPath$filename'));
       await _updateBgmVolume();
     } catch (e, stackTrace) {
-      debugPrint('Error playing BGM: $e');
-      debugPrint('Stack trace: $stackTrace');
+      AppLogger.error(
+        'Error playing BGM',
+        exception: e,
+        stackTrace: stackTrace,
+      );
       _isPlayingBgm = false; // Graceful degradation
     }
   }
@@ -176,7 +179,7 @@ class AudioServiceImpl implements AudioService {
     try {
       await _bgmPlayer.stop();
     } catch (e) {
-      debugPrint('Error stopping BGM: $e');
+      AppLogger.error('Error stopping BGM', exception: e);
     }
   }
 
@@ -186,7 +189,7 @@ class AudioServiceImpl implements AudioService {
       try {
         await _bgmPlayer.pause();
       } catch (e) {
-        debugPrint('Error pausing BGM: $e');
+        AppLogger.error('Error pausing BGM', exception: e);
       }
     }
   }
@@ -199,7 +202,7 @@ class AudioServiceImpl implements AudioService {
         try {
           await _bgmPlayer.resume();
         } catch (e) {
-          debugPrint('Error resuming BGM: $e');
+          AppLogger.error('Error resuming BGM', exception: e);
         }
       }
     }
@@ -235,8 +238,11 @@ class AudioServiceImpl implements AudioService {
         mode: PlayerMode.lowLatency,
       );
     } catch (e, stackTrace) {
-      debugPrint('Error playing SFX: $e');
-      debugPrint('Stack trace: $stackTrace');
+      AppLogger.error(
+        'Error playing SFX',
+        exception: e,
+        stackTrace: stackTrace,
+      );
       // Graceful degradation: continue silently
     }
   }

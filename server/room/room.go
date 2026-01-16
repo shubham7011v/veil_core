@@ -353,9 +353,11 @@ func (r *Room) Run() {
 
 				// Check auto-start for public rooms
 				if !r.isPrivate && len(r.game.Players) >= r.maxPlayers && r.game.Phase == game.PhaseLobby {
-					log.Printf("Lobby full in room %s. Starting %ds countdown...", r.ID, game.GetStartGameDelay())
+					// FORCE 4s delay as per user request to ensure clients load screen
+					const startDelay = 4
+					log.Printf("Lobby full in room %s. Starting %ds countdown...", r.ID, startDelay)
 					r.game.Phase = game.PhaseStarting
-					r.game.StartTime = time.Now().Unix() + int64(game.GetStartGameDelay())
+					r.game.StartTime = time.Now().Unix() + int64(startDelay)
 				}
 			}
 
