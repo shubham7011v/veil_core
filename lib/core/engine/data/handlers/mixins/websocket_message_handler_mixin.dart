@@ -69,11 +69,11 @@ mixin WebSocketMessageHandlerMixin on WebSocketHandlerBase {
           break;
 
         case 'LEADERBOARD_DATA':
-          _processLeaderboardData(msg['data'] as List<dynamic>);
+          _processLeaderboardData((msg['data'] as List<dynamic>?) ?? []);
           break;
 
         case 'FRIEND_LIST':
-          _processFriendList(msg['data'] as List<dynamic>);
+          _processFriendList((msg['data'] as List<dynamic>?) ?? []);
           break;
 
         case 'ROOM_CREATED':
@@ -89,7 +89,7 @@ mixin WebSocketMessageHandlerMixin on WebSocketHandlerBase {
           break;
 
         case 'CHALLENGES_DATA':
-          _processChallengesData(msg['data'] as List<dynamic>);
+          _processChallengesData((msg['data'] as List<dynamic>?) ?? []);
           break;
 
         case 'CHALLENGE_CLAIM_OK':
@@ -283,56 +283,7 @@ mixin WebSocketMessageHandlerMixin on WebSocketHandlerBase {
       '📊 [WebSocket] GAME_STATE: Phase: $phaseStr, Players: $players',
     );
 
-    // Parse phase
-    final phase = SessionPhase.values.firstWhere(
-      (p) => p.name == phaseStr,
-      orElse: () => SessionPhase.lobby,
-    );
-
-    // Audio Triggers based on State Changes
-    final previousPhase = currentSessionState.currentPhase;
-    // Detect Turn Start
-    if (previousPhase != SessionPhase.thinking &&
-        phase == SessionPhase.thinking) {
-      final activeId = stateData['activePlayerId'] as String?;
-      final myId = sl.authRepository.currentUser?.uid;
-      if (activeId == myId) {
-        try {
-          sl.audioService.playSfx(SoundAssets.turnAlert);
-          sl.audioService.triggerHaptic(HapticType.heavy);
-        } catch (e) {
-          AppLogger.sessionError('Audio error (turn alert)', exception: e);
-        }
-      }
-    }
-    // Detect Challenge
-    if (previousPhase != SessionPhase.challenging &&
-        phase == SessionPhase.challenging) {
-      try {
-        sl.audioService.playSfx(SoundAssets.challenge);
-        sl.audioService.triggerHaptic(HapticType.error); // Alert vibration
-      } catch (e) {
-        AppLogger.sessionError('Audio error (challenge)', exception: e);
-      }
-    }
-
-    // BGM Lifecycle
-    if (previousPhase == SessionPhase.lobby && phase != SessionPhase.lobby) {
-      try {
-        sl.audioService.stopBgm();
-      } catch (e) {
-        AppLogger.sessionError('Audio error (stop bgm)', exception: e);
-      }
-    }
-    if (previousPhase != SessionPhase.lobby && phase == SessionPhase.lobby) {
-      try {
-        sl.audioService.playBgm(SoundAssets.lobbyAmbience);
-      } catch (e) {
-        AppLogger.sessionError('Audio error (resume bgm)', exception: e);
-      }
-    }
-
-    // Parse participants
+    // Parse participants (Do this EARLY so we can use names in logs)
     final myId = sl.authRepository.currentUser?.uid;
     final participantsList = stateData['participants'] as List<dynamic>? ?? [];
     final participants = participantsList.map((p) {
@@ -371,15 +322,81 @@ mixin WebSocketMessageHandlerMixin on WebSocketHandlerBase {
       );
     }).toList();
 
+    // Parse phase
+    final phase = SessionPhase.values.firstWhere(
+      (p) => p.name == phaseStr,
+      orElse: () => SessionPhase.lobby,
+    );
+
+    // Audio Triggers based on State Changes
+    final previousPhase = currentSessionState.currentPhase;
+    // Detect Turn Start
+    if (previousPhase != SessionPhase.thinking &&
+        phase == SessionPhase.thinking) {
+      final activeId = stateData['activePlayerId'] as String?;
+      // myId is already defined above
+      if (activeId == myId) {
+        try {
+          sl.audioService.playSfx(SoundAssets.turnAlert);
+          sl.audioService.triggerHaptic(HapticType.heavy);
+        } catch (e) {
+          AppLogger.sessionError('Audio error (turn alert)', exception: e);
+        }
+      }
+    }
+    // Detect Challenge
+    if (previousPhase != SessionPhase.challenging &&
+        phase == SessionPhase.challenging) {
+      try {
+        sl.audioService.playSfx(SoundAssets.challenge);
+        sl.audioService.triggerHaptic(HapticType.error); // Alert vibration
+      } catch (e) {
+        AppLogger.sessionError('Audio error (challenge)', exception: e);
+      }
+    }
+
+    // BGM Lifecycle
+    if (previousPhase == SessionPhase.lobby && phase != SessionPhase.lobby) {
+      try {
+        sl.audioService.stopBgm();
+      } catch (e) {
+        AppLogger.sessionError('Audio error (stop bgm)', exception: e);
+      }
+    }
+    if (previousPhase != SessionPhase.lobby && phase == SessionPhase.lobby) {
+      try {
+        sl.audioService.playBgm(SoundAssets.lobbyAmbience);
+      } catch (e) {
+        AppLogger.sessionError('Audio error (resume bgm)', exception: e);
+      }
+    }
+
     final activeId = stateData['activePlayerId'] as String?;
 
     // Parse rich event data
     final lastEvent = stateData['lastEvent'] as String?;
     final actorId = stateData['lastEventActorId'] as String?;
     if (lastEvent != null) {
-      AppLogger.sessionEvent(
-        '🎬 [WebSocket] Last Event: $lastEvent by $actorId',
-      );
+      var logMsg = '🎬 [WebSocket] Last Event: $lastEvent';
+      if (actorId != null && actorId.isNotEmpty) {
+        // Find actor name for log
+        // Try finding by sessionId first (common for events), then id
+        final actorName = participants
+            .firstWhere(
+              (p) => p.sessionId == actorId || p.id == actorId,
+              orElse: () => Participant(
+                id: 'unknown',
+                sessionId: 'unknown',
+                name: actorId, // Fallback to ID
+                unitCount: 0,
+                isMe: false,
+              ),
+            )
+            .name;
+
+        logMsg += ' by $actorName';
+      }
+      AppLogger.sessionEvent(logMsg);
     }
     final cardCount = stateData['lastEventCardCount'] as int? ?? 0;
     isBluffSuccessful = stateData['isBluffSuccessful'] as bool?;
@@ -418,7 +435,7 @@ mixin WebSocketMessageHandlerMixin on WebSocketHandlerBase {
       );
       lastRankClaimed = lastMove?.declaredRank;
     } else {
-      lastMove = null;
+      lastMove = null; // Clear it if null
       lastRankClaimed = null;
     }
 
@@ -444,9 +461,28 @@ mixin WebSocketMessageHandlerMixin on WebSocketHandlerBase {
     currentSessionState = newState;
     if (!stateStreamController.isClosed) {
       stateStreamController.add(newState);
-      AppLogger.sessionEvent(
-        '🧑 [WebSocket] Active Player: ${newState.activeParticipantId}',
-      );
+
+      // Log Active Player Name
+      String activeName = newState.activeParticipantId ?? 'None';
+      if (newState.activeParticipantId != null) {
+        if (newState.activeParticipantId == 'me') {
+          activeName = 'You';
+        } else {
+          activeName = participants
+              .firstWhere(
+                (p) => p.id == newState.activeParticipantId,
+                orElse: () => Participant(
+                  id: 'unknown',
+                  sessionId: 'unknown',
+                  name: newState.activeParticipantId!,
+                  unitCount: 0,
+                  isMe: false,
+                ),
+              )
+              .name;
+        }
+      }
+      AppLogger.sessionEvent('🧑 [WebSocket] Active Player: $activeName');
     }
 
     // Emit events based on lastEvent from server

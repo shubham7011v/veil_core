@@ -64,6 +64,21 @@ class _SessionScreenState extends State<SessionScreen>
     );
     AppLogger.sessionEvent('Screen initialized');
     _entryController.forward();
+
+    // Check for missed initial events (e.g. shuffling)
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      final state = context.read<SessionBloc>().state;
+      if (state.lastEvent == engine.SessionEventType.shuffling) {
+        final now = DateTime.now().millisecondsSinceEpoch;
+        final eventTime = state.lastEventTimestamp;
+        // If event happened within last 10 seconds, replay it
+        if (now - eventTime < 10000) {
+          AppLogger.sessionEvent('Replaying missed shuffling event');
+          _handleGameEvents(engine.SessionEventType.shuffling, state);
+        }
+      }
+    });
   }
 
   @override

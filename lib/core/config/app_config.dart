@@ -301,7 +301,7 @@ class AppConfig {
     matchmakingDelaySeconds = _getIntConfig(
       'matchmaking_delay_seconds',
       'MATCHMAKING_DELAY_SECONDS',
-      5,
+      1,
     );
 
     // Development
