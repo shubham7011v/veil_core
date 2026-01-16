@@ -56,6 +56,7 @@ class _SessionScreenState extends State<SessionScreen>
   String? _previousActivePlayerId; // Tracks state updates for popups
   String? _visualActivePlayerId; // Tracks visual updates for UI masking
   Timer? _visualUpdateTimer;
+  int _lastHandledEventTimestamp = 0; // Prevent duplicate event handling
 
   @override
   void initState() {
@@ -563,7 +564,10 @@ class _SessionScreenState extends State<SessionScreen>
           context.read<SessionBloc>().add(const SessionErrorCleared());
         }
 
-        if (state.lastEvent != engine.SessionEventType.none) {
+        if (state.lastEvent != engine.SessionEventType.none &&
+            state.lastEventTimestamp != _lastHandledEventTimestamp) {
+          // Only handle if this specific event timestamp hasn't been processed
+          _lastHandledEventTimestamp = state.lastEventTimestamp;
           _handleGameEvents(state.lastEvent, state);
         }
 
