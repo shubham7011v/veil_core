@@ -67,6 +67,11 @@ class CardAnimationManager {
     Offset? customStartOffset,
     Offset? customEndOffset,
   }) {
+    // DEBUG LOG: Check entry count
+    AppLogger.info(
+      '[DEBUG] triggerCardAnimation CALLED: $sourceId -> $targetId (retry: $retryCount)',
+    );
+
     final sourceKey = sourceId == SessionIds.pile
         ? _pileKey
         : (sourceId == SessionIds.staging
@@ -82,6 +87,11 @@ class CardAnimationManager {
 
     // Use addPostFrameCallback to ensure keys are rendered
     WidgetsBinding.instance.addPostFrameCallback((_) {
+      // DEBUG LOG: Check callback execution
+      AppLogger.info(
+        '[DEBUG] PostFrameCallback RUNNING for: $sourceId -> $targetId',
+      );
+
       Offset start =
           customStartOffset ??
           (sourceKey != null
