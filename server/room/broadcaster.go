@@ -158,6 +158,7 @@ func (b *Broadcaster) BroadcastStateLocked() {
 		"isBluffSuccessful":  b.room.game.IsBluffSuccessful,
 		"gameLog":            b.room.game.GameLog,
 		"createdAt":          b.room.CreationTime,
+		"winnerId":           b.room.game.WinnerID,
 	}
 
 	// Add lastMove if exists

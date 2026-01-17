@@ -380,6 +380,9 @@ func (r *Room) Run() {
 							r.readyClients[p.ID] = true
 						}
 					}
+
+					// ✅ FIX: Check readiness immediately (in case all players are bots or already ready)
+					r.checkAllPlayersReady()
 				}
 			}
 

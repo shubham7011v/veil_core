@@ -466,6 +466,7 @@ mixin WebSocketMessageHandlerMixin on WebSocketHandlerBase {
       isSpectator: stateData['isSpectator'] as bool? ?? false,
       isSyncing: false, // Reset syncing flag on full state sync
       createdAt: stateData['createdAt'] as int?,
+      winnerId: stateData['winnerId'] as String?,
     );
 
     currentSessionState = newState;
