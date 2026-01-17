@@ -266,3 +266,17 @@ func (g *Game) AddToLog(msg string) {
 		g.GameLog = g.GameLog[:15]
 	}
 }
+
+// IsActive returns true if the game is in an active playing phase.
+// This includes thinking, challenging, and revealing phases.
+func (g *Game) IsActive() bool {
+	return g.Phase == PhaseThinking ||
+		g.Phase == PhaseChallenging ||
+		g.Phase == PhaseRevealing
+}
+
+// IsInLobbyPhase returns true if the game hasn't started yet.
+// This includes both lobby and starting countdown phases.
+func (g *Game) IsInLobbyPhase() bool {
+	return g.Phase == PhaseLobby || g.Phase == PhaseStarting
+}

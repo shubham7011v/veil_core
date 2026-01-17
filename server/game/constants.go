@@ -41,6 +41,20 @@ func GetStartGameDelay() int {
 	return 10 // Default
 }
 
+// Game rules constants
+const (
+	// Card play constraints
+	MinCardsPerPlay = 1
+	MaxCardsPerPlay = 4
+
+	// Deck configuration
+	DeckSize = 52
+
+	// Player constraints
+	AbsoluteMinPlayers = 2
+	AbsoluteMaxPlayers = 10
+)
+
 func init() {
 	if val := os.Getenv("MAX_PLAYERS"); val != "" {
 		if i, err := strconv.Atoi(val); err == nil {

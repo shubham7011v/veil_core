@@ -15,8 +15,8 @@ func (g *Game) PlayCards(playerID string, cardIDs []string, declaredRank Rank) e
 	if g.ActivePlayerID() != playerID {
 		return errors.New("not your turn")
 	}
-	if len(cardIDs) == 0 || len(cardIDs) > 4 {
-		return errors.New("invalid card count (1-4)")
+	if len(cardIDs) < MinCardsPerPlay || len(cardIDs) > MaxCardsPerPlay {
+		return fmt.Errorf("invalid card count (must be %d-%d)", MinCardsPerPlay, MaxCardsPerPlay)
 	}
 
 	p := g.PlayerMap[playerID]
@@ -294,8 +294,8 @@ func (g *Game) VerifyDeckConsistency() error {
 	// 3. Final Count Check
 	// Note: We only check if cards are dealt. If game hasn't started, totalCount will be 0.
 	if g.Phase != PhaseLobby && g.Phase != PhaseStarting && g.Phase != PhaseFinished {
-		if totalCount != 52 {
-			return fmt.Errorf("deck inconsistency: expected 52 cards, found %d", totalCount)
+		if totalCount != DeckSize {
+			return fmt.Errorf("deck inconsistency: expected %d cards, found %d", DeckSize, totalCount)
 		}
 	}
 

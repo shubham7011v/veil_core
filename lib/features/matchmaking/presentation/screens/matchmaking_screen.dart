@@ -1,11 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
-import 'package:google_fonts/google_fonts.dart';
 import '../../../../core/utils/app_logger.dart';
 import '../../../session/session.dart';
 import '../../../../core/engine/engine.dart';
 import '../../../../core/config/app_config.dart';
+import '../../../../core/theme/veil_theme.dart';
+import '../../../../core/constants/game_constants.dart';
 import '../bloc/matchmaking_bloc.dart';
 import '../bloc/matchmaking_event.dart';
 import '../bloc/matchmaking_state.dart';
@@ -44,12 +45,12 @@ class _MatchmakingViewState extends State<_MatchmakingView>
     AppLogger.info('🎬 [MatchmakingScreen] Initializing screen...');
 
     _controller = AnimationController(
-      duration: const Duration(seconds: 4),
+      duration: GameConstants.matchmakingOrbitDuration,
       vsync: this,
     )..repeat();
 
     _pulseController = AnimationController(
-      duration: const Duration(milliseconds: 1500),
+      duration: GameConstants.pulseAnimationDuration,
       vsync: this,
     )..repeat(reverse: true);
   }
@@ -78,14 +79,14 @@ class _MatchmakingViewState extends State<_MatchmakingView>
       context: context,
       barrierDismissible: false,
       builder: (dialogContext) => AlertDialog(
-        backgroundColor: const Color(0xFF2C2C2C),
+        backgroundColor: VeilTheme.darkGray,
         title: Text(
           '15 Seconds Remaining!',
-          style: GoogleFonts.cinzel(color: const Color(0xFFE5A043)),
+          style: VeilTheme.titleMedium.copyWith(color: VeilTheme.goldAccent),
         ),
         content: Text(
           'The lobby will auto-fill with bots soon. Do you want to keep waiting?',
-          style: GoogleFonts.inter(color: Colors.white70),
+          style: VeilTheme.bodyMedium,
         ),
         actions: [
           TextButton(
@@ -93,17 +94,11 @@ class _MatchmakingViewState extends State<_MatchmakingView>
               Navigator.pop(dialogContext);
               _onManualPop();
             },
-            child: const Text(
-              'Leave',
-              style: TextStyle(color: Colors.redAccent),
-            ),
+            child: Text('Leave', style: TextStyle(color: VeilTheme.errorColor)),
           ),
           TextButton(
             onPressed: () => Navigator.pop(dialogContext),
-            child: const Text(
-              'Wait',
-              style: TextStyle(color: Color(0xFFE5A043)),
-            ),
+            child: Text('Wait', style: TextStyle(color: VeilTheme.goldAccent)),
           ),
         ],
       ),
@@ -220,13 +215,7 @@ class _MatchmakingViewState extends State<_MatchmakingView>
 
   Widget _buildBackground() {
     return Container(
-      decoration: const BoxDecoration(
-        gradient: LinearGradient(
-          begin: Alignment.topCenter,
-          end: Alignment.bottomCenter,
-          colors: [Color(0xFF0F0F0F), Colors.black],
-        ),
-      ),
+      decoration: const BoxDecoration(gradient: VeilTheme.backgroundGradient),
     );
   }
 
@@ -236,7 +225,10 @@ class _MatchmakingViewState extends State<_MatchmakingView>
         CurvedAnimation(parent: _pulseController, curve: Curves.easeInOut),
       ),
       child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
+        padding: const EdgeInsets.symmetric(
+          horizontal: VeilTheme.spacingLG,
+          vertical: VeilTheme.spacingMD,
+        ),
         child: Row(
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
@@ -245,21 +237,17 @@ class _MatchmakingViewState extends State<_MatchmakingView>
               children: [
                 Text(
                   'Finding a Match',
-                  style: GoogleFonts.cinzel(
-                    color: Colors.white70,
-                    fontSize: 20,
-                    fontWeight: FontWeight.bold,
-                    letterSpacing: 1.2,
+                  style: VeilTheme.titleMedium.copyWith(
+                    color: VeilTheme.textSecondary,
                   ),
                 ),
                 const SizedBox(height: 4),
                 Text(
                   'Starting in: ${state.secondsRemaining} seconds',
-                  style: GoogleFonts.inter(
+                  style: VeilTheme.bodyMedium.copyWith(
                     color: state.secondsRemaining <= 10
-                        ? Colors.redAccent
-                        : const Color(0xFFE5A043),
-                    fontSize: 14,
+                        ? VeilTheme.errorColor
+                        : VeilTheme.goldAccent,
                     fontWeight: FontWeight.w600,
                   ),
                 ),
@@ -280,27 +268,18 @@ class _MatchmakingViewState extends State<_MatchmakingView>
       children: [
         Text(
           state.isMatchFound ? 'Match Found!' : 'Looking for players...',
-          style: GoogleFonts.inter(
-            color: Colors.white38,
-            fontSize: 16,
-            letterSpacing: 0.5,
-          ),
+          style: VeilTheme.bodyLarge.copyWith(color: VeilTheme.textQuaternary),
         ),
         const SizedBox(height: 12),
         Text(
-          'Players found: ${state.participants.length} / 5',
-          style: GoogleFonts.cinzel(
-            color: const Color(0xFFE5A043),
-            fontSize: 18,
-            fontWeight: FontWeight.w500,
-          ),
+          'Players found: ${state.participants.length} / ${GameConstants.maxPlayers}',
+          style: VeilTheme.titleSmall,
         ),
       ],
     );
   }
 
   Widget _buildParticipantsList(List<Participant> participants) {
-    const int maxPlayers = 5;
     final List<Participant> sorted = List.from(participants);
     sorted.sort((a, b) {
       if (a.isMe) return -1;
@@ -310,13 +289,13 @@ class _MatchmakingViewState extends State<_MatchmakingView>
 
     return GridView.builder(
       gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-        crossAxisCount: 3,
+        crossAxisCount: GameConstants.playerGridCrossAxisCount,
         mainAxisSpacing: 10,
         crossAxisSpacing: 10,
-        childAspectRatio: 0.68,
+        childAspectRatio: GameConstants.playerCardAspectRatio,
       ),
       padding: const EdgeInsets.symmetric(horizontal: 12),
-      itemCount: maxPlayers,
+      itemCount: GameConstants.maxPlayers,
       itemBuilder: (context, index) {
         if (index < sorted.length) {
           return AnimatedSwitcher(

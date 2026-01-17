@@ -77,28 +77,28 @@ type GameAction struct {
 }
 
 func NewRoom(id string) *Room {
-	r := &Room{
+	room := &Room{
 		ID:              id,
 		CreationTime:    time.Now().Unix(),
-		broadcast:       make(chan []byte, 32),
-		register:        make(chan *Client, 10),
-		unregister:      make(chan *Client, 10),
+		broadcast:       make(chan []byte, config.BroadcastChannelBuffer),
+		register:        make(chan *Client, config.RegisterChannelBuffer),
+		unregister:      make(chan *Client, config.UnregisterChannelBuffer),
 		clients:         make(map[*Client]bool),
 		game:            game.NewGame(),
-		actions:         make(chan GameAction, 32),
+		actions:         make(chan GameAction, config.ActionsChannelBuffer),
 		quit:            make(chan struct{}),
-		maxPlayers:      game.MaxPlayers, // Default
+		maxPlayers:      config.DefaultMaxPlayers,
 		voice:           game.NewVoiceState(),
 		webRTC:          game.NewWebRTCManager(),
-		turnDuration:    30 * time.Second, // 30s baseline
-		gracePeriod:     60 * time.Second, // ✅ Increased from 30s to 60s for better mobile stability
+		turnDuration:    config.TurnTimeout,
+		gracePeriod:     config.DefaultGracePeriod,
 		disconnectTimes: make(map[string]time.Time),
-		lastFullSync:    time.Now(), // Initialize for periodic sync
+		lastFullSync:    time.Now(),
 		readyClients:    make(map[string]bool),
 	}
 	// Initialize broadcaster with reference to this room
-	r.broadcaster = NewBroadcaster(r)
-	return r
+	room.broadcaster = NewBroadcaster(room)
+	return room
 }
 
 func NewPrivateRoom(id, name, code, password, hostID string, maxPlayers int, bootAmount float64) *Room {
@@ -326,7 +326,7 @@ func (r *Room) Run() {
 
 		case client := <-r.register:
 			// 1. Calculate boot amount
-			boot := 100 // Default public stake
+			boot := config.DefaultBootAmount
 			if r.isPrivate {
 				boot = int(r.bootAmount)
 			}
@@ -353,12 +353,9 @@ func (r *Room) Run() {
 			log.Printf("Client joined Room %s (Spectator: %v)", r.ID, client.IsSpectator)
 
 			if !client.IsSpectator {
-				name := client.Name
-				if name == "" {
-					name = "Player " + client.ID
-				}
 				// Use client's stored name and avatar (synced during AUTH)
-				if err := r.game.AddPlayer(client.ID, client.Name, client.AvatarURL); err != nil {
+				playerName := game.DefaultPlayerName(client.ID, client.Name)
+				if err := r.game.AddPlayer(client.ID, playerName, client.AvatarURL); err != nil {
 					log.Printf("Error adding player %s to game in room %s: %v", client.ID, r.ID, err)
 					// Refund if add fails
 					if !client.IsBot && !isRejoining {
@@ -372,11 +369,10 @@ func (r *Room) Run() {
 				// Check auto-start for public rooms
 				if !r.isPrivate && len(r.game.Players) >= r.maxPlayers && r.game.Phase == game.PhaseLobby {
 					// ✅ UPDATED: Wait for CLIENT_READY signal from all players
-					// Use 15s as a fallback timeout, but checkAllPlayersReady() should trigger start earlier
-					const startDelay = 15
-					log.Printf("Lobby full in room %s. Starting %ds fallback countdown...", r.ID, startDelay)
+					// Use configured delay as a fallback timeout
+					log.Printf("Lobby full in room %s. Starting %ds fallback countdown...", r.ID, config.LobbyStartDelaySec)
 					r.game.Phase = game.PhaseStarting
-					r.game.StartTime = time.Now().Unix() + int64(startDelay)
+					r.game.StartTime = time.Now().Unix() + int64(config.LobbyStartDelaySec)
 
 					// Pre-mark all Bots as ready immediately
 					for _, p := range r.game.Players {
@@ -404,14 +400,12 @@ func (r *Room) Run() {
 
 				// ✅ FIX #14: Handle PhaseStarting like PhaseLobby (immediate removal)
 				// If game is ACTIVE (Thinking, Challenging, Revealing), mark as disconnected
-				if r.game.Phase == game.PhaseThinking ||
-					r.game.Phase == game.PhaseChallenging ||
-					r.game.Phase == game.PhaseRevealing {
+				if r.game.IsActive() {
 					r.disconnectTimes[client.ID] = time.Now()
 					log.Printf("Player %s disconnected during active game. Grace period started.", client.ID)
 					// Update player status in game state
-					if p := r.game.PlayerMap[client.ID]; p != nil {
-						p.IsDisconnected = true
+					if player := r.game.PlayerMap[client.ID]; player != nil {
+						player.IsDisconnected = true
 					}
 				} else {
 					// If in Lobby, Starting, or Finished phase - remove immediately
@@ -507,7 +501,7 @@ func (r *Room) Run() {
 			if tickCount == 0 && (r.game.Phase == game.PhaseThinking || r.game.Phase == game.PhaseChallenging) {
 				if r.game.TurnStartTime > 0 {
 					elapsed := time.Now().Unix() - r.game.TurnStartTime
-					if elapsed > 30 { // 30s limit
+					if elapsed > config.TurnTimeoutSec {
 						r.handleTurnTimeout()
 					}
 				}
@@ -517,11 +511,10 @@ func (r *Room) Run() {
 			// Check every tick (200ms) but strict throttled by TurnStartTime
 			if r.game.Phase == game.PhaseThinking {
 				activeID := r.game.ActivePlayerID()
-				if p := r.game.PlayerMap[activeID]; p != nil && p.IsBot {
+				if player := r.game.PlayerMap[activeID]; player != nil && player.IsBot {
 					// Add delay so bot doesn't play instantly (human-like)
-					// Verify TurnStartTime + 10s < Now
-					if time.Now().Unix() >= r.game.TurnStartTime+10 { // 10s thinking time
-						r.processBotMove(p)
+					if time.Now().Unix() >= r.game.TurnStartTime+config.BotThinkingDelaySec {
+						r.processBotMove(player)
 					}
 				}
 			}
@@ -554,9 +547,9 @@ func (r *Room) Run() {
 				}
 			}
 
-			// HYBRID APPROACH: Periodic Full State Sync (every 30s during active game)
+			// HYBRID APPROACH: Periodic Full State Sync (configured interval during active game)
 			if r.game.Phase != game.PhaseLobby && r.game.Phase != game.PhaseFinished {
-				if now.Sub(r.lastFullSync) >= 30*time.Second {
+				if now.Sub(r.lastFullSync) >= config.PeriodicSyncInterval {
 					r.lastFullSync = now
 
 					// ✅ Anti-Cheat: Verify deck consistency during sync
@@ -661,8 +654,8 @@ func (r *Room) processAction(action GameAction) {
 			challengerID := client.ID
 			roomID := r.ID
 
-			// Schedule resolution after 2 seconds (animation time)
-			r.pendingChallengeTimer = time.AfterFunc(2*time.Second, func() {
+			// Schedule resolution after configured animation delay
+			r.pendingChallengeTimer = time.AfterFunc(config.ChallengeRevealDelay, func() {
 				r.mu.Lock()
 				defer r.mu.Unlock()
 

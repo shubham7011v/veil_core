@@ -61,11 +61,11 @@ type Manager struct {
 }
 
 func NewManager(authClient *auth.Client) *Manager {
-	m := &Manager{
+	mgr := &Manager{
 		Clients:         make(map[*Client]bool),
-		Register:        make(chan *Client, 1024), // Increased buffer to prevent blocking
-		Unregister:      make(chan *Client, 1024),
-		ExpiredSessions: make(chan string, 1024),
+		Register:        make(chan *Client, config.ManagerRegisterBuffer),
+		Unregister:      make(chan *Client, config.ManagerUnregisterBuffer),
+		ExpiredSessions: make(chan string, config.SessionExpiryBuffer),
 
 		Rooms:        make(map[string]*Room),
 		PlayerRooms:  make(map[string]*Room),
@@ -73,21 +73,21 @@ func NewManager(authClient *auth.Client) *Manager {
 		CreationTime: time.Now(),
 	}
 	// Initialize modular handlers
-	m.authHandler = NewAuthHandler(m)
-	m.matchmaker = NewMatchmaker(m)
+	mgr.authHandler = NewAuthHandler(mgr)
+	mgr.matchmaker = NewMatchmaker(mgr)
 
-	m.startDeadlockMonitor()
-	return m
+	mgr.startDeadlockMonitor()
+	return mgr
 }
 
-func (m *Manager) startDeadlockMonitor() {
+func (mgr *Manager) startDeadlockMonitor() {
 	go func() {
 		for {
 			time.Sleep(10 * time.Second)
-			last := atomic.LoadInt64(&m.lastLoopTime)
+			last := atomic.LoadInt64(&mgr.lastLoopTime)
 			if last > 0 {
 				elapsed := time.Now().Unix() - last
-				if elapsed > 15 {
+				if elapsed > config.DeadlockThresholdSec {
 					log.Printf("CRITICAL: Manager.Run loop has not iterated for %ds! Potential deadlock or heavy blocking.", elapsed)
 				}
 			}
@@ -95,27 +95,27 @@ func (m *Manager) startDeadlockMonitor() {
 	}()
 }
 
-func (m *Manager) Run() {
+func (mgr *Manager) Run() {
 	defer func() {
 		if r := recover(); r != nil {
 			log.Printf("Manager Recovered from panic: %v", r)
-			go m.Run() // Restart
+			go mgr.Run() // Restart
 		}
 	}()
 
-	ticker := time.NewTicker(1 * time.Second)
+	ticker := time.NewTicker(time.Duration(config.ManagerTickIntervalSec) * time.Second)
 	defer ticker.Stop()
 
 	for {
-		atomic.StoreInt64(&m.lastLoopTime, time.Now().Unix())
+		atomic.StoreInt64(&mgr.lastLoopTime, time.Now().Unix())
 		select {
-		case client := <-m.Register:
-			m.Clients[client] = true
+		case client := <-mgr.Register:
+			mgr.Clients[client] = true
 			log.Println("New Connection Registered")
 
-		case client := <-m.Unregister:
-			if _, ok := m.Clients[client]; ok {
-				delete(m.Clients, client)
+		case client := <-mgr.Unregister:
+			if _, ok := mgr.Clients[client]; ok {
+				delete(mgr.Clients, client)
 				// No need to remove from Queue.
 				// The client is always in a Room now (ActiveLobby or GameRoom).
 				if client.CurrentRoom != nil {
@@ -123,16 +123,16 @@ func (m *Manager) Run() {
 					// We wait for the Room to signal expiry via ExpiredSessions.
 
 					// If they are leaving the currently filling lobby, free up a slot
-					m.mu.Lock()
+					mgr.mu.Lock()
 					// Safe Decrement: Only if they are actually in the lobby that is still filling
-					if m.ActiveLobby != nil && client.CurrentRoom == m.ActiveLobby {
-						m.ActiveLobbyCount--
-						if m.ActiveLobbyCount < 0 {
-							m.ActiveLobbyCount = 0
+					if mgr.ActiveLobby != nil && client.CurrentRoom == mgr.ActiveLobby {
+						mgr.ActiveLobbyCount--
+						if mgr.ActiveLobbyCount < 0 {
+							mgr.ActiveLobbyCount = 0
 						}
-						log.Printf("Lobby slot freed. Remaining: %d", m.ActiveLobbyCount)
+						log.Printf("Lobby slot freed. Remaining: %d", mgr.ActiveLobbyCount)
 					}
-					m.mu.Unlock()
+					mgr.mu.Unlock()
 
 					// ✅ FIX: Run Leave in background to not block Manager
 					// This prevents registration timeouts when Leave is slow
@@ -143,14 +143,14 @@ func (m *Manager) Run() {
 				log.Println("Connection Unregistered")
 			}
 
-		case playerID := <-m.ExpiredSessions:
+		case playerID := <-mgr.ExpiredSessions:
 			// Cleanup from Index
-			m.RemovePlayerRoom(playerID)
+			mgr.RemovePlayerRoom(playerID)
 
 		case <-ticker.C:
 			// Regular Housekeeping
-			m.matchmaker.CheckLobbyTimeout()
-			m.matchmaker.CleanupEmptyRooms()
+			mgr.matchmaker.CheckLobbyTimeout()
+			mgr.matchmaker.CleanupEmptyRooms()
 		}
 	}
 }
