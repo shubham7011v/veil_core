@@ -36,6 +36,7 @@ class _MatchmakingViewState extends State<_MatchmakingView>
   late AnimationController _pulseController;
   bool _hasShownTimeoutDialog = false;
   bool _isManualPop = false;
+  bool _hasNavigated = false;
 
   @override
   void initState() {
@@ -123,7 +124,8 @@ class _MatchmakingViewState extends State<_MatchmakingView>
           context.read<SessionBloc>().add(SessionHandlerSwapped(bloc.handler));
         }
 
-        if (state.isMatchFound) {
+        if (state.isMatchFound && !_hasNavigated) {
+          _hasNavigated = true;
           AppLogger.info(
             '🎉 [MatchmakingScreen] Match found! Navigating to session...',
           );

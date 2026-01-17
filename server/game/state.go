@@ -90,9 +90,17 @@ func (g *Game) AddPlayer(id, name, avatar string) error {
 }
 
 func (g *Game) RemovePlayer(id string) {
-	if _, exists := g.PlayerMap[id]; !exists {
+	p, exists := g.PlayerMap[id]
+	if !exists {
 		return
 	}
+
+	// ✅ FIX: maintaining deck consistency by returning cards to pile
+	if len(p.Hand) > 0 {
+		g.Pile = append(g.Pile, p.Hand...)
+		g.PileCount = len(g.Pile)
+	}
+
 	delete(g.PlayerMap, id)
 
 	newPlayers := make([]*Player, 0)

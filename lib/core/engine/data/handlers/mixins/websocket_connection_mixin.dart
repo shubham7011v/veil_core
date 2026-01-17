@@ -502,14 +502,20 @@ mixin WebSocketConnectionMixin on WebSocketHandlerBase, WidgetsBindingObserver {
     return attemptAutoReconnect();
   }
 
+  bool _isAutoReconnecting = false;
+
   Future<void> attemptAutoReconnect() async {
     // Don't auto-reconnect if we are already connected or connecting
+    // Also check our own lock to prevent parallel token fetches
     if (connectionStatus == ConnectionStatus.connected ||
         connectionStatus == ConnectionStatus.connecting ||
-        isConnecting) {
-      AppLogger.info('⚠️ Auto-reconnect skipped: Already connected/connecting');
+        isConnecting ||
+        _isAutoReconnecting) {
+      AppLogger.info('⚠️ Auto-reconnect skipped: Already in progress');
       return;
     }
+
+    _isAutoReconnecting = true;
 
     try {
       final user = sl.authRepository.currentUser;
@@ -521,6 +527,15 @@ mixin WebSocketConnectionMixin on WebSocketHandlerBase, WidgetsBindingObserver {
       // ✅ FIX: Force token refresh to avoid expired tokens
       final token = await user.getIdToken(true); // Force refresh
       final displayName = user.displayName;
+
+      // Check status again after the async token fetch (in case it changed)
+      if (connectionStatus == ConnectionStatus.connected ||
+          connectionStatus == ConnectionStatus.connecting) {
+        AppLogger.info(
+          '⚠️ Connection established during token fetch, skipping.',
+        );
+        return;
+      }
 
       if (token != null && lastUrl != null) {
         AppLogger.info('🔄 Auto-reconnecting with fresh token...');
@@ -536,6 +551,8 @@ mixin WebSocketConnectionMixin on WebSocketHandlerBase, WidgetsBindingObserver {
           const AuthFailure('Session expired. Please sign in again.'),
         );
       }
+    } finally {
+      _isAutoReconnecting = false;
     }
   }
 }

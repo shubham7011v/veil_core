@@ -133,3 +133,42 @@ func TestBluffLogic(t *testing.T) {
 		t.Errorf("Expected p1 to have 2 cards after losing bluff, got %d", len(g.PlayerMap["p1"].Hand))
 	}
 }
+
+func TestRemovePlayerDeckConsistency(t *testing.T) {
+	g := NewGame()
+	g.AddPlayer("p1", "p1", "")
+	g.AddPlayer("p2", "p2", "")
+	g.AddPlayer("p3", "p3", "")
+
+	if err := g.Start(); err != nil {
+		t.Fatalf("Failed to start game: %v", err)
+	}
+
+	// Initial check
+	if err := g.VerifyDeckConsistency(); err != nil {
+		t.Fatalf("Initial consistency check failed: %v", err)
+	}
+
+	// Remove p2 (who has cards)
+	p2HandSize := len(g.PlayerMap["p2"].Hand)
+	if p2HandSize == 0 {
+		t.Fatal("p2 should have cards dealt")
+	}
+
+	g.RemovePlayer("p2")
+
+	// Check Pile
+	if g.PileCount != p2HandSize {
+		t.Errorf("Expected pile count %d, got %d", p2HandSize, g.PileCount)
+	}
+
+	// Final consistency check
+	if err := g.VerifyDeckConsistency(); err != nil {
+		t.Errorf("Post-removal consistency check failed: %v", err)
+	}
+
+	// Verify p2 is gone
+	if _, exists := g.PlayerMap["p2"]; exists {
+		t.Error("p2 should be removed from map")
+	}
+}
