@@ -3,6 +3,35 @@ import '../../../../core/engine/engine.dart' as engine;
 import '../../../../core/error/failure.dart';
 import '../../domain/models/match_stats.dart';
 
+sealed class SessionSideEffect {
+  const SessionSideEffect();
+}
+
+class SessionNavigateToHome extends SessionSideEffect {
+  const SessionNavigateToHome();
+}
+
+class SessionShowTurnPopup extends SessionSideEffect {
+  final String message;
+  const SessionShowTurnPopup(this.message);
+}
+
+class SessionTriggerHaptic extends SessionSideEffect {
+  final bool isLight;
+  const SessionTriggerHaptic({this.isLight = false});
+}
+
+class SessionShowSnackBar extends SessionSideEffect {
+  final String message;
+  final bool isError;
+  const SessionShowSnackBar(this.message, {this.isError = false});
+}
+
+class SessionShowErrorNotification extends SessionSideEffect {
+  final String message;
+  const SessionShowErrorNotification(this.message);
+}
+
 class SessionBlocState extends Equatable {
   final engine.SessionState engineState;
 
@@ -36,6 +65,9 @@ class SessionBlocState extends Equatable {
   // -- Error State --
   final Failure? failure;
 
+  // -- Side Effects --
+  final SessionSideEffect? effect;
+
   const SessionBlocState({
     required this.engineState,
     required this.selectedUnitIds,
@@ -55,6 +87,7 @@ class SessionBlocState extends Equatable {
     required this.matchStats,
     this.gameStartTime,
     this.failure,
+    this.effect,
   });
 
   factory SessionBlocState.initial() => SessionBlocState(
@@ -70,6 +103,7 @@ class SessionBlocState extends Equatable {
     chatMessages: const [],
     typingStatus: const {},
     matchStats: const MatchStats(),
+    effect: null,
   );
 
   SessionBlocState copyWith({
@@ -95,6 +129,7 @@ class SessionBlocState extends Equatable {
     bool clearLastMove = false,
     bool clearFailure = false,
     bool clearGameStartTime = false,
+    SessionSideEffect? Function()? effect,
   }) {
     return SessionBlocState(
       engineState: engineState ?? this.engineState,
@@ -117,6 +152,7 @@ class SessionBlocState extends Equatable {
           ? null
           : (gameStartTime ?? this.gameStartTime),
       failure: clearFailure ? null : (failure ?? this.failure),
+      effect: effect != null ? effect() : this.effect,
     );
   }
 
@@ -171,5 +207,6 @@ class SessionBlocState extends Equatable {
     matchStats,
     gameStartTime,
     failure,
+    effect,
   ];
 }

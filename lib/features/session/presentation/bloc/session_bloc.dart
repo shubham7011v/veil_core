@@ -7,6 +7,7 @@ import 'session_state.dart';
 import '../../domain/models/match_stats.dart';
 import '../../../../core/di/service_locator.dart' as di;
 import '../../../../core/engine/data/handlers/websocket_session_handler.dart';
+import '../../../../core/error/failure.dart'; // Explicit import ensuring Failure is available
 
 class SessionBloc extends Bloc<SessionEvent, SessionBlocState> {
   engine.GameSessionHandler _handler;
@@ -206,6 +207,17 @@ class SessionBloc extends Bloc<SessionEvent, SessionBlocState> {
     add(const HandlerSyncRequested());
   }
 
+  // Helper to emit effect and then clear it
+  void _emitEffect(
+    Emitter<SessionBlocState> emit,
+    SessionSideEffect effect, {
+    SessionBlocState? baseState,
+  }) {
+    final s = baseState ?? state;
+    emit(s.copyWith(effect: () => effect));
+    emit(s.copyWith(effect: () => null));
+  }
+
   void _initHandler() {
     _stateSub = _handler.sessionStateStream.listen((newState) {
       if (!isClosed) {
@@ -289,10 +301,13 @@ class SessionBloc extends Bloc<SessionEvent, SessionBlocState> {
         lastEventTimestamp: DateTime.now().millisecondsSinceEpoch,
       ),
     );
+    // Haptic feedback for selection
+    _emitEffect(emit, const SessionTriggerHaptic(isLight: true));
   }
 
   void _onRankStaged(RankStaged event, Emitter<SessionBlocState> emit) {
     emit(state.copyWith(stagedRank: event.rank, isSelectingRank: false));
+    _emitEffect(emit, const SessionTriggerHaptic(isLight: true));
   }
 
   void _onRankSelectionToggle(
@@ -300,6 +315,7 @@ class SessionBloc extends Bloc<SessionEvent, SessionBlocState> {
     Emitter<SessionBlocState> emit,
   ) {
     emit(state.copyWith(isSelectingRank: !state.isSelectingRank));
+    _emitEffect(emit, const SessionTriggerHaptic(isLight: true));
   }
 
   void _onCardsPlayRequested(
@@ -328,14 +344,14 @@ class SessionBloc extends Bloc<SessionEvent, SessionBlocState> {
         .where((u) => !playedIds.contains(u.id))
         .toList();
 
-    emit(
-      state.copyWith(
-        engineState: state.engineState.copyWith(myHand: updatedHand),
-        selectedUnitIds: const [],
-        clearStagedRank: true,
-        isSelectingRank: false,
-      ),
+    final nextState = state.copyWith(
+      engineState: state.engineState.copyWith(myHand: updatedHand),
+      selectedUnitIds: const [],
+      clearStagedRank: true,
+      isSelectingRank: false,
     );
+
+    emit(nextState);
 
     AppLogger.sessionEvent(
       '🎯 Optimistic UI: Removed ${playedIds.length} cards locally. Bluffing: $_myLastPlayWasBluff',
@@ -343,6 +359,7 @@ class SessionBloc extends Bloc<SessionEvent, SessionBlocState> {
 
     // Trigger server action
     _handler.playCards(playedIds, rankToPlay);
+    _emitEffect(emit, const SessionTriggerHaptic(), baseState: nextState);
   }
 
   void _onTurnPassRequested(
@@ -350,6 +367,7 @@ class SessionBloc extends Bloc<SessionEvent, SessionBlocState> {
     Emitter<SessionBlocState> emit,
   ) {
     _handler.passTurn();
+    _emitEffect(emit, const SessionTriggerHaptic(isLight: true));
   }
 
   void _onChallengeRaiseRequested(
@@ -357,6 +375,7 @@ class SessionBloc extends Bloc<SessionEvent, SessionBlocState> {
     Emitter<SessionBlocState> emit,
   ) {
     _handler.raiseChallenge();
+    _emitEffect(emit, const SessionTriggerHaptic());
   }
 
   void _onHandSortRequested(
@@ -364,6 +383,7 @@ class SessionBloc extends Bloc<SessionEvent, SessionBlocState> {
     Emitter<SessionBlocState> emit,
   ) {
     _handler.sortHand();
+    _emitEffect(emit, const SessionTriggerHaptic(isLight: true));
   }
 
   void _onHandReorderRequested(
@@ -371,6 +391,7 @@ class SessionBloc extends Bloc<SessionEvent, SessionBlocState> {
     Emitter<SessionBlocState> emit,
   ) {
     _handler.reorderHand(event.oldIndex, event.newIndex);
+    // No haptic for drag reorder usually, or very light
   }
 
   void _onHandlerSwapped(
@@ -381,6 +402,7 @@ class SessionBloc extends Bloc<SessionEvent, SessionBlocState> {
     _stateSub?.cancel();
     _eventSub?.cancel();
     _chatSub?.cancel();
+    _errorSub?.cancel();
 
     // Only dispose if it's NOT the singleton WebSocket handler
     if (_handler is! WebSocketSessionHandler) {
@@ -428,9 +450,7 @@ class SessionBloc extends Bloc<SessionEvent, SessionBlocState> {
     _eventSub?.cancel();
     _chatSub?.cancel();
     _errorSub?.cancel();
-    _eventSub?.cancel();
-    _chatSub?.cancel();
-    _errorSub?.cancel();
+
     // Only dispose if it's NOT the singleton WebSocket handler
     if (_handler is! WebSocketSessionHandler) {
       _handler.dispose();
@@ -442,7 +462,30 @@ class SessionBloc extends Bloc<SessionEvent, SessionBlocState> {
     SessionErrorOccurred event,
     Emitter<SessionBlocState> emit,
   ) {
-    emit(state.copyWith(failure: event.error));
+    final nextState = state.copyWith(failure: event.error);
+
+    // Check for critical errors that require navigation
+    if (event.error is ServerFailure) {
+      final failure = event.error as ServerFailure;
+      if (failure.originalError is Map) {
+        final data = failure.originalError as Map;
+        if (data['code'] == 'ROOM_CLOSED') {
+          _emitEffect(
+            emit,
+            const SessionNavigateToHome(),
+            baseState: nextState,
+          );
+          return;
+        }
+      }
+    }
+
+    _emitEffect(
+      emit,
+      SessionShowSnackBar(event.error.message, isError: true),
+      baseState: nextState,
+    );
+
     // Rollback for optimistic updates: force re-sync with handler
     add(const HandlerSyncRequested());
   }
@@ -460,6 +503,7 @@ class SessionBloc extends Bloc<SessionEvent, SessionBlocState> {
     Emitter<SessionBlocState> emit,
   ) {
     if (event.message['type'] == 'emoji') {
+      // Emoji handling logic...
       add(
         EngineEventReceived(
           engine.SessionEventType.emojiReceived,

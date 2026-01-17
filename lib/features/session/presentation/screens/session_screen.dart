@@ -4,13 +4,11 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import '../../../../core/utils/app_logger.dart';
 import '../bloc/session_bloc.dart';
 import '../bloc/session_state.dart';
-import '../bloc/session_event.dart';
+
 import '../../../../core/engine/engine.dart' as engine;
 import '../widgets/session_view.dart';
-import '../../../../core/di/service_locator.dart' as di;
 import '../../../../core/notifications/bloc/app_notification_bloc.dart';
 import '../../../../core/notifications/bloc/app_notification_event.dart';
-import '../../../../core/error/failure.dart';
 import '../widgets/floating_emoji_layer.dart';
 import '../utils/session_constants.dart';
 import '../managers/card_animation_manager.dart';
@@ -39,9 +37,6 @@ class _SessionScreenState extends State<SessionScreen>
   bool _showEmoji = false;
   final List<FloatingEmoji> _activeEmojis = [];
   bool? _isWebSocket;
-
-  // Track previous active player ID for turn change detection
-  String? _previousActivePlayerId; // Tracks state updates for popups
 
   @override
   void initState() {
@@ -109,15 +104,9 @@ class _SessionScreenState extends State<SessionScreen>
 
   @override
   void dispose() {
-    // Leave online room to clean up server state
-    if (_isWebSocket == true) {
-      try {
-        AppLogger.sessionEvent('Leaving online room on dispose');
-        di.sl.webSocketSessionHandler.leaveRoom('');
-      } catch (e) {
-        AppLogger.sessionError('Error leaving room on dispose', exception: e);
-      }
-    }
+    // Note: Leave logic is now handled largely by Bloc/Handler, but clean exit is good.
+    // However, Bloc should manage session lifecycle via events if needed.
+    // For now, Managers need disposal.
     _visualSync.dispose();
     _entryController.dispose();
     _turnPopups.dispose();
@@ -125,60 +114,48 @@ class _SessionScreenState extends State<SessionScreen>
     super.dispose();
   }
 
-  // All animation and event handling logic has been extracted to managers
-  // See: CardAnimationManager, TurnPopupManager, GameEventHandler
-
-  // Logic extracted to handlers: NavigationHandler, GameEventHandler, etc.
+  void _handleSideEffect(BuildContext context, SessionSideEffect effect) {
+    if (effect is SessionNavigateToHome) {
+      _navigation.leaveGame('/home');
+    } else if (effect is SessionShowTurnPopup) {
+      _turnPopups.showPopup(effect.message);
+    } else if (effect is SessionTriggerHaptic) {
+      if (effect.isLight) {
+        HapticFeedback.lightImpact();
+      } else {
+        HapticFeedback.mediumImpact();
+      }
+    } else if (effect is SessionShowSnackBar) {
+      context.read<AppNotificationBloc>().add(
+        effect.isError
+            ? ShowErrorNotification(effect.message)
+            : ShowSuccessNotification(effect.message),
+      );
+    } else if (effect is SessionShowErrorNotification) {
+      context.read<AppNotificationBloc>().add(
+        ShowErrorNotification(effect.message),
+      );
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
     return BlocListener<SessionBloc, SessionBlocState>(
       listenWhen: (prev, curr) =>
+          curr.effect != null ||
           (curr.lastEvent != engine.SessionEventType.none &&
-              prev.lastEventTimestamp != curr.lastEventTimestamp) ||
-          prev.engineState.activeParticipantId !=
-              curr.engineState.activeParticipantId,
+              prev.lastEventTimestamp != curr.lastEventTimestamp),
       listener: (context, state) {
+        // Handle Side Effects
+        if (state.effect != null) {
+          _handleSideEffect(context, state.effect!);
+        }
+
+        // Handle Visual Sync & Events
         _cardAnimations.updateAvatarKeys(state);
 
-        // Turn Change Feedback
-        final currentActiveId = state.engineState.activeParticipantId;
-        if (currentActiveId != _previousActivePlayerId &&
-            currentActiveId != null &&
-            currentActiveId.isNotEmpty) {
-          if (currentActiveId == SessionIds.me) {
-            HapticFeedback.mediumImpact();
-            _turnPopups.showPopup("YOUR TURN");
-          } else {
-            HapticFeedback.lightImpact();
-            final name = state.getPlayerName(currentActiveId);
-            _turnPopups.showPopup("${name.toUpperCase()}'S TURN");
-          }
-          _previousActivePlayerId = currentActiveId;
-        }
-
-        // Failures
-        if (state.failure != null) {
-          bool handled = false;
-          if (state.failure is ServerFailure) {
-            final failure = state.failure as ServerFailure;
-            if (failure.originalError is Map) {
-              final data = failure.originalError as Map;
-              if (data['code'] == 'ROOM_CLOSED') {
-                handled = true;
-                _navigation.leaveGame('/home');
-              }
-            }
-          }
-
-          if (!handled) {
-            context.read<AppNotificationBloc>().add(
-              ShowErrorNotification(state.failure!.message),
-            );
-            context.read<SessionBloc>().add(const SessionErrorCleared());
-          }
-        }
-
+        // Turn feedback is now handled via Side Effects or explicit state checks if needed,
+        // but let's keep event handler for strictly visual game events.
         if (_visualSync.shouldHandleEvent(state.lastEventTimestamp)) {
           _eventHandler.handleEvent(context, state.lastEvent, state);
         }
@@ -196,6 +173,8 @@ class _SessionScreenState extends State<SessionScreen>
               if (didPop) return;
               final shouldLeave = await _navigation.showLeaveDialog();
               if (shouldLeave == true) {
+                // Trigger event instead of direct nav?
+                // For now, keep navigation handler logic consistently
                 _navigation.leaveGame('/home');
               }
             },
