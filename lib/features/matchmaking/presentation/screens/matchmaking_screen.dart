@@ -4,13 +4,21 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import '../../../../core/utils/app_logger.dart';
 import '../../../session/session.dart';
 import '../../../../core/engine/engine.dart';
+import '../../../../core/theme/colors.dart';
+import '../../../../core/theme/bloc/theme_bloc.dart';
+import '../../../../core/theme/bloc/theme_state.dart';
+import '../../../../core/di/service_locator.dart';
 import '../../../../core/config/app_config.dart';
-import '../../../../core/theme/veil_theme.dart';
 import '../../../../core/constants/game_constants.dart';
 import '../bloc/matchmaking_bloc.dart';
 import '../bloc/matchmaking_event.dart';
 import '../bloc/matchmaking_state.dart';
-import '../widgets/matchmaking_widgets.dart';
+import '../widgets/matchmaking_connection_banner.dart';
+import '../widgets/matchmaking_timeout_dialog.dart';
+import '../widgets/matchmaking_orbit.dart';
+import '../widgets/matchmaking_header.dart';
+import '../widgets/matchmaking_status_view.dart';
+import '../widgets/matchmaking_participants_grid.dart';
 
 class MatchmakingScreen extends StatelessWidget {
   const MatchmakingScreen({super.key});
@@ -18,7 +26,10 @@ class MatchmakingScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return BlocProvider(
-      create: (context) => MatchmakingBloc()..add(StartMatchmaking()),
+      create: (context) => MatchmakingBloc(
+        handler: sl.webSocketSessionHandler,
+        authRepository: sl.authRepository,
+      )..add(StartMatchmaking()),
       child: const _MatchmakingView(),
     );
   }
@@ -33,18 +44,14 @@ class _MatchmakingView extends StatefulWidget {
 
 class _MatchmakingViewState extends State<_MatchmakingView>
     with TickerProviderStateMixin {
-  late AnimationController _controller;
+  late AnimationController _orbitController;
   late AnimationController _pulseController;
-  bool _hasShownTimeoutDialog = false;
-  bool _isManualPop = false;
   bool _hasNavigated = false;
 
   @override
   void initState() {
     super.initState();
-    AppLogger.info('🎬 [MatchmakingScreen] Initializing screen...');
-
-    _controller = AnimationController(
+    _orbitController = AnimationController(
       duration: GameConstants.matchmakingOrbitDuration,
       vsync: this,
     )..repeat();
@@ -57,258 +64,140 @@ class _MatchmakingViewState extends State<_MatchmakingView>
 
   @override
   void dispose() {
-    AppLogger.info('🛑 [MatchmakingScreen] Disposing screen...');
-    _controller.dispose();
+    _orbitController.dispose();
     _pulseController.dispose();
     super.dispose();
   }
 
-  void _onManualPop() {
-    AppLogger.info('👈 [MatchmakingScreen] Manual pop triggered');
-    _isManualPop = true;
-    context.read<MatchmakingBloc>().add(CancelMatchmaking());
-    Navigator.of(context).pop();
-  }
+  void _onHomeSideEffect(
+    BuildContext context,
+    MatchmakingSideEffect effect,
+    AppColorPalette palette,
+  ) {
+    if (effect is MatchmakingNavigateToSession) {
+      if (_hasNavigated) return;
+      _hasNavigated = true;
 
-  void _showTimeoutDialog() {
-    if (!mounted) return;
-    AppLogger.info('⏰ [MatchmakingScreen] Showing timeout dialog');
-    _hasShownTimeoutDialog = true;
-
-    showDialog(
-      context: context,
-      barrierDismissible: false,
-      builder: (dialogContext) => AlertDialog(
-        backgroundColor: VeilTheme.darkGray,
-        title: Text(
-          '15 Seconds Remaining!',
-          style: VeilTheme.titleMedium.copyWith(color: VeilTheme.goldAccent),
+      AppLogger.info('🎉 [MatchmakingScreen] Match found! Navigating...');
+      Future.delayed(
+        Duration(seconds: AppConfig.instance.matchmakingDelaySeconds),
+        () {
+          if (context.mounted) {
+            Navigator.pushReplacementNamed(
+              context,
+              '/session',
+              arguments: {'useWebSocket': true},
+            );
+          }
+        },
+      );
+    } else if (effect is MatchmakingShowTimeoutDialog) {
+      showMatchmakingTimeoutDialog(context, palette);
+    } else if (effect is MatchmakingTriggerHaptic) {
+      HapticFeedback.selectionClick();
+    } else if (effect is MatchmakingShowSnackBar) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(effect.message),
+          backgroundColor: effect.isError ? palette.danger : palette.primary,
+          behavior: SnackBarBehavior.floating,
         ),
-        content: Text(
-          'The lobby will auto-fill with bots soon. Do you want to keep waiting?',
-          style: VeilTheme.bodyMedium,
-        ),
-        actions: [
-          TextButton(
-            onPressed: () {
-              Navigator.pop(dialogContext);
-              _onManualPop();
-            },
-            child: Text('Leave', style: TextStyle(color: VeilTheme.errorColor)),
-          ),
-          TextButton(
-            onPressed: () => Navigator.pop(dialogContext),
-            child: Text('Wait', style: TextStyle(color: VeilTheme.goldAccent)),
-          ),
-        ],
-      ),
-    );
+      );
+    } else if (effect is MatchmakingPop) {
+      Navigator.pop(context);
+    }
   }
 
   @override
   Widget build(BuildContext context) {
-    return BlocListener<MatchmakingBloc, MatchmakingState>(
-      listener: (context, state) {
-        // Swap handler with SessionBloc when connection is established
-        if (state.connectionStatus == ConnectionStatus.connected &&
-            !state.isConnecting) {
-          AppLogger.info(
-            '🔄 [MatchmakingScreen] Swapping handler with SessionBloc',
-          );
-          final bloc = context.read<MatchmakingBloc>();
-          context.read<SessionBloc>().add(SessionHandlerSwapped(bloc.handler));
-        }
+    return BlocBuilder<ThemeBloc, ThemeState>(
+      builder: (context, themeState) {
+        final palette = AppColors.getPalette(themeState.mode);
 
-        if (state.isMatchFound && !_hasNavigated) {
-          _hasNavigated = true;
-          AppLogger.info(
-            '🎉 [MatchmakingScreen] Match found! Navigating to session...',
-          );
-          Future.delayed(
-            Duration(seconds: AppConfig.instance.matchmakingDelaySeconds),
-            () {
-              if (context.mounted && !_isManualPop) {
-                Navigator.pushReplacementNamed(
-                  context,
-                  '/session',
-                  arguments: {'useWebSocket': true},
-                );
-              }
-            },
-          );
-        }
+        return BlocListener<MatchmakingBloc, MatchmakingState>(
+          listenWhen: (previous, current) =>
+              current.effect != null ||
+              (current.connectionStatus == ConnectionStatus.connected &&
+                  !current.isConnecting &&
+                  previous.connectionStatus != current.connectionStatus),
+          listener: (context, state) {
+            // Handler Swap Logic
+            if (state.connectionStatus == ConnectionStatus.connected &&
+                !state.isConnecting) {
+              AppLogger.info(
+                '🔄 [MatchmakingScreen] Swapping handler with SessionBloc',
+              );
+              context.read<SessionBloc>().add(
+                SessionHandlerSwapped(context.read<MatchmakingBloc>().handler),
+              );
+            }
 
-        if (state.secondsRemaining <= 15 &&
-            state.secondsRemaining > 0 &&
-            !_hasShownTimeoutDialog &&
-            !state.isMatchFound) {
-          AppLogger.info(
-            '⏰ [MatchmakingScreen] 15 seconds remaining, showing dialog',
-          );
-          _showTimeoutDialog();
-        }
-
-        if (state.secondsRemaining <= 5 && state.secondsRemaining > 0) {
-          HapticFeedback.selectionClick();
-        }
-
-        if (state.error != null) {
-          AppLogger.error(
-            '❌ [MatchmakingScreen] Error occurred',
-            exception: state.error!,
-          );
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text(state.error!),
-              backgroundColor: Colors.red,
-              behavior: SnackBarBehavior.floating,
-            ),
-          );
-          if (state.error!.contains('Funds')) {
-            Navigator.pop(context);
-          }
-        }
-      },
-      child: BlocBuilder<MatchmakingBloc, MatchmakingState>(
-        builder: (context, state) {
-          return Scaffold(
-            backgroundColor: Colors.black,
-            body: PopScope(
-              canPop: true,
-              onPopInvokedWithResult: (didPop, result) {
-                if (didPop) _isManualPop = true;
-              },
-              child: Stack(
-                children: [
-                  _buildBackground(),
-                  SafeArea(
-                    child: Column(
-                      children: [
-                        _buildHeader(state),
-                        MatchmakingConnectionBanner(
-                          status: state.connectionStatus,
-                          pulseController: _pulseController,
+            if (state.effect != null) {
+              _onHomeSideEffect(context, state.effect!, palette);
+            }
+          },
+          child: BlocBuilder<MatchmakingBloc, MatchmakingState>(
+            builder: (context, state) {
+              return Scaffold(
+                backgroundColor: palette.background,
+                body: Stack(
+                  children: [
+                    // Background
+                    Container(
+                      decoration: BoxDecoration(
+                        gradient: LinearGradient(
+                          begin: Alignment.topCenter,
+                          end: Alignment.bottomCenter,
+                          colors: [palette.background, palette.surface],
                         ),
-                        const SizedBox(height: 24),
-                        _buildStatusInfo(state),
-                        const SizedBox(height: 32),
-                        SizedBox(
-                          height: 140,
-                          child: MatchmakingOrbit(controller: _controller),
-                        ),
-                        const SizedBox(height: 32),
-                        Expanded(
-                          child: _buildParticipantsList(state.participants),
-                        ),
-                        const SizedBox(height: 32),
-                      ],
+                      ),
                     ),
-                  ),
-                ],
-              ),
-            ),
-          );
-        },
-      ),
-    );
-  }
-
-  Widget _buildBackground() {
-    return Container(
-      decoration: const BoxDecoration(gradient: VeilTheme.backgroundGradient),
-    );
-  }
-
-  Widget _buildHeader(MatchmakingState state) {
-    return ScaleTransition(
-      scale: Tween<double>(begin: 1.0, end: 1.05).animate(
-        CurvedAnimation(parent: _pulseController, curve: Curves.easeInOut),
-      ),
-      child: Padding(
-        padding: const EdgeInsets.symmetric(
-          horizontal: VeilTheme.spacingLG,
-          vertical: VeilTheme.spacingMD,
-        ),
-        child: Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-          children: [
-            Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  'Finding a Match',
-                  style: VeilTheme.titleMedium.copyWith(
-                    color: VeilTheme.textSecondary,
-                  ),
+                    SafeArea(
+                      child: Column(
+                        children: [
+                          MatchmakingHeader(
+                            secondsRemaining: state.secondsRemaining,
+                            onClose: () {
+                              context.read<MatchmakingBloc>().add(
+                                CancelMatchmaking(),
+                              );
+                              Navigator.pop(context);
+                            },
+                            palette: palette,
+                            pulseAnimation: _pulseController,
+                          ),
+                          MatchmakingConnectionBanner(
+                            status: state.connectionStatus,
+                            pulseController: _pulseController,
+                          ),
+                          const SizedBox(height: 24),
+                          MatchmakingStatusView(
+                            isMatchFound: state.isMatchFound,
+                            participantCount: state.participants.length,
+                            palette: palette,
+                          ),
+                          const SizedBox(height: 32),
+                          SizedBox(
+                            height: 140,
+                            child: MatchmakingOrbit(
+                              controller: _orbitController,
+                            ),
+                          ),
+                          const SizedBox(height: 32),
+                          Expanded(
+                            child: MatchmakingParticipantsGrid(
+                              participants: state.participants,
+                            ),
+                          ),
+                          const SizedBox(height: 32),
+                        ],
+                      ),
+                    ),
+                  ],
                 ),
-                const SizedBox(height: 4),
-                Text(
-                  'Starting in: ${state.secondsRemaining} seconds',
-                  style: VeilTheme.bodyMedium.copyWith(
-                    color: state.secondsRemaining <= 10
-                        ? VeilTheme.errorColor
-                        : VeilTheme.goldAccent,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-              ],
-            ),
-            IconButton(
-              icon: const Icon(Icons.close, color: Colors.white54),
-              onPressed: _onManualPop,
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildStatusInfo(MatchmakingState state) {
-    return Column(
-      children: [
-        Text(
-          state.isMatchFound ? 'Match Found!' : 'Looking for players...',
-          style: VeilTheme.bodyLarge.copyWith(color: VeilTheme.textQuaternary),
-        ),
-        const SizedBox(height: 12),
-        Text(
-          'Players found: ${state.participants.length} / ${GameConstants.maxPlayers}',
-          style: VeilTheme.titleSmall,
-        ),
-      ],
-    );
-  }
-
-  Widget _buildParticipantsList(List<Participant> participants) {
-    final List<Participant> sorted = List.from(participants);
-    sorted.sort((a, b) {
-      if (a.isMe) return -1;
-      if (b.isMe) return 1;
-      return 0;
-    });
-
-    return GridView.builder(
-      gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-        crossAxisCount: GameConstants.playerGridCrossAxisCount,
-        mainAxisSpacing: 10,
-        crossAxisSpacing: 10,
-        childAspectRatio: GameConstants.playerCardAspectRatio,
-      ),
-      padding: const EdgeInsets.symmetric(horizontal: 12),
-      itemCount: GameConstants.maxPlayers,
-      itemBuilder: (context, index) {
-        if (index < sorted.length) {
-          return AnimatedSwitcher(
-            duration: const Duration(milliseconds: 500),
-            child: ParticipantCard(
-              key: ValueKey(sorted[index].id),
-              participant: sorted[index],
-            ),
-          );
-        }
-        return AnimatedSwitcher(
-          duration: const Duration(milliseconds: 500),
-          child: const EmptySlot(),
+              );
+            },
+          ),
         );
       },
     );

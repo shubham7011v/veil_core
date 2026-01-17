@@ -1,18 +1,19 @@
 import 'dart:async';
 import 'package:flutter_bloc/flutter_bloc.dart';
-import 'package:firebase_auth/firebase_auth.dart';
-import 'package:veil_core/core/utils/app_logger.dart';
+import '../../../../core/utils/app_logger.dart';
 import '../../../../core/engine/engine.dart';
-import '../../../../core/di/service_locator.dart';
 import '../../../../core/config/app_config.dart';
 import '../../../../core/engine/data/handlers/websocket_session_handler.dart';
 import '../../../../core/engine/domain/models/room_event.dart';
+import '../../../../core/data/repositories/auth_repository.dart';
+
 import 'matchmaking_event.dart';
 import 'matchmaking_state.dart';
 
 class MatchmakingBloc extends Bloc<MatchmakingEvent, MatchmakingState> {
   final WebSocketSessionHandler _handler;
-  StreamSubscription? _statsSubscription;
+  final AuthRepository _authRepository;
+
   StreamSubscription? _sessionStateSubscription;
   StreamSubscription? _connectionStatusSubscription;
   StreamSubscription? _errorSubscription;
@@ -20,10 +21,14 @@ class MatchmakingBloc extends Bloc<MatchmakingEvent, MatchmakingState> {
   Timer? _waitTimer;
   Timer? _timeoutTimer;
   int _lobbyCreatedAt = 0;
+  bool _hasTriggeredTimeoutDialog = false;
 
-  MatchmakingBloc({WebSocketSessionHandler? handler})
-    : _handler = handler ?? sl.webSocketSessionHandler,
-      super(const MatchmakingState()) {
+  MatchmakingBloc({
+    required WebSocketSessionHandler handler,
+    required AuthRepository authRepository,
+  }) : _handler = handler,
+       _authRepository = authRepository,
+       super(const MatchmakingState()) {
     on<StartMatchmaking>(_onStartMatchmaking);
     on<UpdateParticipants>(_onUpdateParticipants);
     on<UpdateConnectionStatus>(_onUpdateConnectionStatus);
@@ -36,6 +41,17 @@ class MatchmakingBloc extends Bloc<MatchmakingEvent, MatchmakingState> {
 
   // Public getter to expose handler for SessionBloc integration
   WebSocketSessionHandler get handler => _handler;
+
+  // Helper to emit effect and then clear it
+  void _emitEffect(
+    Emitter<MatchmakingState> emit,
+    MatchmakingSideEffect effect, {
+    MatchmakingState? baseState,
+  }) {
+    final s = baseState ?? state;
+    emit(s.copyWith(effect: () => effect));
+    emit(s.copyWith(effect: () => null));
+  }
 
   Future<void> _onStartMatchmaking(
     StartMatchmaking event,
@@ -62,33 +78,7 @@ class MatchmakingBloc extends Bloc<MatchmakingEvent, MatchmakingState> {
         AppLogger.info(
           '🔌 [MatchmakingBloc] Not connected, attempting connection...',
         );
-        final user = FirebaseAuth.instance.currentUser;
-        final token = user != null
-            ? await user.getIdToken()
-            : 'mock_token_${DateTime.now().millisecondsSinceEpoch}';
-
-        int retries = 0;
-        while (retries < 3) {
-          try {
-            await _handler.connect(
-              AppConfig.instance.serverUrl,
-              token!,
-              displayName: user?.displayName,
-            );
-            if (_handler.connectionStatus == ConnectionStatus.connected) {
-              AppLogger.info('✅ [MatchmakingBloc] Connection successful');
-              break;
-            }
-          } catch (e) {
-            AppLogger.warning(
-              '⚠️ [MatchmakingBloc] Connection attempt ${retries + 1} failed',
-              data: {'error': e.toString()},
-            );
-            retries++;
-            if (retries >= 3) rethrow;
-            await Future.delayed(const Duration(milliseconds: 1000));
-          }
-        }
+        await _establishConnection();
       }
 
       _handler.resetGameSession();
@@ -108,22 +98,60 @@ class MatchmakingBloc extends Bloc<MatchmakingEvent, MatchmakingState> {
         '❌ [MatchmakingBloc] Error during matchmaking start',
         exception: e,
       );
-      emit(state.copyWith(isConnecting: false, error: e.toString()));
+      final nextState = state.copyWith(
+        isConnecting: false,
+        error: () => e.toString(),
+      );
+      _emitEffect(
+        emit,
+        MatchmakingShowSnackBar(e.toString(), isError: true),
+        baseState: nextState,
+      );
+    }
+  }
+
+  Future<void> _establishConnection() async {
+    final user = _authRepository.currentUser;
+    if (user == null) {
+      throw Exception('Authentication required');
+    }
+
+    final token = await user.getIdToken();
+    if (token == null) {
+      throw Exception('Failed to retrieve authentication token');
+    }
+
+    int retries = 0;
+    while (retries < 3) {
+      try {
+        await _handler.connect(
+          AppConfig.instance.serverUrl,
+          token,
+          displayName: user.displayName,
+        );
+        if (_handler.connectionStatus == ConnectionStatus.connected) {
+          AppLogger.info('✅ [MatchmakingBloc] Connection successful');
+          return;
+        }
+      } catch (e) {
+        AppLogger.warning(
+          '⚠️ [MatchmakingBloc] Connection attempt ${retries + 1} failed',
+          data: {'error': e.toString()},
+        );
+        retries++;
+        if (retries >= 3) rethrow;
+        await Future.delayed(const Duration(milliseconds: 1000));
+      }
     }
   }
 
   void _setupSubscriptions() {
     AppLogger.info('📡 [MatchmakingBloc] Setting up stream subscriptions...');
 
-    _statsSubscription?.cancel();
     _sessionStateSubscription?.cancel();
     _connectionStatusSubscription?.cancel();
     _errorSubscription?.cancel();
     _roomEventSubscription?.cancel();
-
-    _statsSubscription = _handler.statsStream.listen((stats) {
-      // Stats handled by AuthBloc usually, but we could add to state if needed
-    });
 
     _errorSubscription = _handler.errorStream.listen((failure) {
       AppLogger.warning(
@@ -148,10 +176,6 @@ class MatchmakingBloc extends Bloc<MatchmakingEvent, MatchmakingState> {
     _sessionStateSubscription = _handler.sessionStateStream.listen((
       sessionState,
     ) {
-      AppLogger.info(
-        '📊 [MatchmakingBloc] Session state updated',
-        data: {'participants': sessionState.participants.length},
-      );
       add(UpdateParticipants(sessionState.participants));
 
       if (sessionState.createdAt != null &&
@@ -196,7 +220,7 @@ class MatchmakingBloc extends Bloc<MatchmakingEvent, MatchmakingState> {
     _timeoutTimer?.cancel();
     _timeoutTimer = Timer(const Duration(seconds: 45), () {
       if (!state.isMatchFound) {
-        // Maybe handle 45s timeout specific log or event
+        // Handled via secondsRemaining logic for consistency
       }
     });
   }
@@ -229,10 +253,6 @@ class MatchmakingBloc extends Bloc<MatchmakingEvent, MatchmakingState> {
     UpdateParticipants event,
     Emitter<MatchmakingState> emit,
   ) {
-    AppLogger.info(
-      '👥 [MatchmakingBloc] Participants updated',
-      data: {'count': event.participants.length},
-    );
     emit(state.copyWith(participants: event.participants));
   }
 
@@ -240,22 +260,60 @@ class MatchmakingBloc extends Bloc<MatchmakingEvent, MatchmakingState> {
     UpdateConnectionStatus event,
     Emitter<MatchmakingState> emit,
   ) {
-    emit(state.copyWith(connectionStatus: event.status));
+    emit(
+      state.copyWith(
+        connectionStatus: event.status,
+        // Clear error when connection successfully established or reset
+        error: event.status == ConnectionStatus.connected ? () => null : null,
+      ),
+    );
   }
 
   void _onUpdateTimer(UpdateTimer event, Emitter<MatchmakingState> emit) {
-    emit(state.copyWith(secondsRemaining: event.secondsRemaining));
+    final nextState = state.copyWith(secondsRemaining: event.secondsRemaining);
+
+    // Side Effect: Haptic feedback in final 5 seconds
+    if (event.secondsRemaining <= 5 && event.secondsRemaining > 0) {
+      _emitEffect(emit, const MatchmakingTriggerHaptic(), baseState: nextState);
+    } else if (event.secondsRemaining == 15 &&
+        !_hasTriggeredTimeoutDialog &&
+        !state.isMatchFound) {
+      // Side Effect: Timeout Dialog at 15s remaining
+      _hasTriggeredTimeoutDialog = true;
+      _emitEffect(
+        emit,
+        const MatchmakingShowTimeoutDialog(),
+        baseState: nextState,
+      );
+    } else {
+      emit(nextState);
+    }
   }
 
   void _onMatchFound(MatchFound event, Emitter<MatchmakingState> emit) {
     AppLogger.info('✅ [MatchmakingBloc] Match found, canceling timers');
     _timeoutTimer?.cancel();
     _waitTimer?.cancel();
-    emit(state.copyWith(isMatchFound: true));
+    final nextState = state.copyWith(isMatchFound: true);
+    _emitEffect(
+      emit,
+      const MatchmakingNavigateToSession(),
+      baseState: nextState,
+    );
   }
 
   void _onTriggerError(TriggerError event, Emitter<MatchmakingState> emit) {
-    emit(state.copyWith(error: event.message));
+    var nextState = state.copyWith(error: () => event.message);
+
+    _emitEffect(
+      emit,
+      MatchmakingShowSnackBar(event.message, isError: true),
+      baseState: nextState,
+    );
+
+    if (event.message.contains('Funds')) {
+      _emitEffect(emit, const MatchmakingPop(), baseState: nextState);
+    }
   }
 
   void _onCancelMatchmaking(
@@ -269,7 +327,6 @@ class MatchmakingBloc extends Bloc<MatchmakingEvent, MatchmakingState> {
 
   @override
   Future<void> close() {
-    _statsSubscription?.cancel();
     _sessionStateSubscription?.cancel();
     _connectionStatusSubscription?.cancel();
     _errorSubscription?.cancel();

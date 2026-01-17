@@ -8,6 +8,7 @@ class MatchmakingState extends Equatable {
   final bool isMatchFound;
   final bool isConnecting;
   final String? error;
+  final MatchmakingSideEffect? effect;
 
   const MatchmakingState({
     this.participants = const [],
@@ -16,6 +17,7 @@ class MatchmakingState extends Equatable {
     this.isMatchFound = false,
     this.isConnecting = false,
     this.error,
+    this.effect,
   });
 
   MatchmakingState copyWith({
@@ -24,7 +26,8 @@ class MatchmakingState extends Equatable {
     int? secondsRemaining,
     bool? isMatchFound,
     bool? isConnecting,
-    String? error,
+    String? Function()? error,
+    MatchmakingSideEffect? Function()? effect,
   }) {
     return MatchmakingState(
       participants: participants ?? this.participants,
@@ -32,7 +35,8 @@ class MatchmakingState extends Equatable {
       secondsRemaining: secondsRemaining ?? this.secondsRemaining,
       isMatchFound: isMatchFound ?? this.isMatchFound,
       isConnecting: isConnecting ?? this.isConnecting,
-      error: error,
+      error: error != null ? error() : this.error,
+      effect: effect != null ? effect() : this.effect,
     );
   }
 
@@ -44,5 +48,37 @@ class MatchmakingState extends Equatable {
     isMatchFound,
     isConnecting,
     error,
+    effect,
   ];
+}
+
+// Side Effects
+abstract class MatchmakingSideEffect extends Equatable {
+  const MatchmakingSideEffect();
+  @override
+  List<Object?> get props => [];
+}
+
+class MatchmakingNavigateToSession extends MatchmakingSideEffect {
+  const MatchmakingNavigateToSession();
+}
+
+class MatchmakingShowTimeoutDialog extends MatchmakingSideEffect {
+  const MatchmakingShowTimeoutDialog();
+}
+
+class MatchmakingTriggerHaptic extends MatchmakingSideEffect {
+  const MatchmakingTriggerHaptic();
+}
+
+class MatchmakingShowSnackBar extends MatchmakingSideEffect {
+  final String message;
+  final bool isError;
+  const MatchmakingShowSnackBar(this.message, {this.isError = false});
+  @override
+  List<Object?> get props => [message, isError];
+}
+
+class MatchmakingPop extends MatchmakingSideEffect {
+  const MatchmakingPop();
 }

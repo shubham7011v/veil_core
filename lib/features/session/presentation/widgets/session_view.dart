@@ -17,7 +17,7 @@ import '../widgets/floating_emoji_layer.dart';
 import '../../../game/presentation/widgets/chat_widget.dart';
 import '../../../game/presentation/widgets/emoji_picker.dart';
 import '../widgets/rank_selector_modal.dart';
-import 'package:veil_core/features/voice/presentation/widgets/voice_overlay.dart';
+import '../../../voice/presentation/widgets/voice_overlay.dart';
 import '../managers/card_animation_manager.dart';
 import '../managers/turn_popup_manager.dart';
 import '../handlers/navigation_handler.dart';
