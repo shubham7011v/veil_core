@@ -418,17 +418,38 @@ mixin WebSocketConnectionMixin on WebSocketHandlerBase, WidgetsBindingObserver {
     }
   }
 
+  Timer? _connectivityDebounceTimer;
+
   Future<void> handleConnectivityChange(
     List<ConnectivityResult> results,
   ) async {
-    final hasConnection = results.any((r) => r != ConnectivityResult.none);
+    // Cancel existing timer to debounce
+    _connectivityDebounceTimer?.cancel();
+
+    // Debounce for 1.5 seconds to let network settle (e.g. 4G -> Null -> WiFi)
+    _connectivityDebounceTimer = Timer(
+      const Duration(milliseconds: 1500),
+      () async {
+        await _processConnectivityChange(results);
+      },
+    );
+  }
+
+  Future<void> _processConnectivityChange(
+    List<ConnectivityResult> results,
+  ) async {
+    // Re-check current status as the passed 'results' might be stale after delay
+    final currentResults = await Connectivity().checkConnectivity();
+    final hasConnection = currentResults.any(
+      (r) => r != ConnectivityResult.none,
+    );
 
     if (!hasConnection) {
-      AppLogger.networkEvent('❌ Network lost');
+      AppLogger.networkEvent('❌ Network lost (Debounced)');
       return;
     }
 
-    AppLogger.networkEvent('🌐 Network changed: $results');
+    AppLogger.networkEvent('🌐 Network changed (Debounced): $currentResults');
 
     // If connected: socket is likely dead/zombie due to IP change. Force reconnect.
     if (connectionStatus == ConnectionStatus.connected) {
@@ -472,24 +493,32 @@ mixin WebSocketConnectionMixin on WebSocketHandlerBase, WidgetsBindingObserver {
     _reconnectScheduleTimer?.cancel();
 
     // Wait a bit to allow the app to fully resume and Firebase to be ready
-    _reconnectScheduleTimer = Timer(
-      const Duration(milliseconds: 300),
-      () async {
-        try {
-          if (connectionStatus != ConnectionStatus.connected &&
-              connectionStatus != ConnectionStatus.connecting) {
-            AppLogger.info('🔄 Scheduled reconnection triggered');
-            await attemptAutoReconnect();
-          } else {
-            AppLogger.info(
-              '⚠️ Reconnect skipped: Already connected or connecting',
-            );
+    _reconnectScheduleTimer = Timer(const Duration(milliseconds: 300), () async {
+      try {
+        if (connectionStatus != ConnectionStatus.connected &&
+            connectionStatus != ConnectionStatus.connecting) {
+          AppLogger.info('🔄 Scheduled reconnection triggered');
+          await attemptAutoReconnect();
+        } else {
+          // Already connected? Let's verify it's not a zombie connection
+          if (connectionStatus == ConnectionStatus.connected) {
+            AppLogger.info('⚡ Verifying connection integrity on resume...');
+            // Sending a ping will trigger immediate write error if socket is effectively dead
+            try {
+              sendMessage({'type': 'PING', 'seq': nextSequence++}, force: true);
+              // If that succeeded, we are likely okay, but let's ensure heartbeat is running
+              if (heartbeatTimer == null || !heartbeatTimer!.isActive) {
+                startHeartbeat();
+              }
+            } catch (_) {
+              // sendMessage handles the error logging and reconnection trigger
+            }
           }
-        } catch (e) {
-          AppLogger.error('❌ Scheduled reconnect error', exception: e);
         }
-      },
-    );
+      } catch (e) {
+        AppLogger.error('❌ Scheduled reconnect error', exception: e);
+      }
+    });
   }
 
   /// Force reconnection attempt (e.g., from notification handler)
