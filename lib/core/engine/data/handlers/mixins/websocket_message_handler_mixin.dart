@@ -296,11 +296,16 @@ mixin WebSocketMessageHandlerMixin on WebSocketHandlerBase {
       final pId = pMap['id'] as String?; // Might be null for others
       final sessionId = pMap['sessionId'] as String;
       final isMe = (pId != null && pId == myId);
+      final participantId = isMe ? 'me' : (pId ?? sessionId);
+      final participantName = pMap['name'] as String;
+
+      // ✅ FIX: Populate pNames map for UI display
+      pNames[participantId] = participantName;
 
       return Participant(
-        id: isMe ? 'me' : (pId ?? sessionId),
+        id: participantId,
         sessionId: sessionId,
-        name: pMap['name'] as String,
+        name: participantName,
         avatarUrl: pMap['avatarUrl'] as String?,
         rank: pMap['rank'] as String?,
         unitCount: pMap['cardCount'] as int,

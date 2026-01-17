@@ -480,12 +480,26 @@ func (r *Room) Run() {
 			// Check Countdown Start
 			if r.game.Phase == game.PhaseStarting {
 				if time.Now().Unix() >= r.game.StartTime {
-					log.Printf("Countdown finished in Room %s. Starting game!", r.ID)
-					if err := r.game.Start(); err != nil {
-						log.Printf("Failed to start game after countdown: %v", err)
-						r.game.Phase = game.PhaseLobby
+					// ✅ FIX: Only start via timeout if we're not actively waiting for CLIENT_READY
+					// Check if all human players have signaled ready
+					humanPlayersReady := true
+					for _, p := range r.game.Players {
+						if !p.IsBot && !r.readyClients[p.ID] {
+							humanPlayersReady = false
+							break
+						}
 					}
-					r.broadcaster.BroadcastStateLocked()
+
+					if humanPlayersReady {
+						log.Printf("Countdown finished in Room %s. Starting game!", r.ID)
+						if err := r.game.Start(); err != nil {
+							log.Printf("Failed to start game after countdown: %v", err)
+							r.game.Phase = game.PhaseLobby
+						}
+						r.broadcaster.BroadcastStateLocked()
+					} else {
+						log.Printf("⏳ [Client-Ready] Room %s countdown expired, but waiting for CLIENT_READY signals", r.ID)
+					}
 				}
 			}
 
