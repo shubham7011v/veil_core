@@ -64,22 +64,42 @@ class SessionBloc extends Bloc<SessionEvent, SessionBlocState> {
           hasCards &&
           (roundJustReset || gameJustStarted);
 
-      emit(
-        state.copyWith(
-          engineState: event.state,
-          isRevealingBluff: _handler.isRevealingBluff,
-          isBluffSuccessful: _handler.isBluffSuccessful, // Sync from handler
-          lastMove: _handler.lastMove,
-          clearLastMove: _handler.lastMove == null,
-          pNames: _handler.pNames,
-          gameLog: _handler.gameLog,
-          // Clear stagedRank on round reset or game start, show selector
-          clearStagedRank: shouldShowRankSelector,
-          isSelectingRank: shouldShowRankSelector
-              ? true
-              : state.isSelectingRank,
-        ),
+      SessionBlocState nextState = state.copyWith(
+        engineState: event.state,
+        isRevealingBluff: _handler.isRevealingBluff,
+        isBluffSuccessful: _handler.isBluffSuccessful, // Sync from handler
+        lastMove: _handler.lastMove,
+        clearLastMove: _handler.lastMove == null,
+        pNames: _handler.pNames,
+        gameLog: _handler.gameLog,
+        // Clear stagedRank on round reset or game start, show selector
+        clearStagedRank: shouldShowRankSelector,
+        isSelectingRank: shouldShowRankSelector ? true : state.isSelectingRank,
       );
+
+      // Check for Turn Change -> "YOUR TURN"
+      final previousActiveId = state.engineState.activeParticipantId;
+      final newActiveId = event.state.activeParticipantId;
+
+      emit(nextState);
+
+      if (newActiveId == 'me' && previousActiveId != 'me') {
+        _emitEffect(
+          emit,
+          const SessionShowTurnPopup("YOUR TURN"),
+          baseState: nextState,
+        );
+      }
+
+      // Check for Game End -> "ROUND OVER"
+      if (event.state.currentPhase == engine.SessionPhase.finished &&
+          state.engineState.currentPhase != engine.SessionPhase.finished) {
+        _emitEffect(
+          emit,
+          const SessionShowTurnPopup("ROUND OVER"),
+          baseState: nextState,
+        );
+      }
     });
     on<EngineEventReceived>((event, emit) {
       final shouldSync = _handler.lastMove != null;
@@ -130,6 +150,10 @@ class SessionBloc extends Bloc<SessionEvent, SessionBlocState> {
                   false; // Reset pending flag, result handled in PickUp
             }
           }
+          _emitEffect(
+            emit,
+            const SessionShowTurnPopup("CHALLENGE!"),
+          ); // Global announcement
           break;
 
         case engine.SessionEventType.cardsPickedUp:

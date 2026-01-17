@@ -42,7 +42,27 @@ class SessionBottomControls extends StatelessWidget {
         mainAxisSize: MainAxisSize.min,
         children: [
           // The "Deck" View
-          SessionHandView(state: state, myAvatarKey: myAvatarKey),
+          AnimatedContainer(
+            duration: const Duration(milliseconds: 500),
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(16),
+              boxShadow: isMyTurn
+                  ? [
+                      BoxShadow(
+                        color: const Color(0xFFFFD700).withValues(alpha: 0.15),
+                        blurRadius: 20,
+                        spreadRadius: 2,
+                      ),
+                      BoxShadow(
+                        color: const Color(0xFFFFD700).withValues(alpha: 0.05),
+                        blurRadius: 40,
+                        spreadRadius: 5,
+                      ),
+                    ]
+                  : [],
+            ),
+            child: SessionHandView(state: state, myAvatarKey: myAvatarKey),
+          ),
 
           const SizedBox(height: 8),
 
