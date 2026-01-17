@@ -4,6 +4,7 @@ import 'dart:io';
 import 'dart:math';
 import 'package:flutter/widgets.dart';
 import 'package:web_socket_channel/web_socket_channel.dart';
+import 'package:connectivity_plus/connectivity_plus.dart';
 import '../../../../di/service_locator.dart';
 import '../../../../error/failure.dart';
 import '../../../domain/models/session_enums.dart';
@@ -414,6 +415,52 @@ mixin WebSocketConnectionMixin on WebSocketHandlerBase, WidgetsBindingObserver {
 
       default:
         break;
+    }
+  }
+
+  Future<void> handleConnectivityChange(
+    List<ConnectivityResult> results,
+  ) async {
+    final hasConnection = results.any((r) => r != ConnectivityResult.none);
+
+    if (!hasConnection) {
+      AppLogger.networkEvent('❌ Network lost');
+      return;
+    }
+
+    AppLogger.networkEvent('🌐 Network changed: $results');
+
+    // If connected: socket is likely dead/zombie due to IP change. Force reconnect.
+    if (connectionStatus == ConnectionStatus.connected) {
+      AppLogger.networkEvent(
+        '🔄 Network switch detected while connected. Restarting connection...',
+      );
+      // Mark as reconnecting immediately to block potential sends
+      updateConnectionStatus(ConnectionStatus.reconnecting);
+
+      // Close existing channel silently (don't want to trigger failure logic yet)
+      try {
+        heartbeatTimer?.cancel();
+        await channel?.sink.close();
+      } catch (_) {}
+
+      // Force break lock if any (though usually false if connected)
+      isConnecting = false;
+      return attemptAutoReconnect();
+    }
+
+    // If we were stuck in reconnecting/failed/disconnected, try now!
+    // Also restart if we were 'connecting' but network switched (old attempt is doomed)
+    if (connectionStatus == ConnectionStatus.reconnecting ||
+        connectionStatus == ConnectionStatus.failed ||
+        connectionStatus == ConnectionStatus.disconnected ||
+        connectionStatus == ConnectionStatus.connecting) {
+      AppLogger.networkEvent(
+        '🚀 Network restored/switched. Triggering connection immediately.',
+      );
+      reconnectTimer?.cancel();
+      isConnecting = false; // Force break lock to allow new attempt
+      return attemptAutoReconnect();
     }
   }
 

@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'package:flutter/widgets.dart';
 import 'package:web_socket_channel/web_socket_channel.dart';
+import 'package:connectivity_plus/connectivity_plus.dart';
 
 import '../../domain/handlers/game_session_handler.dart';
 import '../../domain/handlers/voice_session_handler.dart';
@@ -56,6 +57,7 @@ class WebSocketSessionHandler extends GameSessionHandler
 
   // Managed connection artifacts
   StreamSubscription? _subscription;
+  StreamSubscription? _connectivitySubscription;
   Completer<void>? _connectionCompleter;
   int _connectionId = 0;
 
@@ -133,6 +135,10 @@ class WebSocketSessionHandler extends GameSessionHandler
     _currentState = SessionState.initial();
     // Register lifecycle observer
     WidgetsBinding.instance.addObserver(this);
+    // Register connectivity observer - active network monitoring
+    _connectivitySubscription = Connectivity().onConnectivityChanged.listen(
+      handleConnectivityChange,
+    );
   }
 
   // --- WebSocketHandlerBase Interface Implementation ---
@@ -374,6 +380,7 @@ class WebSocketSessionHandler extends GameSessionHandler
 
   @override
   void onAuthSuccess(Map<String, dynamic> authData) {
+    reconnectAttempts = 0;
     updateConnectionStatus(ConnectionStatus.connected);
     startHeartbeat();
     processMessageQueue();
@@ -480,6 +487,7 @@ class WebSocketSessionHandler extends GameSessionHandler
 
   @override
   Future<void> dispose() async {
+    await _connectivitySubscription?.cancel();
     _heartbeatTimer?.cancel();
     _reconnectTimer?.cancel();
     _authTimeoutTimer?.cancel();
