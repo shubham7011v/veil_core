@@ -47,9 +47,11 @@ class ServiceLocator {
   late final DiscoveryService discoveryService;
 
   // Explicitly expose WebSocket handler for specialized calls (like updateNickname)
-  late final WebSocketSessionHandler _webSocketHandler;
+  WebSocketSessionHandler? _webSocketHandler;
 
-  WebSocketSessionHandler get webSocketSessionHandler => _webSocketHandler;
+  WebSocketSessionHandler get webSocketSessionHandler => _webSocketHandler!;
+  set webSocketSessionHandler(WebSocketSessionHandler handler) =>
+      _webSocketHandler = handler;
 
   Future<void> setup() async {
     final prefs = await SharedPreferences.getInstance();
@@ -65,9 +67,9 @@ class ServiceLocator {
     authRepository = AuthRepository();
     userRepository = UserRepository();
     onboardingRepository = OnboardingRepository(prefs);
-    sessionRepository = WebSocketSessionRepository(_webSocketHandler);
-    profileRepository = ProfileRepository(_webSocketHandler);
-    challengesRepository = ChallengesRepository(_webSocketHandler);
+    sessionRepository = WebSocketSessionRepository(_webSocketHandler!);
+    profileRepository = ProfileRepository(_webSocketHandler!);
+    challengesRepository = ChallengesRepository(_webSocketHandler!);
     adminRepository = AdminRepository();
 
     // Default to local, but the app can switch
@@ -75,7 +77,7 @@ class ServiceLocator {
 
     // Conditionally register voice based on feature flag
     if (FeatureFlags.enableVoiceChat) {
-      voiceSessionHandler = _webSocketHandler;
+      voiceSessionHandler = _webSocketHandler!;
     } else {
       voiceSessionHandler = null; // Voice disabled
     }
@@ -99,7 +101,7 @@ class ServiceLocator {
 
   void initializeSystemStatus(AuthBloc authBloc) {
     systemStatusService = SystemStatusService(
-      sessionHandler: _webSocketHandler,
+      sessionHandler: _webSocketHandler!,
       authBloc: authBloc,
     );
   }
@@ -107,7 +109,7 @@ class ServiceLocator {
   /// Factory method to create session handler based on mode
   GameSessionHandler createSessionHandler({bool online = false}) {
     if (online) {
-      return _webSocketHandler;
+      return _webSocketHandler!;
     }
     return LocalBotSessionHandler();
   }

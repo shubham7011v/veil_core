@@ -22,6 +22,10 @@ mixin WebSocketConnectionMixin on WebSocketHandlerBase, WidgetsBindingObserver {
   static const Duration _authTimeout = Duration(seconds: 10);
   static const Duration _heartbeatInterval = Duration(seconds: 10);
   static const Duration _watchdogTimeout = Duration(seconds: 12);
+  static const Duration _tokenRefreshCooldown = Duration(seconds: 30);
+
+  DateTime? _lastTokenRefreshTime;
+  String? _cachedToken;
 
   /// Connect to WebSocket server
   Future<void> connect(
@@ -189,10 +193,34 @@ mixin WebSocketConnectionMixin on WebSocketHandlerBase, WidgetsBindingObserver {
       );
 
       reconnectTimer?.cancel();
-      reconnectTimer = Timer(
-        delay,
-        () => attemptConnection(firebaseToken, displayName: displayName),
-      );
+      reconnectTimer = Timer(delay, () async {
+        // ✅ FIX: Refresh token before retrying to avoid reusing stale/placeholder tokens
+        try {
+          final user = sl.authRepository.currentUser;
+          if (user == null) {
+            AppLogger.warning('❌ No user found for reconnection');
+            updateConnectionStatus(ConnectionStatus.failed);
+            return;
+          }
+
+          AppLogger.networkEvent('🔄 Refreshing auth token before retry...');
+          final freshToken = await _getFreshToken(user);
+
+          if (freshToken != null) {
+            await attemptConnection(
+              freshToken,
+              displayName: displayName ?? user.displayName,
+            );
+          } else {
+            AppLogger.error('❌ Failed to refresh token');
+            updateConnectionStatus(ConnectionStatus.failed);
+          }
+        } catch (e) {
+          AppLogger.error('❌ Token refresh failed', exception: e);
+          // Fall back to using the old token as a last resort
+          attemptConnection(firebaseToken, displayName: displayName);
+        }
+      });
 
       updateConnectionStatus(ConnectionStatus.reconnecting);
     } else {
@@ -230,6 +258,14 @@ mixin WebSocketConnectionMixin on WebSocketHandlerBase, WidgetsBindingObserver {
       currentSessionState = currentSessionState.copyWith(isSyncing: true);
       if (!stateStreamController.isClosed) {
         stateStreamController.add(currentSessionState);
+      }
+    } else if (status == ConnectionStatus.connected) {
+      // ✅ FIX: Ensure syncing flag is cleared when connected
+      if (currentSessionState.isSyncing) {
+        currentSessionState = currentSessionState.copyWith(isSyncing: false);
+        if (!stateStreamController.isClosed) {
+          stateStreamController.add(currentSessionState);
+        }
       }
     }
 
@@ -467,7 +503,7 @@ mixin WebSocketConnectionMixin on WebSocketHandlerBase, WidgetsBindingObserver {
 
       // Force break lock if any (though usually false if connected)
       isConnecting = false;
-      return attemptAutoReconnect();
+      return attemptAutoReconnect(force: true);
     }
 
     // If we were stuck in reconnecting/failed/disconnected, try now!
@@ -481,7 +517,7 @@ mixin WebSocketConnectionMixin on WebSocketHandlerBase, WidgetsBindingObserver {
       );
       reconnectTimer?.cancel();
       isConnecting = false; // Force break lock to allow new attempt
-      return attemptAutoReconnect();
+      return attemptAutoReconnect(force: true);
     }
   }
 
@@ -528,18 +564,19 @@ mixin WebSocketConnectionMixin on WebSocketHandlerBase, WidgetsBindingObserver {
       AppLogger.info('⚠️ Already connected, skipping force reconnect');
       return;
     }
-    return attemptAutoReconnect();
+    return attemptAutoReconnect(force: true);
   }
 
   bool _isAutoReconnecting = false;
 
-  Future<void> attemptAutoReconnect() async {
+  Future<void> attemptAutoReconnect({bool force = false}) async {
     // Don't auto-reconnect if we are already connected or connecting
     // Also check our own lock to prevent parallel token fetches
-    if (connectionStatus == ConnectionStatus.connected ||
-        connectionStatus == ConnectionStatus.connecting ||
-        isConnecting ||
-        _isAutoReconnecting) {
+    if (!force &&
+        (connectionStatus == ConnectionStatus.connected ||
+            connectionStatus == ConnectionStatus.connecting ||
+            isConnecting ||
+            _isAutoReconnecting)) {
       AppLogger.info('⚠️ Auto-reconnect skipped: Already in progress');
       return;
     }
@@ -553,8 +590,8 @@ mixin WebSocketConnectionMixin on WebSocketHandlerBase, WidgetsBindingObserver {
         return;
       }
 
-      // ✅ FIX: Force token refresh to avoid expired tokens
-      final token = await user.getIdToken(true); // Force refresh
+      // ✅ FIX: Force token refresh with cooldown to avoid "Too many attempts"
+      final token = await _getFreshToken(user);
       final displayName = user.displayName;
 
       // Check status again after the async token fetch (in case it changed)
@@ -570,7 +607,10 @@ mixin WebSocketConnectionMixin on WebSocketHandlerBase, WidgetsBindingObserver {
         AppLogger.info('🔄 Auto-reconnecting with fresh token...');
         // Reset attempts to 0 for a fresh start on resume
         reconnectAttempts = 0;
-        await connect(lastUrl!, token, displayName: displayName);
+        // ✅ FIX: Don't await the full connection here, just ensure it's started.
+        // This allows the _isAutoReconnecting lock to be released sooner and
+        // allows subsequent triggers (like network switches) to be processed.
+        unawaited(connect(lastUrl!, token, displayName: displayName));
       }
     } catch (e) {
       AppLogger.error('❌ Auto-reconnect failed', exception: e);
@@ -582,6 +622,35 @@ mixin WebSocketConnectionMixin on WebSocketHandlerBase, WidgetsBindingObserver {
       }
     } finally {
       _isAutoReconnecting = false;
+    }
+  }
+
+  /// Helper to fetch a fresh token with exponential backoff/cooldown
+  Future<String?> _getFreshToken(dynamic user) async {
+    final now = DateTime.now();
+
+    // 1. If we have a cached token and it's within the cooldown period, reuse it
+    if (_cachedToken != null &&
+        _lastTokenRefreshTime != null &&
+        now.difference(_lastTokenRefreshTime!) < _tokenRefreshCooldown) {
+      AppLogger.info(
+        '🛡️ Token refresh cooldown active (${now.difference(_lastTokenRefreshTime!).inSeconds}s ago). Reusing cached token.',
+      );
+      return _cachedToken;
+    }
+
+    try {
+      // 2. Fetch fresh token from Firebase
+      final token = await user.getIdToken(true);
+      if (token != null) {
+        _cachedToken = token;
+        _lastTokenRefreshTime = now;
+      }
+      return token;
+    } catch (e) {
+      AppLogger.error('❌ Firebase token refresh failed', exception: e);
+      // Return cached token as last resort if fetch fails
+      return _cachedToken;
     }
   }
 }

@@ -478,7 +478,12 @@ mixin WebSocketMessageHandlerMixin on WebSocketHandlerBase {
       myHand: myHand,
       pileCount: stateData['pileCount'] as int? ?? 0,
       currentPhase: phase,
-      activeParticipantId: activeId == myId ? 'me' : activeId,
+      activeParticipantId:
+          participants.any(
+            (p) => p.isMe && (p.id == activeId || p.sessionId == activeId),
+          )
+          ? 'me'
+          : activeId,
       startTime: stateData['startTime'] != null
           ? (stateData['startTime'] as int)
           : null,

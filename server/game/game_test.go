@@ -172,3 +172,186 @@ func TestRemovePlayerDeckConsistency(t *testing.T) {
 		t.Error("p2 should be removed from map")
 	}
 }
+
+func TestChallengeResolution(t *testing.T) {
+	g := NewGame()
+	g.AddPlayer("p1", "Player 1", "", false)
+	g.AddPlayer("p2", "Player 2", "", false)
+	g.Start()
+
+	// Test successful bluff detection
+	t.Run("Bluff detected correctly", func(t *testing.T) {
+		g.SetTurnMessages("p1")
+		p1 := g.PlayerMap["p1"]
+		p1.Hand = []Card{
+			{ID: "c1", Suit: Spades, Rank: RankTwo},
+		}
+
+		// Play bluff: Two as Three
+		g.PlayCards("p1", []string{"c1"}, RankThree)
+		isBluff, _ := g.Challenge("p2")
+
+		if !isBluff {
+			t.Error("Expected bluff to be detected")
+		}
+	})
+
+	// Test honest play
+	t.Run("Honest play not marked as bluff", func(t *testing.T) {
+		g2 := NewGame()
+		g2.AddPlayer("p1", "P1", "", false)
+		g2.AddPlayer("p2", "P2", "", false)
+		g2.Start()
+		g2.SetTurnMessages("p1")
+
+		p1 := g2.PlayerMap["p1"]
+		p1.Hand = []Card{
+			{ID: "c1", Suit: Spades, Rank: RankThree},
+		}
+
+		// Play honest: Three as Three
+		g2.PlayCards("p1", []string{"c1"}, RankThree)
+		isBluff, _ := g2.Challenge("p2")
+
+		if isBluff {
+			t.Error("Expected honest play not to be bluff")
+		}
+	})
+}
+
+func TestPassMechanics(t *testing.T) {
+	g := NewGame()
+	g.AddPlayer("p1", "Player 1", "", false)
+	g.AddPlayer("p2", "Player 2", "", false)
+	g.AddPlayer("p3", "Player 3", "", false)
+	g.Start()
+
+	// Set up game state: p1 plays cards
+	g.SetTurnMessages("p1")
+	p1 := g.PlayerMap["p1"]
+	p1.Hand = []Card{{ID: "c1", Suit: Spades, Rank: RankTwo}}
+	g.PlayCards("p1", []string{"c1"}, RankTwo)
+
+	initialPileCount := g.PileCount
+
+	// p2 passes
+	err := g.Pass("p2")
+	if err != nil {
+		t.Fatalf("Pass failed: %v", err)
+	}
+
+	// p3 passes - should trigger pile discard (2 consecutive passes)
+	err = g.Pass("p3")
+	if err != nil {
+		t.Fatalf("Second pass failed: %v", err)
+	}
+
+	// Pile should be discarded after enough passes
+	if g.PileCount != 0 {
+		t.Errorf("Expected pile to be discarded after consecutive passes, got pile count %d", g.PileCount)
+	}
+
+	// Test pass count tracking
+	if g.PileCount == 0 && initialPileCount > 0 {
+		// Pass was successful and pile was cleared
+		if g.Phase != PhaseThinking {
+			t.Errorf("Expected phase to be thinking after pile clear, got %s", g.Phase)
+		}
+	}
+}
+
+func TestWinCondition(t *testing.T) {
+	t.Run("Player wins when hand is empty", func(t *testing.T) {
+		g := NewGame()
+		g.AddPlayer("p1", "Winner", "", false)
+		g.AddPlayer("p2", "Loser", "", false)
+		g.Start()
+
+		// Give p1 only one card
+		p1 := g.PlayerMap["p1"]
+		p1.Hand = []Card{{ID: "c1", Suit: Spades, Rank: RankAce}}
+
+		// Set p1 as active
+		g.SetTurnMessages("p1")
+
+		// Play last card
+		err := g.PlayCards("p1", []string{"c1"}, RankAce)
+		if err != nil {
+			t.Fatalf("Failed to play winning card: %v", err)
+		}
+
+		// Check if p1 has zero cards
+		if len(p1.Hand) != 0 {
+			t.Errorf("Expected p1 to have 0 cards, got %d", len(p1.Hand))
+		}
+	})
+}
+
+func TestCardValidation(t *testing.T) {
+	t.Run("Invalid card ID should fail", func(t *testing.T) {
+		g := NewGame()
+		g.AddPlayer("p1", "P1", "", false)
+		g.AddPlayer("p2", "P2", "", false)
+		g.Start()
+
+		g.SetTurnMessages("p1")
+
+		// Try to play card that doesn't exist in hand
+		err := g.PlayCards("p1", []string{"nonexistent_card"}, RankTwo)
+		if err == nil {
+			t.Error("Expected error when playing invalid card ID")
+		}
+	})
+
+	t.Run("Cannot play on other player's turn", func(t *testing.T) {
+		g := NewGame()
+		g.AddPlayer("p1", "P1", "", false)
+		g.AddPlayer("p2", "P2", "", false)
+		g.Start()
+
+		// Set p1 as active
+		g.SetTurnMessages("p1")
+
+		// Try to play as p2 (not active)
+		p2 := g.PlayerMap["p2"]
+		if len(p2.Hand) > 0 {
+			err := g.PlayCards("p2", []string{p2.Hand[0].ID}, RankTwo)
+			if err == nil {
+				t.Error("Expected error when playing out of turn")
+			}
+		}
+	})
+}
+
+func TestMultiCardPlay(t *testing.T) {
+	g := NewGame()
+	g.AddPlayer("p1", "Player 1", "", false)
+	g.AddPlayer("p2", "Player 2", "", false)
+	g.Start()
+
+	g.SetTurnMessages("p1")
+	p1 := g.PlayerMap["p1"]
+
+	// Give p1 multiple cards of same rank
+	p1.Hand = []Card{
+		{ID: "c1", Suit: Spades, Rank: RankTwo},
+		{ID: "c2", Suit: Hearts, Rank: RankTwo},
+		{ID: "c3", Suit: Clubs, Rank: RankTwo},
+	}
+
+	// Play all three cards
+	err := g.PlayCards("p1", []string{"c1", "c2", "c3"}, RankTwo)
+	if err != nil {
+		t.Fatalf("Failed to play multiple cards: %v", err)
+	}
+
+	// Pile should have 3 cards
+	if g.PileCount != 3 {
+		t.Errorf("Expected pile count 3, got %d", g.PileCount)
+	}
+
+	// Player should have 0 cards left
+	if len(p1.Hand) != 0 {
+		t.Errorf("Expected p1 to have 0 cards, got %d", len(p1.Hand))
+	}
+}
