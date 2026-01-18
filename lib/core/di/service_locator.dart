@@ -58,27 +58,15 @@ class ServiceLocator {
     storageService = StorageService(prefs);
     greetingService = GreetingService();
 
-    // Initialize Notification Bloc
-    notificationBloc = AppNotificationBloc();
-    notificationService = NotificationService();
-    sessionBloc = SessionBloc();
-
-    // Initialize Audio Service
-    audioService = AudioServiceImpl();
-    await audioService.initialize();
-
-    authRepository = AuthRepository();
-    userRepository = UserRepository();
-    onboardingRepository = OnboardingRepository(prefs);
-
     // Initialize the singleton WS handler
     _webSocketHandler = WebSocketSessionHandler();
 
+    // Initialize Repositories
+    authRepository = AuthRepository();
+    userRepository = UserRepository();
+    onboardingRepository = OnboardingRepository(prefs);
     sessionRepository = WebSocketSessionRepository(_webSocketHandler);
-
-    // Initialize ProfileRepository with WebSocket handler
     profileRepository = ProfileRepository(_webSocketHandler);
-
     challengesRepository = ChallengesRepository(_webSocketHandler);
     adminRepository = AdminRepository();
 
@@ -91,6 +79,17 @@ class ServiceLocator {
     } else {
       voiceSessionHandler = null; // Voice disabled
     }
+
+    // Initialize Audio Service
+    audioService = AudioServiceImpl();
+    await audioService.initialize();
+
+    // Initialize Notification Service
+    notificationService = NotificationService();
+
+    // Initialize Blocs (depend on services/repositories)
+    notificationBloc = AppNotificationBloc();
+    sessionBloc = SessionBloc();
 
     // Initialize Offline Services
     localGameEngine = LocalGameEngine();
