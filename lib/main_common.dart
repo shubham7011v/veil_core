@@ -10,7 +10,6 @@ import 'core/theme/bloc/theme_bloc.dart';
 import 'core/theme/bloc/theme_state.dart';
 import 'core/theme/bloc/theme_event.dart';
 
-import 'features/session/session.dart';
 import 'features/auth/auth.dart';
 import 'features/profile/profile.dart';
 import 'features/challenges/presentation/bloc/challenges_bloc.dart';
@@ -290,7 +289,7 @@ class BluffApp extends StatelessWidget {
           create: (context) =>
               ChallengesBloc(di.sl.challengesRepository)..add(LoadChallenges()),
         ),
-        BlocProvider(create: (_) => SessionBloc()),
+        BlocProvider.value(value: di.sl.sessionBloc),
       ],
       child: BlocBuilder<ThemeBloc, ThemeState>(
         builder: (context, themeState) {

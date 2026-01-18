@@ -3,6 +3,7 @@ import '../../../../di/service_locator.dart';
 import '../../../../error/failure.dart';
 import '../../../../../../features/auth/domain/models/user_stats.dart';
 import '../../../../../../features/challenges/domain/models/daily_challenge.dart';
+import '../../../../../../features/profile/domain/models/match_history_item.dart';
 import '../../../../../../features/social/domain/models/friend_record.dart';
 import '../../../../constants/sound_assets.dart';
 import '../../../../services/audio/audio_service_interface.dart';
@@ -111,6 +112,10 @@ mixin WebSocketMessageHandlerMixin on WebSocketHandlerBase {
 
         case 'TYPING':
           _processTyping(msg['data'] as Map<String, dynamic>);
+          break;
+
+        case 'MATCH_HISTORY_DATA':
+          _processMatchHistoryData((msg['data'] as List<dynamic>?) ?? []);
           break;
       }
     } catch (e, stack) {
@@ -277,6 +282,24 @@ mixin WebSocketMessageHandlerMixin on WebSocketHandlerBase {
       onTypingStatusChanged(senderId, isTyping);
     } catch (e) {
       AppLogger.sessionError('Failed to parse typing message', exception: e);
+    }
+  }
+
+  void _processMatchHistoryData(List<dynamic> data) {
+    try {
+      final history = data
+          .map(
+            (item) => MatchHistoryItem.fromJson(item as Map<String, dynamic>),
+          )
+          .toList();
+      if (!matchHistoryController.isClosed) {
+        matchHistoryController.add(history);
+      }
+    } catch (e) {
+      AppLogger.sessionError(
+        'Failed to parse match history data',
+        exception: e,
+      );
     }
   }
 

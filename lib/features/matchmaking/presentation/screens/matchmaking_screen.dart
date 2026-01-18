@@ -92,7 +92,11 @@ class _MatchmakingViewState extends State<_MatchmakingView>
         },
       );
     } else if (effect is MatchmakingShowTimeoutDialog) {
-      showMatchmakingTimeoutDialog(context, palette);
+      showMatchmakingTimeoutDialog(
+        context,
+        palette,
+        context.read<MatchmakingBloc>(),
+      );
     } else if (effect is MatchmakingTriggerHaptic) {
       HapticFeedback.selectionClick();
     } else if (effect is MatchmakingShowSnackBar) {

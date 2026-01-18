@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'profile_event.dart';
@@ -7,6 +8,7 @@ import '../../../../core/error/failure.dart';
 
 class ProfileBloc extends Bloc<ProfileEvent, ProfileState> {
   final ProfileRepository _repository;
+  StreamSubscription? _historySubscription;
 
   ProfileBloc({required ProfileRepository repository})
     : _repository = repository,
@@ -14,6 +16,14 @@ class ProfileBloc extends Bloc<ProfileEvent, ProfileState> {
     on<ProfileViewRequested>(_onViewRequested);
     on<ProfileFriendAdded>(_onFriendAdded);
     on<ProfileFriendRemoved>(_onFriendRemoved);
+    on<ProfileMatchHistoryRequested>(_onMatchHistoryRequested);
+    on<ProfileMatchHistoryUpdated>(_onMatchHistoryUpdated);
+  }
+
+  @override
+  Future<void> close() {
+    _historySubscription?.cancel();
+    return super.close();
   }
 
   Future<void> _onViewRequested(
@@ -26,6 +36,18 @@ class ProfileBloc extends Bloc<ProfileEvent, ProfileState> {
       final profile = await _repository.getProfile(event.userId);
       final currentUser = FirebaseAuth.instance.currentUser;
       final isOwnProfile = currentUser?.uid == event.userId;
+
+      if (isOwnProfile) {
+        // Subscribe to match history updates for own profile
+        _historySubscription?.cancel();
+        _historySubscription = _repository.myMatchHistoryStream.listen((
+          history,
+        ) {
+          add(ProfileMatchHistoryUpdated(history));
+        });
+        // Fetch initial history
+        _repository.fetchMyMatchHistory();
+      }
 
       emit(ProfileLoaded(profile: profile, isOwnProfile: isOwnProfile));
     } catch (e) {
@@ -58,6 +80,22 @@ class ProfileBloc extends Bloc<ProfileEvent, ProfileState> {
       add(ProfileViewRequested(event.userId));
     } catch (e) {
       emit(ProfileError(UnknownFailure('Failed to remove friend: $e')));
+    }
+  }
+
+  void _onMatchHistoryRequested(
+    ProfileMatchHistoryRequested event,
+    Emitter<ProfileState> emit,
+  ) {
+    _repository.fetchMyMatchHistory();
+  }
+
+  void _onMatchHistoryUpdated(
+    ProfileMatchHistoryUpdated event,
+    Emitter<ProfileState> emit,
+  ) {
+    if (state is ProfileLoaded) {
+      emit((state as ProfileLoaded).copyWith(matchHistory: event.history));
     }
   }
 }

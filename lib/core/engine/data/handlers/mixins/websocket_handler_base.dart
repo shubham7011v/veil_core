@@ -8,6 +8,7 @@ import '../../../domain/models/unit.dart';
 import '../../../../../features/auth/domain/models/user_stats.dart';
 import '../../../../../features/social/domain/models/friend_record.dart';
 import '../../../../../features/challenges/domain/models/daily_challenge.dart';
+import '../../../../../features/profile/domain/models/match_history_item.dart';
 import '../../../../error/failure.dart';
 
 /// Base mixin that defines the interface required by all WebSocket handler mixins.
@@ -57,6 +58,8 @@ mixin WebSocketHandlerBase {
   StreamController<Map<String, dynamic>> get challengeClaimResultController;
   StreamController<Map<String, dynamic>> get chatController;
   StreamController<Failure> get errorController;
+  // Match History
+  StreamController<List<MatchHistoryItem>> get matchHistoryController;
 
   // --- Matchmaking ---
   bool get isJoiningMatchmaking;

@@ -9,6 +9,7 @@ import (
 	"testing"
 	"time"
 
+	"veil_server/config"
 	"veil_server/db"
 	"veil_server/protocol"
 	"veil_server/room"
@@ -22,13 +23,20 @@ func TestGameFlow(t *testing.T) {
 	os.Remove(dbPath)
 	defer os.Remove(dbPath)
 	db.InitDB(dbPath)
-	os.Setenv("LOBBY_TIMEOUT_S", "1")
+	os.Setenv("LOBBY_TIMEOUT_S", "10")
 	os.Setenv("START_GAME_DELAY", "1")
+	os.Setenv("START_GAME_DELAY", "1")
+	// Override directly as init() has already run
+	originalTarget := room.TargetPlayers
+	room.TargetPlayers = 2
+	defer func() { room.TargetPlayers = originalTarget }()
 	defer os.Unsetenv("LOBBY_TIMEOUT_S")
 	defer os.Unsetenv("START_GAME_DELAY")
+	defer os.Unsetenv("MAX_PLAYERS")
 
 	// 1. Setup Server
-	manager := room.NewManager(nil)
+	dbConn, _ := db.InitDB(dbPath)
+	manager := room.NewManager(nil, dbConn)
 	go manager.Run()
 	s := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		room.ServeWs(manager, w, r)
@@ -53,10 +61,15 @@ func TestGameFlow(t *testing.T) {
 	// 3. Auth & Join
 	sendMsg(t, connA, protocol.MsgTypeAuth, protocol.AuthMessage{Token: "A"})
 	sendMsg(t, connA, "JOIN_ROOM", nil)
+	waitForGameState(t, connA, "lobby")
+	sendMsg(t, connA, protocol.MsgTypeClientReady, nil)
+
 	sendMsg(t, connB, protocol.MsgTypeAuth, protocol.AuthMessage{Token: "B"})
 	sendMsg(t, connB, "JOIN_ROOM", nil)
+	// Since TargetPlayers=2, joining makes it full -> 'starting'
+	waitForGameState(t, connB, "starting")
+	sendMsg(t, connB, protocol.MsgTypeClientReady, nil)
 
-	// 4. Wait for Start & Identify Active Player
 	// 4. Wait for Start & Identify Active Player
 	stateA := waitForGameState(t, connA, "thinking")
 	stateB := waitForGameState(t, connB, "thinking")
@@ -76,7 +89,7 @@ func TestGameFlow(t *testing.T) {
 	var activeConn, passiveConn *websocket.Conn
 	var activeHand []interface{}
 
-	if stateA["activePlayerId"] == "user_A" {
+	if stateA["activePlayerId"] == "A" {
 		activeConn = connA
 		passiveConn = connB
 		activeHand = stateA["myHand"].([]interface{})
@@ -184,8 +197,13 @@ func TestBotBehavior(t *testing.T) {
 	defer os.Unsetenv("LOBBY_TIMEOUT_S")
 	defer os.Unsetenv("START_GAME_DELAY")
 
+	originalDelay := config.BotThinkingDelaySec
+	config.BotThinkingDelaySec = 1
+	defer func() { config.BotThinkingDelaySec = originalDelay }()
+
 	// 1. Setup Server
-	manager := room.NewManager(nil)
+	dbConn, _ := db.InitDB(dbPath)
+	manager := room.NewManager(nil, dbConn)
 	go manager.Run()
 	s := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		room.ServeWs(manager, w, r)
@@ -210,6 +228,8 @@ func TestBotBehavior(t *testing.T) {
 	// Simple check, assume OK for speed, real check in waitForGameState loop implicit
 
 	sendMsg(t, connH, "JOIN_ROOM", nil) // Triggers matchmaking
+	waitForGameState(t, connH, "lobby")
+	sendMsg(t, connH, protocol.MsgTypeClientReady, nil)
 
 	// 4. Wait for Game Start (Bots should join after 1s timeout)
 	t.Log("Waiting for bots to fill lobby...")
@@ -280,7 +300,8 @@ func TestNetworkEdgeCases(t *testing.T) {
 	db.InitDB(dbPath)
 
 	// 1. Setup Server
-	manager := room.NewManager(nil)
+	dbConn, _ := db.InitDB(dbPath)
+	manager := room.NewManager(nil, dbConn)
 	go manager.Run()
 	s := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		room.ServeWs(manager, w, r)
@@ -326,6 +347,7 @@ func TestNetworkEdgeCases(t *testing.T) {
 		c2 := connectAndAuth("OtherPlayer", "other_token")
 		defer c2.Close()
 		sendMsg(t, c2, protocol.MsgTypeJoinPrivateRoom, protocol.JoinPrivateRoomMessage{RoomCode: roomCode})
+		sendMsg(t, c2, protocol.MsgTypeClientReady, nil)
 
 		// Wait for c2 to get room joined
 		c2.SetReadDeadline(time.Now().Add(2 * time.Second))
@@ -333,6 +355,7 @@ func TestNetworkEdgeCases(t *testing.T) {
 
 		// Start Game
 		time.Sleep(200 * time.Millisecond)
+		sendMsg(t, c1, protocol.MsgTypeClientReady, nil)
 		sendMsg(t, c1, protocol.MsgTypeStartPrivateGame, protocol.StartPrivateGameMessage{RoomCode: roomCode})
 
 		// Wait for Game Start (Thinking Phase)

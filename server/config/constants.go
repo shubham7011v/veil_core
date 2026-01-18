@@ -3,30 +3,31 @@ package config
 import "time"
 
 // Game timing constants
-const (
+// Game timing constants
+var (
 	// Grace period for disconnected players to reconnect (seconds)
-	DefaultGracePeriodSec = 60
+	DefaultGracePeriodSec = int64(60)
 
 	// Delay before starting a game after lobby fills (seconds)
-	LobbyStartDelaySec = 15
+	LobbyStartDelaySec = int64(15)
 
 	// Maximum time allowed per turn (seconds)
-	TurnTimeoutSec = 30
+	TurnTimeoutSec = int64(30)
 
 	// Bot thinking delay to simulate human behavior (seconds)
-	BotThinkingDelaySec = 10
+	BotThinkingDelaySec = int64(10)
 
 	// Interval for periodic full state sync (seconds)
-	PeriodicSyncIntervalSec = 30
+	PeriodicSyncIntervalSec = int64(30)
 
 	// Animation delay for challenge resolution (seconds)
-	ChallengeRevealDelaySec = 2
+	ChallengeRevealDelaySec = int64(2)
 
 	// Lobby timeout before auto-filling with bots (seconds)
-	LobbyTimeoutSec = 45
+	LobbyTimeoutSec = int64(45)
 
 	// Matchmaker tick interval (milliseconds)
-	MatchmakerTickIntervalMs = 200
+	MatchmakerTickIntervalMs = int64(200)
 )
 
 // Duration constants (pre-calculated for convenience)

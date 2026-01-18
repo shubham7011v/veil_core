@@ -15,6 +15,7 @@ import '../../features/profile/profile.dart';
 import '../../features/challenges/data/challenges_repository.dart';
 import '../../features/admin/data/admin_repository.dart';
 import '../../features/offline/offline.dart';
+import '../../features/session/session.dart';
 import '../services/notification_service.dart';
 
 class ServiceLocator {
@@ -38,6 +39,7 @@ class ServiceLocator {
   late final AudioService audioService;
   late final AppNotificationBloc notificationBloc;
   late final NotificationService notificationService;
+  late final SessionBloc sessionBloc;
 
   // Offline Services
   late final LocalGameEngine localGameEngine;
@@ -59,6 +61,7 @@ class ServiceLocator {
     // Initialize Notification Bloc
     notificationBloc = AppNotificationBloc();
     notificationService = NotificationService();
+    sessionBloc = SessionBloc();
 
     // Initialize Audio Service
     audioService = AudioServiceImpl();

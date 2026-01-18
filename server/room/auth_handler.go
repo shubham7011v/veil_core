@@ -8,8 +8,6 @@ import (
 	"strings"
 	"time"
 
-	"veil_server/config"
-	"veil_server/db"
 	"veil_server/protocol"
 )
 
@@ -26,63 +24,37 @@ func NewAuthHandler(m *Manager) *AuthHandler {
 
 // HandleAuth processes authentication messages and verifies Firebase tokens
 func (ah *AuthHandler) HandleAuth(c *Client, authData protocol.AuthMessage) {
-	tokenString := authData.Token
-	userName := authData.Name
-	userID := tokenString
-	firebaseName := userName
-	firebaseAvatar := authData.AvatarURL
-
-	if ah.manager.AuthClient != nil && !strings.HasPrefix(tokenString, "mock_") {
-		// ✅ FIX: Add timeout to Firebase verification
-		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-		defer cancel()
-
-		token, err := ah.manager.AuthClient.VerifyIDToken(ctx, tokenString)
-		if err == nil {
-			userID = token.UID
-			if firebaseName == "" && token.Claims["name"] != nil {
-				firebaseName = token.Claims["name"].(string)
-			}
-			if firebaseAvatar == "" && token.Claims["picture"] != nil {
-				firebaseAvatar = token.Claims["picture"].(string)
-			}
+	// Call UseCase
+	u, err := ah.manager.authUC.Authenticate(context.Background(), authData.Token, authData.Name, authData.AvatarURL)
+	if err != nil {
+		if err.Error() == protocol.ErrCodeAuthTimeout {
+			ah.manager.sendError(c, protocol.ErrCodeAuthTimeout, "Authentication service temporarily unavailable")
 		} else {
-			// Check if it was a timeout
-			if err == context.DeadlineExceeded {
-				log.Printf("Token verification timeout for client: %v", err)
-				ah.manager.sendError(c, "AUTH_TIMEOUT", "Authentication service temporarily unavailable")
-			} else {
-				log.Printf("Token verify failed: %v", err)
-				ah.manager.sendError(c, "AUTH_FAILED", "Invalid authentication token")
-			}
-			return
+			log.Printf("Auth Failed: %v", err)
+			ah.manager.sendError(c, protocol.ErrCodeAuthFailed, "Authentication failed")
 		}
+		return
 	}
 
-	if firebaseName == "" {
-		nameID := userID
-		if len(nameID) > 4 {
-			nameID = nameID[:4]
-		}
-		firebaseName = "Player " + nameID
-	}
+	// Update Client Identity
+	c.ID = u.ID
+	c.Name = u.Name
+	c.AvatarURL = u.AvatarURL
 
-	c.ID = userID
-	c.Name = firebaseName
-	c.AvatarURL = firebaseAvatar
-
-	stats, err := db.GetOrCreateUser(c.ID, firebaseName)
-	if err == nil {
-		if firebaseAvatar != "" {
-			db.UpdateUserAvatar(c.ID, firebaseAvatar)
-			stats.AvatarURL = firebaseAvatar
-		}
-	} else {
-		stats = &db.UserStats{UserID: c.ID, Name: "Unknown", Rank: "Novice", Coins: 1000}
+	// Map to legacy stats format for protocol compatibility
+	stats := map[string]interface{}{
+		"userId":      u.ID,
+		"name":        u.Name,
+		"avatarUrl":   u.AvatarURL,
+		"rank":        u.Rank,
+		"coins":       u.Coins,
+		"gamesPlayed": u.GamesPlayed,
+		"wins":        u.Wins,
+		"losses":      u.Losses,
 	}
 	ah.SendAuthOk(c, stats)
 
-	// ✅ Session Restoration: Check if player belongs to an active game
+	// Session Restoration: Check if player belongs to an active game
 	if r := ah.manager.FindRoomByPlayerID(c.ID); r != nil {
 		log.Printf("AUTH: Auto-restoring session for %s in room %s", c.ID, r.ID)
 		c.CurrentRoom = r
@@ -96,62 +68,59 @@ func (ah *AuthHandler) HandleUpdateName(c *Client, data []byte) {
 	if err := json.Unmarshal(data, &payload); err != nil {
 		return
 	}
-	if err := db.UpdateUserName(c.ID, payload.Name); err != nil {
+
+	u, err := ah.manager.authUC.UpdateName(c.ID, payload.Name)
+	if err != nil {
+		// Log or error?
 		return
 	}
-	stats, _ := db.GetOrCreateUser(c.ID, payload.Name)
+
+	stats := map[string]interface{}{
+		"userId":      u.ID,
+		"name":        u.Name,
+		"avatarUrl":   u.AvatarURL,
+		"rank":        u.Rank,
+		"coins":       u.Coins,
+		"gamesPlayed": u.GamesPlayed,
+		"wins":        u.Wins,
+		"losses":      u.Losses,
+	}
 	ah.SendAuthOk(c, stats)
 }
 
 // HandleRefillCoins processes coin refill requests for low-balance users
 func (ah *AuthHandler) HandleRefillCoins(c *Client) {
-	stats, _ := db.GetOrCreateUser(c.ID, "")
-	if stats.Coins < 100 {
-		topUp := 1000 - stats.Coins
-		if err := db.UpdateUserCoins(c.ID, topUp); err == nil {
-			stats.Coins = 1000
-			ah.SendAuthOk(c, stats)
-		}
-	} else {
-		ah.manager.sendError(c, "REFILL_DENIED", "You have enough coins!")
-	}
-}
-
-// HandleChallengeClaim processes checking and rewarding daily challenges
-func (ah *AuthHandler) HandleChallengeClaim(c *Client, data []byte) {
-	if !config.GetFeatureFlags().EnableDailyChallenges {
-		ah.manager.sendError(c, "FEATURE_DISABLED", "Daily Challenges are currently disabled")
-		return
-	}
-	var challengeID string
-	json.Unmarshal(data, &challengeID)
-	reward, err := db.ClaimChallengeReward(c.ID, challengeID)
+	u, err := ah.manager.authUC.RefillCoins(c.ID)
 	if err != nil {
-		ah.manager.sendError(c, "CLAIM_FAILED", err.Error())
+		ah.manager.sendError(c, protocol.ErrCodeRefillDenied, "You have enough coins or error occurred")
 		return
 	}
 
-	response := map[string]interface{}{
-		"challengeId": challengeID,
-		"reward":      reward,
+	stats := map[string]interface{}{
+		"userId":      u.ID,
+		"name":        u.Name,
+		"avatarUrl":   u.AvatarURL,
+		"rank":        u.Rank,
+		"coins":       u.Coins,
+		"gamesPlayed": u.GamesPlayed,
+		"wins":        u.Wins,
+		"losses":      u.Losses,
 	}
-	bytes, _ := json.Marshal(protocol.NewMessage(protocol.MsgTypeChallengeClaimOk, response))
-	c.Send <- bytes
-
-	stats, err := db.GetOrCreateUser(c.ID, "")
-	if err == nil {
-		ah.SendAuthOk(c, stats)
-	}
+	ah.SendAuthOk(c, stats)
 }
+
+// HandleChallengeClaim: Logic Moved to Manager
+// This method is kept as a legacy stub if needed, but Manager handles MsgTypeChallengeClaim now.
+// We can remove it or deprecated it. Removing to avoid confusion since logic is in Manager now.
 
 // HandleDeleteAccount processes account deletion requests
 func (ah *AuthHandler) HandleDeleteAccount(c *Client) {
 	log.Printf("User %s requested account deletion", c.ID)
-	if err := db.DeleteUser(c.ID); err != nil {
-		ah.manager.sendError(c, "DELETE_FAILED", "Could not delete account data")
+	if err := ah.manager.authUC.DeleteAccount(c.ID); err != nil {
+		ah.manager.sendError(c, protocol.ErrCodeDeleteFailed, "Could not delete account data")
 		return
 	}
-	ah.manager.sendError(c, "ACCOUNT_DELETED", "Your account has been permanently deleted")
+	ah.manager.sendError(c, protocol.ErrCodeAccountDeleted, "Your account has been permanently deleted")
 	if c.CurrentRoom != nil {
 		c.CurrentRoom.Leave(c)
 	}
@@ -159,7 +128,7 @@ func (ah *AuthHandler) HandleDeleteAccount(c *Client) {
 
 // AddFriendListResponse fetches and sends friend list
 func (ah *AuthHandler) AddFriendListResponse(c *Client) {
-	friends, err := db.GetFriends(c.ID)
+	friends, err := ah.manager.socialUC.GetFriends(c.ID)
 	if err != nil {
 		return
 	}
@@ -167,8 +136,29 @@ func (ah *AuthHandler) AddFriendListResponse(c *Client) {
 	c.Send <- bytes
 }
 
+// AddPlayerCoinsResponse sends updated user stats (coins) to the client
+func (ah *AuthHandler) AddPlayerCoinsResponse(c *Client) {
+	// Re-fetch user stats via AuthUC
+	u, err := ah.manager.authUC.GetUser(c.ID)
+	if err != nil {
+		return
+	}
+
+	stats := map[string]interface{}{
+		"userId":      u.ID,
+		"name":        u.Name,
+		"avatarUrl":   u.AvatarURL,
+		"rank":        u.Rank,
+		"coins":       u.Coins,
+		"gamesPlayed": u.GamesPlayed,
+		"wins":        u.Wins,
+		"losses":      u.Losses,
+	}
+	ah.SendAuthOk(c, stats)
+}
+
 // SendAuthOk sends successful authentication response with user stats
-func (ah *AuthHandler) SendAuthOk(c *Client, stats *db.UserStats) {
+func (ah *AuthHandler) SendAuthOk(c *Client, stats interface{}) {
 	isAdmin := false
 	if adminUIDsEnv := os.Getenv("ADMIN_UIDS"); adminUIDsEnv != "" {
 		for _, uid := range strings.Split(adminUIDsEnv, ",") {

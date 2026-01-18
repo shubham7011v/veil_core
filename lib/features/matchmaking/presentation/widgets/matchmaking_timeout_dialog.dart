@@ -1,13 +1,17 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_bloc/flutter_bloc.dart';
 import '../../../../core/theme/colors.dart';
 import '../bloc/matchmaking_bloc.dart';
 import '../bloc/matchmaking_event.dart';
 
 class MatchmakingTimeoutDialog extends StatelessWidget {
   final AppColorPalette palette;
+  final MatchmakingBloc bloc;
 
-  const MatchmakingTimeoutDialog({super.key, required this.palette});
+  const MatchmakingTimeoutDialog({
+    super.key,
+    required this.palette,
+    required this.bloc,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -25,7 +29,7 @@ class MatchmakingTimeoutDialog extends StatelessWidget {
         TextButton(
           onPressed: () {
             Navigator.pop(context); // Close dialog
-            context.read<MatchmakingBloc>().add(CancelMatchmaking());
+            bloc.add(CancelMatchmaking());
             Navigator.pop(context); // Close screen
           },
           child: Text('Leave', style: TextStyle(color: palette.danger)),
@@ -43,10 +47,12 @@ class MatchmakingTimeoutDialog extends StatelessWidget {
 void showMatchmakingTimeoutDialog(
   BuildContext context,
   AppColorPalette palette,
+  MatchmakingBloc bloc,
 ) {
   showDialog(
     context: context,
     barrierDismissible: false,
-    builder: (context) => MatchmakingTimeoutDialog(palette: palette),
+    builder: (context) =>
+        MatchmakingTimeoutDialog(palette: palette, bloc: bloc),
   );
 }

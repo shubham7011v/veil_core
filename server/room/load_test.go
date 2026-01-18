@@ -20,10 +20,10 @@ func TestLoadMatchmaking(t *testing.T) {
 
 	// Initialize temporary database for test
 	dbPath := "test_load.db"
-	db.InitDB(dbPath)
+	dbConn, _ := db.InitDB(dbPath)
 	defer os.Remove(dbPath)
 
-	m := NewManager(nil)
+	m := NewManager(nil, dbConn)
 	go m.Run()
 
 	numClients := 20

@@ -3,6 +3,7 @@ package api
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"log"
 	"net/http"
 	"os"
@@ -10,7 +11,6 @@ import (
 	"strings"
 	"time"
 	"veil_server/config"
-	"veil_server/db"
 	"veil_server/room"
 
 	"firebase.google.com/go/v4/auth"
@@ -180,7 +180,7 @@ func (h *AdminHandler) BanUser(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// 1. Mark as banned in DB
-	if err := db.BanUser(payload.UserID); err != nil {
+	if err := h.Manager.UserRepo.BanUser(payload.UserID); err != nil {
 		log.Printf("Error banning user in DB: %v", err)
 	}
 	log.Printf("Banning user: %s", payload.UserID)
@@ -208,8 +208,14 @@ func (h *AdminHandler) CloseRoom(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// TODO: Implement ForceClose in Manager
-	// This is a placeholder until we add the method to Manager
+	// Force close the specified room
+	if err := h.Manager.ForceCloseRoom(payload.RoomID); err != nil {
+		log.Printf("Failed to close room %s: %v", payload.RoomID, err)
+		http.Error(w, fmt.Sprintf("Failed to close room: %v", err), http.StatusNotFound)
+		return
+	}
+
+	log.Printf("Admin closed room: %s", payload.RoomID)
 	w.WriteHeader(http.StatusOK)
-	w.Write([]byte(`{"status":"ok"}`))
+	w.Write([]byte(`{"status":"ok","message":"Room closed successfully"}`))
 }

@@ -9,19 +9,24 @@ import (
 	"time"
 
 	"veil_server/config"
-	"veil_server/db"
 	"veil_server/game"
+	"veil_server/internal/domain/user"
+	"veil_server/protocol"
 )
 
 // Matchmaker handles lobby management and matchmaking operations
 // Extracted from Manager to improve modularity and single-responsibility
 type Matchmaker struct {
-	manager *Manager
+	manager  *Manager
+	userRepo user.Repository
 }
 
 // NewMatchmaker creates a new matchmaking handler
-func NewMatchmaker(m *Manager) *Matchmaker {
-	return &Matchmaker{manager: m}
+func NewMatchmaker(m *Manager, repo user.Repository) *Matchmaker {
+	return &Matchmaker{
+		manager:  m,
+		userRepo: repo,
+	}
 }
 
 // Matchmaking Settings
@@ -37,6 +42,12 @@ func init() {
 	if val, exists := os.LookupEnv("LOBBY_TIMEOUT_S"); exists {
 		if s, err := time.ParseDuration(val + "s"); err == nil {
 			LobbyTimeout = s
+		}
+	}
+	if val, exists := os.LookupEnv("MAX_PLAYERS"); exists {
+		var i int
+		if _, err := fmt.Sscanf(val, "%d", &i); err == nil {
+			TargetPlayers = i
 		}
 	}
 }
@@ -104,12 +115,14 @@ func (mm *Matchmaker) CheckLobbyTimeout() {
 func (mm *Matchmaker) AttemptJoinActiveLobby(c *Client) {
 	// 1. Pre-Check: Validate coins BEFORE locking or assigning slot
 	// This prevents "Ghost Slots" where a user takes a slot but is later rejected by the room.
-	var stats *db.UserStats
+	// 1. Pre-Check: Validate coins BEFORE locking or assigning slot
+	// This prevents "Ghost Slots" where a user takes a slot but is later rejected by the room.
+	var u *user.User
 	var err error
 
 	// Retry loop for SQLite busy/locked errors
 	for i := 0; i < 5; i++ {
-		stats, err = db.GetOrCreateUser(c.ID, "")
+		u, err = mm.userRepo.GetOrCreate(c.ID, "")
 		if err == nil {
 			break
 		}
@@ -122,16 +135,16 @@ func (mm *Matchmaker) AttemptJoinActiveLobby(c *Client) {
 		break
 	}
 
-	if err != nil || stats == nil || stats.Coins < 100 {
+	if err != nil || u == nil || u.Coins < 100 {
 		coins := -1
-		if stats != nil {
-			coins = stats.Coins
+		if u != nil {
+			coins = u.Coins
 		}
 		log.Printf("DEBUG: Player %s failed coin check after retries. err: %v, coins: %d", c.ID, err, coins)
-		mm.manager.sendError(c, "INSUFFICIENT_FUNDS", "You need 100 coins to play online")
+		mm.manager.sendError(c, protocol.ErrCodeLowBalance, "You need 100 coins to play online")
 		return
 	}
-	log.Printf("DEBUG: Player %s passed coin check (coins: %d)", c.ID, stats.Coins)
+	log.Printf("DEBUG: Player %s passed coin check (coins: %d)", c.ID, u.Coins)
 
 	mm.manager.mu.Lock()
 	defer mm.manager.mu.Unlock()
@@ -155,7 +168,7 @@ func (mm *Matchmaker) AttemptJoinActiveLobby(c *Client) {
 	// Create if missing
 	if mm.manager.ActiveLobby == nil {
 		roomID := fmt.Sprintf("match_%d", time.Now().UnixNano())
-		room := NewRoom(roomID)
+		room := NewRoom(roomID, mm.manager)
 		room.SetMaxPlayers(TargetPlayers) // Override default (10) with matchmaking target (5)
 		room.SessionExpiry = mm.manager.ExpiredSessions
 
@@ -174,7 +187,7 @@ func (mm *Matchmaker) AttemptJoinActiveLobby(c *Client) {
 		mm.manager.ActiveLobby = room
 		mm.manager.ActiveLobbyCount = 0
 		mm.manager.ActiveLobbyStartTime = time.Now()
-		room.CreationTime = mm.manager.ActiveLobbyStartTime.Unix()
+		room.session.CreatedAt = mm.manager.ActiveLobbyStartTime.Unix()
 		log.Printf("Created New Active Lobby: %s (max: %d)", roomID, TargetPlayers)
 	}
 

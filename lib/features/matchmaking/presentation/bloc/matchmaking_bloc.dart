@@ -183,7 +183,8 @@ class MatchmakingBloc extends Bloc<MatchmakingEvent, MatchmakingState> {
         add(SyncLobbyCreatedAt(sessionState.createdAt!));
       }
 
-      if (sessionState.currentPhase == SessionPhase.thinking &&
+      if ((sessionState.currentPhase == SessionPhase.thinking ||
+              sessionState.currentPhase == SessionPhase.starting) &&
           !state.isMatchFound) {
         AppLogger.info(
           '🎉 [MatchmakingBloc] Match found! Transitioning to game...',

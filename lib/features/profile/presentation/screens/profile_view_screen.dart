@@ -11,6 +11,7 @@ import '../../../../shared/components/app_error_widget.dart';
 import '../../../../core/notifications/bloc/app_notification_bloc.dart';
 import '../../../../core/notifications/bloc/app_notification_event.dart';
 import '../../../../core/di/service_locator.dart' as di;
+import '../widgets/match_history_list.dart';
 
 class ProfileViewScreen extends StatelessWidget {
   final String userId;
@@ -210,6 +211,28 @@ class ProfileViewScreen extends StatelessWidget {
               ],
             ),
           ),
+
+          // Match History (Only for own profile)
+          if (state.isOwnProfile) ...[
+            const SizedBox(height: 32),
+            Align(
+              alignment: Alignment.centerLeft,
+              child: Text(
+                'MATCH HISTORY',
+                style: GoogleFonts.inter(
+                  color: palette.textSecondary,
+                  fontSize: 14,
+                  fontWeight: FontWeight.bold,
+                  letterSpacing: 1.5,
+                ),
+              ),
+            ),
+            const SizedBox(height: 16),
+            MatchHistoryList(
+              history: state.matchHistory,
+              currentUserId: profile.userId,
+            ),
+          ],
 
           const SizedBox(height: 32),
 

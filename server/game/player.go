@@ -13,15 +13,27 @@ type Player struct {
 	HasPassed      bool `json:"hasPassed"`      // Reset every round
 	IsDisconnected bool `json:"isDisconnected"` // For grace period
 	IsBot          bool `json:"isBot"`          // ✅ FIX: Bot check
+
+	Stats MatchStats `json:"matchStats"`
 }
 
-func NewPlayer(id, name, avatar string) *Player {
+type MatchStats struct {
+	SuccessfulBluffs     int `json:"successfulBluffs"`
+	BluffsCaught         int `json:"bluffsCaught"`         // I caught others
+	BluffsCaughtByOthers int `json:"bluffsCaughtByOthers"` // Others caught me
+	FalseAlarms          int `json:"falseAlarms"`          // I called bluff and lost
+	TurnsPlayed          int `json:"turnsPlayed"`
+	TotalCardsPlayed     int `json:"totalCardsPlayed"`
+}
+
+func NewPlayer(id, name, avatar string, isBot bool) *Player {
 	return &Player{
 		ID:          id,
 		Name:        name,
 		AvatarURL:   avatar,
 		Hand:        []Card{},
 		IsConnected: true,
+		IsBot:       isBot,
 	}
 }
 

@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"database/sql"
 	"encoding/json"
 	"log"
 	"net/http"
@@ -28,28 +29,22 @@ func main() {
 	}
 
 	// Initialize Database
-	var dbService db.UserDatabase
-	if err := db.InitDB("/app/data/veil.db"); err != nil {
+	var dbConn *sql.DB
+	var err error
+	dbConn, err = db.InitDB("/app/data/veil.db")
+	if err != nil {
 		// Fallback for local dev if /app/data doesn't exist
-		if err := db.InitDB("./veil.db"); err != nil {
+		dbConn, err = db.InitDB("./veil.db")
+		if err != nil {
 			log.Fatal("Failed to init DB:", err)
 		}
 	}
 
-	// Create database service instance (implements UserDatabase interface)
-	dbService = db.NewDatabaseService()
-	_ = dbService // NOTE: Interface created for future DI integration
-
-	// Start background workers
-	go db.StartCoinFlusher()
-	go db.StartDailyResetWorker()
+	// Start internal background workers for DB cleanup are now handled by Manager
 
 	// Initialize Firebase Admin SDK
-	// Credentials can be provided via GOOGLE_APPLICATION_CREDENTIALS env var (path to JSON)
-	// OR via raw JSON string in FIREBASE_CREDENTIALS_JSON env var (better for clouds like Heroku/Render)
 	ctx := context.Background()
 	var app *firebase.App
-	var err error
 
 	credJSON := os.Getenv("FIREBASE_CREDENTIALS_JSON")
 	if credJSON != "" {
@@ -70,9 +65,7 @@ func main() {
 	}
 
 	// Initialize the Room Manager with dependency injection
-	// Note: Full DI would also inject db into Manager constructor, but for now
-	// we're demonstrating the pattern without breaking existing code
-	manager := room.NewManager(authClient)
+	manager := room.NewManager(authClient, dbConn)
 	go manager.Run()
 
 	// Handle WebSocket connections
@@ -81,8 +74,8 @@ func main() {
 	})
 
 	// User API
-	userHandler := api.NewUserHandler(authClient)
-	http.HandleFunc("/api/user/v1/avatar", userHandler.UploadAvatar)
+	userHandler := api.NewUserHandler(authClient, manager.UserRepo)
+	http.HandleFunc("/api/user/avatar", userHandler.UploadAvatar)
 
 	// Admin API
 	adminHandler := api.NewAdminHandler(manager, authClient)
@@ -148,7 +141,7 @@ func main() {
 
 	// 3. Flush all buffered coin updates to DB
 	log.Println("Flushing coin buffer...")
-	if err := db.FlushCoins(); err != nil {
+	if err := manager.FlushEconomy(); err != nil {
 		log.Printf("Error flushing coins during shutdown: %v", err)
 	}
 

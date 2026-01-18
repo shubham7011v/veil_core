@@ -37,6 +37,13 @@ func (g *Game) PlayCards(playerID string, cardIDs []string, declaredRank Rank) e
 	g.Pile = append(g.Pile, removed...)
 	g.PileCount = len(g.Pile)
 
+	// Check if previous move was a successful bluff (since we are playing over it)
+	g.checkPreviousBluffSuccess()
+
+	// Update Player Stats
+	p.Stats.TurnsPlayed++
+	p.Stats.TotalCardsPlayed += len(cardIDs)
+
 	// Update Last Move
 	g.LastMove = &LastMove{
 		PlayerID:     playerID,
@@ -120,13 +127,26 @@ func (g *Game) ResolveChallenge(challengerID string) string {
 	winnerID := ""
 
 	if g.IsBluffSuccessful {
-		// Bluffer eats pile
+		// It WAS a bluff -> Bluffer loses, Challenger wins
 		loserID = blufferID
 		winnerID = challengerID
+
+		// Stats: Bluff Caught (Challenger succeeded)
+		if p, ok := g.PlayerMap[challengerID]; ok {
+			p.Stats.BluffsCaught++
+		}
+		if p, ok := g.PlayerMap[blufferID]; ok {
+			p.Stats.BluffsCaughtByOthers++
+		}
 	} else {
-		// Challenger eats pile
+		// It was NOT a bluff -> Challenger loses (False Alarm)
 		loserID = challengerID
 		winnerID = blufferID
+
+		// Stats: False Alarm (Challenger failed)
+		if p, ok := g.PlayerMap[challengerID]; ok {
+			p.Stats.FalseAlarms++
+		}
 	}
 
 	pileCount := g.PileCount
@@ -145,6 +165,24 @@ func (g *Game) ResolveChallenge(challengerID string) string {
 	return loserID + " lost the challenge!"
 }
 
+func (g *Game) checkPreviousBluffSuccess() {
+	if g.LastMove == nil {
+		return
+	}
+	isBluff := false
+	for _, c := range g.LastMove.ActualCards {
+		if c.Rank != g.LastMove.DeclaredRank {
+			isBluff = true
+			break
+		}
+	}
+	if isBluff {
+		if p, ok := g.PlayerMap[g.LastMove.PlayerID]; ok {
+			p.Stats.SuccessfulBluffs++
+		}
+	}
+}
+
 func (g *Game) Pass(playerID string) error {
 	if g.Phase != PhaseThinking && g.Phase != PhaseChallenging {
 		return errors.New("cannot pass now")
@@ -161,6 +199,9 @@ func (g *Game) Pass(playerID string) error {
 	// Check if ALL passed
 	if g.CheckAllPassed() {
 		// Round ends, cards discarded
+		// Check if the last move (which survived) was a bluff
+		g.checkPreviousBluffSuccess()
+
 		g.ResetRound()
 
 		// UI Context

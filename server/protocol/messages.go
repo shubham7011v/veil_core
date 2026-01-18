@@ -58,10 +58,11 @@ const (
 	MsgTypeVoiceICE       = "VOICE_ICE"
 
 	// Daily Challenges
-	MsgTypeChallengesGet    = "CHALLENGES_GET"
-	MsgTypeChallengesData   = "CHALLENGES_DATA"
-	MsgTypeChallengeClaim   = "CHALLENGE_CLAIM"
-	MsgTypeChallengeClaimOk = "CHALLENGE_CLAIM_OK"
+	// Daily Challenges
+	MsgTypeDailyChallengesGet  = "CHALLENGES_GET"
+	MsgTypeDailyChallengesData = "CHALLENGES_DATA"
+	MsgTypeChallengeClaim      = "CHALLENGE_CLAIM"
+	MsgTypeChallengeClaimOk    = "CHALLENGE_CLAIM_OK"
 	// Social
 	MsgTypeChat      = "CHAT"
 	MsgTypeEmoji     = "EMOJI"

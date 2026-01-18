@@ -8,20 +8,22 @@ import (
 	"time"
 
 	"veil_server/config"
-	"veil_server/db"
 	"veil_server/game"
+	"veil_server/internal/domain/match"
+	"veil_server/internal/domain/session"
+	"veil_server/internal/infrastructure/webrtc"
 	"veil_server/protocol"
 
-	"github.com/pion/webrtc/v3"
+	pion "github.com/pion/webrtc/v3"
 )
 
-// Room represents a single game session
+// Room represents a single game session (Infrastructure/Actor Layer)
 type Room struct {
-	mu sync.RWMutex // Protects state access
+	mu sync.RWMutex // Protects session access
 
-	ID           string
-	CreationTime int64 // Unix timestamp (seconds) of room creation
-	clients      map[*Client]bool
+	ID      string
+	session *session.Session
+	clients map[*Client]bool
 
 	// Channels (internal use mostly, exposed via methods)
 	broadcast  chan []byte
@@ -31,35 +33,16 @@ type Room struct {
 	quit       chan struct{}
 
 	// Timing
-	turnTimer       *time.Timer
-	turnDuration    time.Duration
-	gracePeriod     time.Duration
-	disconnectTimes map[string]time.Time // Track when each player disconnected
-	lastFullSync    time.Time            // Periodic full state sync (hybrid approach)
-
-	// Game State
-	game *game.Game
-
-	// Private Settings
-	name       string
-	code       string
-	password   string
-	isPrivate  bool
-	hostID     string
-	maxPlayers int
-	bootAmount float64
-	voice      *game.VoiceState
-	webRTC     *game.WebRTCManager
+	turnTimer    *time.Timer
+	turnDuration time.Duration
+	gracePeriod  time.Duration
 
 	// Event sequencing for race condition prevention
 	eventSequence int64
 
 	// ✅ FIX #3: Track pending challenge timer for cancellation
 	pendingChallengeTimer *time.Timer
-
-	// Client-Ready Protocol: Track which clients have signaled they're ready for game start
-	readyClients   map[string]bool
-	startGameTimer *time.Timer
+	startGameTimer        *time.Timer
 
 	// Broadcaster handles message distribution
 	broadcaster *Broadcaster
@@ -69,6 +52,12 @@ type Room struct {
 
 	// Session Expiry Channel (Notify Manager to clean index)
 	SessionExpiry chan<- string
+
+	// Dependencies
+	manager *Manager
+
+	// Middleware-composed handler
+	actionHandler ActionHandler
 }
 
 type GameAction struct {
@@ -76,41 +65,71 @@ type GameAction struct {
 	Message protocol.BaseMessage
 }
 
-func NewRoom(id string) *Room {
+func NewRoom(id string, manager *Manager) *Room {
+	settings := session.Settings{
+		MaxPlayers: config.DefaultMaxPlayers,
+		BootAmount: float64(config.DefaultBootAmount),
+	}
+
 	room := &Room{
-		ID:              id,
-		CreationTime:    time.Now().Unix(),
-		broadcast:       make(chan []byte, config.BroadcastChannelBuffer),
-		register:        make(chan *Client, config.RegisterChannelBuffer),
-		unregister:      make(chan *Client, config.UnregisterChannelBuffer),
-		clients:         make(map[*Client]bool),
-		game:            game.NewGame(),
-		actions:         make(chan GameAction, config.ActionsChannelBuffer),
-		quit:            make(chan struct{}),
-		maxPlayers:      config.DefaultMaxPlayers,
-		voice:           game.NewVoiceState(),
-		webRTC:          game.NewWebRTCManager(),
-		turnDuration:    config.TurnTimeout,
-		gracePeriod:     config.DefaultGracePeriod,
-		disconnectTimes: make(map[string]time.Time),
-		lastFullSync:    time.Now(),
-		readyClients:    make(map[string]bool),
+		ID:           id,
+		manager:      manager,
+		session:      session.NewSession(id, settings, webrtc.NewManager()),
+		broadcast:    make(chan []byte, config.BroadcastChannelBuffer),
+		register:     make(chan *Client, config.RegisterChannelBuffer),
+		unregister:   make(chan *Client, config.UnregisterChannelBuffer),
+		clients:      make(map[*Client]bool),
+		actions:      make(chan GameAction, config.ActionsChannelBuffer),
+		quit:         make(chan struct{}),
+		turnDuration: config.TurnTimeout,
+		gracePeriod:  config.DefaultGracePeriod,
 	}
 	// Initialize broadcaster with reference to this room
 	room.broadcaster = NewBroadcaster(room)
+
+	// Compose middleware chain
+	room.actionHandler = applyMiddlewares(room.handleActionCore,
+		room.AuthMiddleware,
+		room.ValidationMiddleware,
+		room.RateLimitMiddleware,
+	)
+
 	return room
 }
 
-func NewPrivateRoom(id, name, code, password, hostID string, maxPlayers int, bootAmount float64) *Room {
-	r := NewRoom(id)
-	r.name = name
-	r.code = code
-	r.password = password
-	r.isPrivate = true
-	r.hostID = hostID
-	r.maxPlayers = maxPlayers
-	r.bootAmount = bootAmount
-	// Voice/WebRTC already init in NewRoom
+func NewPrivateRoom(id, name, code, password, hostID string, maxPlayers int, bootAmount float64, manager *Manager) *Room {
+	settings := session.Settings{
+		Name:       name,
+		Code:       code,
+		Password:   password,
+		IsPrivate:  true,
+		HostID:     hostID,
+		MaxPlayers: maxPlayers,
+		BootAmount: bootAmount,
+	}
+
+	r := &Room{
+		ID:           id,
+		manager:      manager,
+		session:      session.NewSession(id, settings, webrtc.NewManager()),
+		broadcast:    make(chan []byte, config.BroadcastChannelBuffer),
+		register:     make(chan *Client, config.RegisterChannelBuffer),
+		unregister:   make(chan *Client, config.UnregisterChannelBuffer),
+		clients:      make(map[*Client]bool),
+		actions:      make(chan GameAction, config.ActionsChannelBuffer),
+		quit:         make(chan struct{}),
+		turnDuration: config.TurnTimeout,
+		gracePeriod:  config.DefaultGracePeriod,
+	}
+	r.broadcaster = NewBroadcaster(r)
+
+	// Compose middleware chain
+	r.actionHandler = applyMiddlewares(r.handleActionCore,
+		r.AuthMiddleware,
+		r.ValidationMiddleware,
+		r.RateLimitMiddleware,
+	)
+
 	return r
 }
 
@@ -137,6 +156,7 @@ func (r *Room) Stop() {
 }
 
 func (r *Room) Leave(client *Client) {
+	defer func() { recover() }()
 	r.unregister <- client
 }
 
@@ -160,44 +180,35 @@ func (r *Room) HandleAction(action GameAction) {
 func (r *Room) IsFull() bool {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
-
-	// Count non-spectator clients directly to avoid race conditions
-	// between client registration and participant creation
-	playerCount := 0
-	for client := range r.clients {
-		if !client.IsSpectator {
-			playerCount++
-		}
-	}
-
-	return playerCount >= r.maxPlayers
+	return r.session.IsFull()
 }
 
 func (r *Room) IsPrivate() bool {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
-	return r.isPrivate
+	return r.session.Settings.IsPrivate
 }
 
 func (r *Room) CheckPassword(pw string) bool {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
-	return r.password == "" || r.password == pw
+	return r.session.Settings.Password == "" || r.session.Settings.Password == pw
 }
 
 func (r *Room) GetInfo() map[string]interface{} {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 
+	s := r.session
 	return map[string]interface{}{
-		"roomCode":    r.code,
-		"roomName":    r.name,
-		"hostId":      r.hostID,
-		"maxPlayers":  r.maxPlayers,
-		"bootAmount":  r.bootAmount,
-		"playerCount": len(r.game.Participants),
-		"isPrivate":   r.isPrivate,
-		"createdAt":   r.CreationTime,
+		"roomCode":    s.Settings.Code,
+		"roomName":    s.Settings.Name,
+		"hostId":      s.Settings.HostID,
+		"maxPlayers":  s.Settings.MaxPlayers,
+		"bootAmount":  s.Settings.BootAmount,
+		"playerCount": len(s.Game.Participants),
+		"isPrivate":   s.Settings.IsPrivate,
+		"createdAt":   s.CreatedAt,
 	}
 }
 
@@ -208,7 +219,7 @@ func (r *Room) GetUnicastActionChannel(client *Client) chan<- GameAction {
 func (r *Room) GetGamePhase() string {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
-	return string(r.game.Phase)
+	return string(r.session.Game.Phase)
 }
 
 // SetMaxPlayers allows overriding the default max players (used by matchmaker)
@@ -219,7 +230,9 @@ func (r *Room) SetMaxPlayers(max int) {
 	} else if max > 10 {
 		max = 10
 	}
-	r.maxPlayers = max
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.session.Settings.MaxPlayers = max
 }
 
 func (r *Room) GetClientCount() int {
@@ -244,6 +257,7 @@ func (r *Room) IsPlayerInRoom(playerID string) bool {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 
+	s := r.session
 	// 1. Check if they are currently connected
 	for client := range r.clients {
 		if client.ID == playerID {
@@ -252,12 +266,12 @@ func (r *Room) IsPlayerInRoom(playerID string) bool {
 	}
 
 	// 2. Check if they are in the game state (participants)
-	if _, exists := r.game.PlayerMap[playerID]; exists {
+	if _, exists := s.Game.PlayerMap[playerID]; exists {
 		return true
 	}
 
 	// 3. Check if they are in disconnectTimeout grace period
-	if _, exists := r.disconnectTimes[playerID]; exists {
+	if _, exists := s.DisconnectTimes[playerID]; exists {
 		return true
 	}
 
@@ -265,10 +279,7 @@ func (r *Room) IsPlayerInRoom(playerID string) bool {
 }
 
 func (r *Room) handleTurnTimeout() {
-	// LOCK REMOVED: Called from Run() loop which already holds r.mu.Lock()
-	// Doing r.mu.Lock() here caused a deadlock.
-
-	activeID := r.game.ActivePlayerID()
+	activeID := r.session.Game.ActivePlayerID()
 	if activeID == "" {
 		return
 	}
@@ -276,9 +287,9 @@ func (r *Room) handleTurnTimeout() {
 	log.Printf("Turn timeout for player %s in room %s", activeID, r.ID)
 
 	// Auto-action based on phase
-	switch r.game.Phase {
+	switch r.session.Game.Phase {
 	case game.PhaseThinking, game.PhaseChallenging:
-		r.game.Pass(activeID)
+		r.session.Game.Pass(activeID)
 	}
 
 	r.broadcaster.BroadcastStateLocked()
@@ -299,12 +310,16 @@ func (r *Room) Run() {
 			"message": "The game room has been closed.",
 		})
 		bytes, _ := json.Marshal(msg)
-		for client := range r.clients {
-			select {
-			case client.Send <- bytes:
-			default:
+
+		func() {
+			defer func() { recover() }() // Ignore panic if send fails on closed channel
+			for client := range r.clients {
+				select {
+				case client.Send <- bytes:
+				default:
+				}
 			}
-		}
+		}()
 
 		ticker.Stop()
 		close(r.register)
@@ -326,18 +341,19 @@ func (r *Room) Run() {
 
 		case client := <-r.register:
 			// 1. Calculate boot amount
+			s := r.session
 			boot := config.DefaultBootAmount
-			if r.isPrivate {
-				boot = int(r.bootAmount)
+			if s.Settings.IsPrivate {
+				boot = int(s.Settings.BootAmount)
 			}
 
 			// ✅ FIX #1: Check coins BEFORE locking to avoid unlock/relock race condition
 			// Pre-check: Validate coins without deducting (matchmaker already validated, this is backup)
 			isRejoining := false
 			r.mu.Lock()
-			if _, disconnected := r.disconnectTimes[client.ID]; disconnected {
+			if _, disconnected := s.DisconnectTimes[client.ID]; disconnected {
 				isRejoining = true
-				delete(r.disconnectTimes, client.ID)
+				delete(s.DisconnectTimes, client.ID)
 				log.Printf("Client %s rejoined room %s within grace period.", client.ID, r.ID)
 			}
 
@@ -345,7 +361,7 @@ func (r *Room) Run() {
 			if !isRejoining && !client.IsSpectator && !client.IsBot {
 				// ✅ Use buffered coin update - deferred async deduction
 				// This avoids the dangerous unlock/relock pattern
-				db.BufferCoinUpdate(client.ID, -boot)
+				r.manager.economyUC.BufferCoinUpdate(client.ID, -boot)
 			}
 
 			// 2. In-memory updates (lock is held)
@@ -355,29 +371,29 @@ func (r *Room) Run() {
 			if !client.IsSpectator {
 				// Use client's stored name and avatar (synced during AUTH)
 				playerName := game.DefaultPlayerName(client.ID, client.Name)
-				if err := r.game.AddPlayer(client.ID, playerName, client.AvatarURL); err != nil {
+				if err := s.Game.AddPlayer(client.ID, playerName, client.AvatarURL, client.IsBot); err != nil {
 					log.Printf("Error adding player %s to game in room %s: %v", client.ID, r.ID, err)
 					// Refund if add fails
 					if !client.IsBot && !isRejoining {
-						db.BufferCoinUpdate(client.ID, boot) // Async refund
+						r.manager.economyUC.BufferCoinUpdate(client.ID, boot) // Async refund
 					}
 				} else {
 					log.Printf("Player %s successfully added to game in room %s. Players: %d/%d",
-						client.ID, r.ID, len(r.game.Players), r.maxPlayers)
+						client.ID, r.ID, len(s.Game.Players), s.Settings.MaxPlayers)
 				}
 
 				// Check auto-start for public rooms
-				if !r.isPrivate && len(r.game.Players) >= r.maxPlayers && r.game.Phase == game.PhaseLobby {
+				if !s.Settings.IsPrivate && len(s.Game.Players) >= s.Settings.MaxPlayers && s.Game.Phase == game.PhaseLobby {
 					// ✅ UPDATED: Wait for CLIENT_READY signal from all players
 					// Use configured delay as a fallback timeout
 					log.Printf("Lobby full in room %s. Starting %ds fallback countdown...", r.ID, config.LobbyStartDelaySec)
-					r.game.Phase = game.PhaseStarting
-					r.game.StartTime = time.Now().Unix() + int64(config.LobbyStartDelaySec)
+					s.Game.Phase = game.PhaseStarting
+					s.Game.StartTime = time.Now().Unix() + int64(config.LobbyStartDelaySec)
 
 					// Pre-mark all Bots as ready immediately
-					for _, p := range r.game.Players {
+					for _, p := range s.Game.Players {
 						if p.IsBot {
-							r.readyClients[p.ID] = true
+							s.ReadyClients[p.ID] = true
 						}
 					}
 
@@ -387,7 +403,7 @@ func (r *Room) Run() {
 			}
 
 			// Broadcast Update
-			if r.isPrivate {
+			if s.Settings.IsPrivate {
 				r.broadcaster.BroadcastRoomInfoLocked()
 			}
 			// Always broadcast state so clients receive hand/game data
@@ -396,24 +412,25 @@ func (r *Room) Run() {
 
 		case client := <-r.unregister:
 			r.mu.Lock()
+			s := r.session
 			if _, ok := r.clients[client]; ok {
 				delete(r.clients, client)
-				r.voice.ReleaseMic(client.ID)
+				s.Voice.ReleaseMic(client.ID)
 				log.Printf("Client left Room %s", r.ID)
 
 				// ✅ FIX #14: Handle PhaseStarting like PhaseLobby (immediate removal)
 				// If game is ACTIVE (Thinking, Challenging, Revealing), mark as disconnected
-				if r.game.IsActive() {
-					r.disconnectTimes[client.ID] = time.Now()
+				if s.Game.IsActive() {
+					s.DisconnectTimes[client.ID] = time.Now()
 					log.Printf("Player %s disconnected during active game. Grace period started.", client.ID)
 					// Update player status in game state
-					if player := r.game.PlayerMap[client.ID]; player != nil {
+					if player := s.Game.PlayerMap[client.ID]; player != nil {
 						player.IsDisconnected = true
 					}
 				} else {
 					// If in Lobby, Starting, or Finished phase - remove immediately
-					r.game.RemovePlayer(client.ID)
-					delete(r.disconnectTimes, client.ID) // Ensure they are not in disconnectTimes
+					s.Game.RemovePlayer(client.ID)
+					delete(s.DisconnectTimes, client.ID) // Ensure they are not in disconnectTimes
 
 					// Notify Manager to clean up index
 					if r.SessionExpiry != nil {
@@ -426,14 +443,14 @@ func (r *Room) Run() {
 				}
 
 				// Host reassignment
-				if r.isPrivate && client.ID == r.hostID {
-					if len(r.game.Players) > 0 {
+				if s.Settings.IsPrivate && client.ID == s.Settings.HostID {
+					if len(s.Game.Players) > 0 {
 						// Assign first player as host
-						r.hostID = r.game.Players[0].ID
+						s.Settings.HostID = s.Game.Players[0].ID
 					}
 				}
 
-				if r.isPrivate {
+				if s.Settings.IsPrivate {
 					r.broadcaster.BroadcastRoomInfoLocked()
 				} else {
 					r.broadcaster.BroadcastStateLocked()
@@ -469,41 +486,29 @@ func (r *Room) Run() {
 			// Public Lobby Timeout is handled by Manager (checkLobbyTimeout)
 
 			// Voice updates
-			if r.voice.Tick() {
-				r.webRTC.SetSpeaker(r.voice.CurrentSpeakerID)
+			if r.session.Voice.Tick() {
+				r.session.WebRTC.SetSpeaker(r.session.Voice.CurrentSpeakerID)
 				r.broadcaster.BroadcastVoiceStateLocked()
 			}
 
 			// Check Countdown Start
-			if r.game.Phase == game.PhaseStarting {
-				if time.Now().Unix() >= r.game.StartTime {
-					// ✅ FIX: Only start via timeout if we're not actively waiting for CLIENT_READY
-					// Check if all human players have signaled ready
-					humanPlayersReady := true
-					for _, p := range r.game.Players {
-						if !p.IsBot && !r.readyClients[p.ID] {
-							humanPlayersReady = false
-							break
-						}
+			if r.session.Game.Phase == game.PhaseStarting {
+				if time.Now().Unix() >= r.session.Game.StartTime {
+					// Timeout reached: Force start regardless of explicit ready signals
+					// (The early start optimization is handled in checkAllPlayersReady)
+					log.Printf("Countdown finished in Room %s. Starting game!", r.ID)
+					if err := r.session.Game.Start(); err != nil {
+						log.Printf("Failed to start game after countdown: %v", err)
+						r.session.Game.Phase = game.PhaseLobby
 					}
-
-					if humanPlayersReady {
-						log.Printf("Countdown finished in Room %s. Starting game!", r.ID)
-						if err := r.game.Start(); err != nil {
-							log.Printf("Failed to start game after countdown: %v", err)
-							r.game.Phase = game.PhaseLobby
-						}
-						r.broadcaster.BroadcastStateLocked()
-					} else {
-						log.Printf("⏳ [Client-Ready] Room %s countdown expired, but waiting for CLIENT_READY signals", r.ID)
-					}
+					r.broadcaster.BroadcastStateLocked()
 				}
 			}
 
 			// Turn Timeout Check (Every 1s)
-			if tickCount == 0 && (r.game.Phase == game.PhaseThinking || r.game.Phase == game.PhaseChallenging) {
-				if r.game.TurnStartTime > 0 {
-					elapsed := time.Now().Unix() - r.game.TurnStartTime
+			if tickCount == 0 && (r.session.Game.Phase == game.PhaseThinking || r.session.Game.Phase == game.PhaseChallenging) {
+				if r.session.Game.TurnStartTime > 0 {
+					elapsed := time.Now().Unix() - r.session.Game.TurnStartTime
 					if elapsed > config.TurnTimeoutSec {
 						r.handleTurnTimeout()
 					}
@@ -512,11 +517,11 @@ func (r *Room) Run() {
 
 			// ✅ FIX: Process Bot Turns
 			// Check every tick (200ms) but strict throttled by TurnStartTime
-			if r.game.Phase == game.PhaseThinking {
-				activeID := r.game.ActivePlayerID()
-				if player := r.game.PlayerMap[activeID]; player != nil && player.IsBot {
+			if r.session.Game.Phase == game.PhaseThinking || r.session.Game.Phase == game.PhaseChallenging {
+				activeID := r.session.Game.ActivePlayerID()
+				if player := r.session.Game.PlayerMap[activeID]; player != nil && player.IsBot {
 					// Add delay so bot doesn't play instantly (human-like)
-					if time.Now().Unix() >= r.game.TurnStartTime+config.BotThinkingDelaySec {
+					if time.Now().Unix() >= r.session.Game.TurnStartTime+config.BotThinkingDelaySec {
 						r.processBotMove(player)
 					}
 				}
@@ -530,33 +535,33 @@ func (r *Room) Run() {
 					humanCount++
 				}
 			}
-			humanCount += len(r.disconnectTimes)
+			humanCount += len(r.session.DisconnectTimes)
 
 			// ✅ FIX #5: If NO humans are left (connected or waiting), stop the room immediately
 			// This prevents ghost rooms with only bots running forever.
-			if humanCount == 0 && r.game.Phase != game.PhaseLobby {
+			if humanCount == 0 && r.session.Game.Phase != game.PhaseLobby {
 				log.Printf("Room %s: No humans left. Closing room.", r.ID)
 				r.mu.Unlock() // Must unlock before returning!
 				r.Stop()
 				return
 			}
 
-			for pid, disconnectTime := range r.disconnectTimes {
+			for pid, disconnectTime := range r.session.DisconnectTimes {
 				if now.Sub(disconnectTime) > r.gracePeriod {
 					log.Printf("Player %s grace period expired in room %s. Removing permanently.", pid, r.ID)
-					r.game.RemovePlayer(pid)
-					delete(r.disconnectTimes, pid)
+					r.session.Game.RemovePlayer(pid)
+					delete(r.session.DisconnectTimes, pid)
 					r.broadcaster.BroadcastRoomInfoLocked()
 				}
 			}
 
 			// HYBRID APPROACH: Periodic Full State Sync (configured interval during active game)
-			if r.game.Phase != game.PhaseLobby && r.game.Phase != game.PhaseFinished {
-				if now.Sub(r.lastFullSync) >= config.PeriodicSyncInterval {
-					r.lastFullSync = now
+			if r.session.Game.Phase != game.PhaseLobby && r.session.Game.Phase != game.PhaseFinished {
+				if now.Sub(r.session.LastFullSync) >= config.PeriodicSyncInterval {
+					r.session.LastFullSync = now
 
 					// ✅ Anti-Cheat: Verify deck consistency during sync
-					if err := r.game.VerifyDeckConsistency(); err != nil {
+					if err := r.session.Game.VerifyDeckConsistency(); err != nil {
 						log.Printf("CRITICAL ALERT: Anti-Cheat triggered in Room %s: %v", r.ID, err)
 						// Optionally: Pause game or flag players
 					}
@@ -571,84 +576,28 @@ func (r *Room) Run() {
 }
 
 func (r *Room) processAction(action GameAction) {
+	// Call composed handler (applies middlewares + core logic)
+	r.actionHandler(action)
+}
+
+func (r *Room) handleActionCore(action GameAction) {
+	s := r.session
 	client := action.Client
 	msg := action.Message
 
-	// 1. Validate client is in room
-	// r.mu.Lock() is already held by Run()
-	if !r.clients[client] {
-		log.Printf("Rejected action from non-member client %s in room %s", client.ID, r.ID)
+	// Delegate core logic to Domain Session
+	result := r.session.HandleAction(client.ID, msg)
+	if result.Error != nil {
+		r.sendErrorToClient(client, protocol.ErrCodeGameError, result.Error.Error())
 		return
 	}
 
-	// 2. Validate message type
-	if !isValidGameMessageType(msg.Type) {
-		log.Printf("Invalid message type %s from client %s", msg.Type, client.ID)
-		r.sendErrorToClient(client, "INVALID_MESSAGE", "Invalid message type")
-		return
-	}
-
-	// 3. Rate limiting check
-	if !client.canPerformAction() {
-		log.Printf("Rate limited client %s", client.ID)
-		r.sendErrorToClient(client, "RATE_LIMITED", "Too many actions")
-		return
-	}
-
-	var err error
-
+	// 5. Infrastructure-specific side effects
 	switch msg.Type {
-	case protocol.MsgTypePlayCards:
-		var payload protocol.PlayCardsMessage
-		if json.Unmarshal(msg.Data, &payload) == nil {
-			err = r.game.PlayCards(client.ID, payload.CardIDs, game.Rank(payload.DeclaredRank))
-			if err == nil {
-				// HYBRID: Send lightweight event instead of full state
-				p := r.game.PlayerMap[client.ID]
-				r.broadcaster.BroadcastActionLocked("PLAY_CARDS", map[string]interface{}{
-					"playerId":           client.ID,
-					"count":              len(payload.CardIDs),
-					"declaredRank":       payload.DeclaredRank,
-					"newPileCount":       r.game.PileCount,
-					"nextPlayerId":       r.game.ActivePlayerID(),
-					"playerNewCardCount": len(p.Hand),          // Fix state drift
-					"turnStartTime":      r.game.TurnStartTime, // CRITICAL: Include timer
-				})
-
-				// ✅ Anti-Cheat check after play
-				if err := r.game.VerifyDeckConsistency(); err != nil {
-					log.Printf("CRITICAL ALERT: Anti-Cheat triggered after PlayCards in Room %s: %v", r.ID, err)
-				}
-				// Fall through to broadcast full state
-			}
-		}
-
-	case protocol.MsgTypePass:
-		err = r.game.Pass(client.ID)
-		if err == nil {
-			// Check if pile was discarded (all passed)
-			if r.game.LastEvent == "pileDiscarded" {
-				// Send full state for round reset
-				r.broadcaster.BroadcastStateLocked()
-			} else {
-				// HYBRID: Send lightweight pass event
-				r.broadcaster.BroadcastActionLocked("PASS", map[string]interface{}{
-					"playerId":      client.ID,
-					"nextPlayerId":  r.game.ActivePlayerID(),
-					"turnStartTime": r.game.TurnStartTime, // CRITICAL: Include timer
-				})
-			}
-			// Fall through to broadcast full state
-		}
-
 	case protocol.MsgTypeChallenge:
-		_, err = r.game.Challenge(client.ID)
-		if err == nil {
-			// Broadcast the "Revealing" state immediately
+		if result.BroadcastState {
 			r.broadcaster.BroadcastStateLocked()
-
 			// ✅ FIX #3: Use tracked timer so it can be cancelled on room stop
-			// Cancel any existing pending timer first
 			if r.pendingChallengeTimer != nil {
 				r.pendingChallengeTimer.Stop()
 			}
@@ -656,213 +605,138 @@ func (r *Room) processAction(action GameAction) {
 			// Capture values for closure
 			challengerID := client.ID
 			roomID := r.ID
+			// s is already defined at top of function
 
 			// Schedule resolution after configured animation delay
 			r.pendingChallengeTimer = time.AfterFunc(config.ChallengeRevealDelay, func() {
 				r.mu.Lock()
 				defer r.mu.Unlock()
-
-				// Clear the timer reference
 				r.pendingChallengeTimer = nil
 
-				// Safety: Check if game is still in revealing phase and has players
-				if r.game.Phase != game.PhaseRevealing || len(r.game.Players) == 0 {
-					log.Printf("Challenge resolution skipped in Room %s (phase: %s, players: %d)",
-						roomID, r.game.Phase, len(r.game.Players))
+				if s.Game.Phase != game.PhaseRevealing || len(s.Game.Players) == 0 {
 					return
 				}
 
-				// Finalize the result
-				if r.game.Phase == game.PhaseRevealing {
-					msg := r.game.ResolveChallenge(challengerID)
+				if s.Game.Phase == game.PhaseRevealing {
+					msg := s.Game.ResolveChallenge(challengerID)
 					log.Printf("Challenge Resolved in Room %s: %s", roomID, msg)
 
-					// ✅ Anti-Cheat check after resolution
-					if err := r.game.VerifyDeckConsistency(); err != nil {
-						log.Printf("CRITICAL ALERT: Anti-Cheat triggered after ResolveChallenge in Room %s: %v", roomID, err)
+					if err := s.Game.VerifyDeckConsistency(); err != nil {
+						log.Printf("CRITICAL ALERT: Anti-Cheat triggered in Room %s: %v", roomID, err)
 					}
 				}
-
-				// Broadcast the final result state
 				r.broadcaster.BroadcastStateLocked()
 			})
-			return // skip r.broadcastState() below to avoid double call
+			return
 		}
-
-	case protocol.MsgTypeJoinPrivateRoom:
-		// Logic mostly handled in Manager.
-		// If we did need it here, we'd process it.
 
 	case protocol.MsgTypeVoiceHandRaise, protocol.MsgTypeVoiceSDP, protocol.MsgTypeVoiceICE:
 		if !config.GetFeatureFlags().EnableVoiceChat {
 			log.Printf("Voice chat is disabled on this server, ignoring message from %s", client.ID)
 			return
 		}
-
 		switch msg.Type {
 		case protocol.MsgTypeVoiceHandRaise:
 			isQueued := false
-			for _, id := range r.voice.Queue {
+			for _, id := range s.Voice.Queue {
 				if id == client.ID {
 					isQueued = true
 					break
 				}
 			}
-
-			if r.voice.CurrentSpeakerID == client.ID || isQueued {
-				r.voice.ReleaseMic(client.ID)
+			if s.Voice.CurrentSpeakerID == client.ID || isQueued {
+				s.Voice.ReleaseMic(client.ID)
 			} else {
-				r.voice.RequestMic(client.ID)
+				s.Voice.RequestMic(client.ID)
 			}
 			r.broadcaster.BroadcastVoiceStateLocked()
 
 		case protocol.MsgTypeVoiceSDP:
-			var offer webrtc.SessionDescription
+			var offer pion.SessionDescription
 			if json.Unmarshal(msg.Data, &offer) == nil {
-				answer, err := r.webRTC.HandleOffer(client.ID, offer)
+				answer, err := s.WebRTC.HandleOffer(client.ID, offer)
 				if err == nil && answer != nil {
 					resp := protocol.NewMessage(protocol.MsgTypeVoiceSDP, answer)
 					bytes, _ := json.Marshal(resp)
 					client.Send <- bytes
-				} else {
-					log.Printf("WebRTC Offer Error for %s: %v", client.ID, err)
 				}
 			}
 
 		case protocol.MsgTypeVoiceICE:
-			var candidate webrtc.ICECandidateInit
+			var candidate pion.ICECandidateInit
 			if json.Unmarshal(msg.Data, &candidate) == nil {
-				if err := r.webRTC.HandleICE(client.ID, candidate); err != nil {
+				if err := s.WebRTC.HandleICE(client.ID, candidate); err != nil {
 					log.Printf("WebRTC ICE Error for %s: %v", client.ID, err)
 				}
 			}
 		}
-
-	case protocol.MsgTypeStartGame, protocol.MsgTypeStartPrivateGame:
-		if r.game.Phase == game.PhaseLobby {
-			// For private rooms, only host can start
-			if r.isPrivate && client.ID != r.hostID {
-				err = fmt.Errorf("only host can start the game")
-			} else {
-				err = r.game.Start()
-				if err == nil {
-					log.Printf("Game started manually in room %s by %s", r.ID, client.ID)
-				}
-			}
-		}
-
-	case protocol.MsgTypeChat:
-		var payload protocol.ChatMessage
-		if json.Unmarshal(msg.Data, &payload) == nil {
-			// Broadcast chat to all
-			// We wrap it in a new message with sender info
-			out := map[string]interface{}{
-				"senderId": client.ID,
-				"message":  payload.Message,
-				"time":     time.Now().Unix(),
-			}
-			// Add Sender Name if available
-			if p := r.game.PlayerMap[client.ID]; p != nil {
-				out["senderName"] = p.Name
-			} else {
-				out["senderName"] = "Player " + client.ID
-			}
-
-			response := protocol.NewMessage(protocol.MsgTypeChat, out)
-			bytes, _ := json.Marshal(response)
-			r.broadcast <- bytes
-		}
-
-	case protocol.MsgTypeEmoji:
-		var payload protocol.EmojiMessage
-		if json.Unmarshal(msg.Data, &payload) == nil {
-			// Broadcast emoji to all
-			out := map[string]interface{}{
-				"senderId": client.ID,
-				"emojiId":  payload.EmojiID,
-			}
-			response := protocol.NewMessage(protocol.MsgTypeEmoji, out)
-			bytes, _ := json.Marshal(response)
-			r.broadcast <- bytes
-		}
+		return
 
 	case protocol.MsgTypeClientReady:
-		// Client has signaled their UI is ready for game start
 		log.Printf("Client %s signaled ready in room %s", client.ID, r.ID)
-		r.readyClients[client.ID] = true
-
-		// Check if all players are ready
+		r.session.ReadyClients[client.ID] = true
 		r.checkAllPlayersReady()
-		return // No broadcast needed
-
-	case protocol.MsgTypeTyping:
-		var payload protocol.TypingMessage
-		if json.Unmarshal(msg.Data, &payload) == nil {
-			// Broadcast typing status to all
-			out := map[string]interface{}{
-				"senderId": client.ID,
-				"isTyping": payload.IsTyping,
-			}
-			response := protocol.NewMessage(protocol.MsgTypeTyping, out)
-			bytes, _ := json.Marshal(response)
-			r.broadcast <- bytes
-		}
+		return
 
 	case protocol.MsgTypeLeaveRoom:
-		log.Printf("Player %s leaving room %s PERMANENTLY", client.ID, r.ID)
-		r.game.RemovePlayer(client.ID)
-		delete(r.disconnectTimes, client.ID) // Bypass grace period
-		if r.isPrivate {
-			r.broadcaster.BroadcastRoomInfoLocked()
-		} else {
-			r.broadcaster.BroadcastStateLocked()
+		// Index cleanup also needed in infrastructure
+		r.manager.RemovePlayerRoom(client.ID)
+		// result.BroadcastState handles the state update
+
+	case protocol.MsgTypePlayCards:
+		// Anti-cheat check
+		if err := r.session.Game.VerifyDeckConsistency(); err != nil {
+			log.Printf("CRITICAL ALERT: Anti-Cheat triggered in Room %s: %v", r.ID, err)
 		}
-		return // Action processed
 	}
 
-	if err != nil {
-		// Send error to specific client
-		errBytes, _ := json.Marshal(protocol.NewMessage(protocol.MsgTypeError, protocol.ErrorMessage{
-			Code:    "GAME_ERROR",
-			Message: err.Error(),
-		}))
-		select {
-		case client.Send <- errBytes:
-		default:
-		}
-	} else {
-		// Valid move -> Broadcast full state to ensure all clients are synced on phase and turn
+	// 6. Handle Results (Broadcasts)
+	if result.BroadcastEvent != nil {
+		r.broadcaster.BroadcastActionLocked(result.BroadcastEvent.Type, result.BroadcastEvent.Payload.(map[string]interface{}))
+	}
+	if result.BroadcastState {
 		r.broadcaster.BroadcastStateLocked()
+	}
 
-		// Check Game Over
-		if r.game.Phase == game.PhaseFinished {
-			log.Printf("Game Over in Room %s! Winner: %s", r.ID, r.game.WinnerID)
+	// 7. Check Game Over (Metadata Persistence)
+	if s.Game.Phase == game.PhaseFinished {
+		log.Printf("Game Over in Room %s! Winner: %s", r.ID, s.Game.WinnerID)
 
-			// 1. Calculate Pot
-			// Pot = BootAmount * Number of Players (who actually played)
-			boot := 100
-			if r.isPrivate {
-				boot = int(r.bootAmount)
-			}
-			potAmount := boot * len(r.game.Participants)
-
-			// 2. Record in SQLite (Moved to goroutine to prevent blocking room lock)
-			var playerIDs []string
-			for _, p := range r.game.Participants {
-				playerIDs = append(playerIDs, p.ID)
-			}
-			matchID := fmt.Sprintf("%s_%d", r.ID, time.Now().Unix())
-			winnerID := r.game.WinnerID
-
-			go func(mid string, pids []string, wid string, pot int) {
-				if err := db.RecordGameResult(mid, pids, wid, 120, pot); err != nil {
-					log.Printf("Background: Failed to record game result: %v", err)
-				}
-			}(matchID, playerIDs, winnerID, potAmount)
-
-			// 3. Broadcast Updated Stats
-			r.broadcaster.BroadcastStatsLocked()
+		boot := 100
+		if s.Settings.IsPrivate {
+			boot = int(s.Settings.BootAmount)
 		}
+		potAmount := boot * len(s.Game.Participants)
+
+		var playerIDs []string
+		statsMap := make(map[string]interface{})
+		for _, p := range s.Game.Players {
+			playerIDs = append(playerIDs, p.ID)
+			statsMap[p.ID] = p.Stats
+		}
+		matchID := fmt.Sprintf("%s_%d", r.ID, time.Now().Unix())
+		winnerID := s.Game.WinnerID
+		duration := 0
+		if s.Game.StartTime > 0 {
+			duration = int(time.Now().Unix() - s.Game.StartTime)
+		}
+
+		go func(mid string, pids []string, wid string, pot int, dur int, stats map[string]interface{}) {
+			result := match.MatchResult{
+				MatchID:     mid,
+				PlayerIDs:   pids,
+				WinnerID:    wid,
+				DurationSec: dur,
+				PotAmount:   pot,
+				EndedAt:     time.Now(),
+				Metadata:    stats,
+			}
+			if err := r.manager.gameUC.RecordMatchResult(result); err != nil {
+				log.Printf("Background: Failed to record game result: %v", err)
+			}
+		}(matchID, playerIDs, winnerID, potAmount, duration, statsMap)
+
+		r.broadcaster.BroadcastStatsLocked()
 	}
 }
 
@@ -886,10 +760,7 @@ func isValidGameMessageType(msgType string) bool {
 }
 
 func (r *Room) sendErrorToClient(client *Client, code, message string) {
-	errBytes, _ := json.Marshal(protocol.NewMessage(protocol.MsgTypeError, protocol.ErrorMessage{
-		Code:    code,
-		Message: message,
-	}))
+	errBytes, _ := json.Marshal(protocol.NewErrorMessage(code, message))
 	select {
 	case client.Send <- errBytes:
 	default:
@@ -905,15 +776,9 @@ func (r *Room) ForceBroadcastState() {
 func (r *Room) processBotMove(bot *game.Player) {
 	log.Printf("🤖 Bot %s (Hand: %d) is thinking...", bot.Name, len(bot.Hand))
 
-	// Simple Bot Strategy:
-	// 1. If pile is empty, play lowest single card.
-	// 2. If pile has cards, try to beat it with same quantity.
-	// 3. Else pass.
-
-	// This is minimal logic for testing; robustness belongs in a dedicated package really.
-
+	s := r.session
 	// Access game safely (lock held in caller)
-	pile := r.game.Pile // ✅ Corrected for updated Game struct
+	pile := s.Game.Pile // ✅ Corrected for updated Game struct
 
 	// Candidates
 	hand := bot.Hand
@@ -939,8 +804,8 @@ func (r *Room) processBotMove(bot *game.Player) {
 		countNeeded := len(pile)
 		var rankToBeat game.Rank
 
-		if r.game.DeclaredRank != nil {
-			rankToBeat = *r.game.DeclaredRank // ✅ Corrected pointer access
+		if s.Game.DeclaredRank != nil {
+			rankToBeat = *s.Game.DeclaredRank // ✅ Corrected pointer access
 		}
 
 		// Naive: Try to find N cards of same rank > rankToBeat
@@ -981,17 +846,18 @@ func (r *Room) processBotMove(bot *game.Player) {
 		log.Printf("🤖 Bot %s playing %d cards (Rank: %s)", bot.Name, len(cardsToPlay), rankToDeclare)
 
 		// Use same broadcast logic as processAction
-		err := r.game.PlayCards(bot.ID, cardsToPlay, rankToDeclare)
+		err := s.Game.PlayCards(bot.ID, cardsToPlay, rankToDeclare)
 		if err == nil {
 			r.broadcaster.BroadcastActionLocked("PLAY_CARDS", map[string]interface{}{
 				"playerId":           bot.ID,
 				"count":              len(cardsToPlay),
 				"declaredRank":       rankToDeclare,
-				"newPileCount":       r.game.PileCount,
-				"nextPlayerId":       r.game.ActivePlayerID(),
+				"newPileCount":       s.Game.PileCount,
+				"nextPlayerId":       s.Game.ActivePlayerID(),
 				"playerNewCardCount": len(bot.Hand),
-				"turnStartTime":      r.game.TurnStartTime,
+				"turnStartTime":      s.Game.TurnStartTime,
 			})
+			r.broadcaster.BroadcastStateLocked()
 			return
 		} else {
 			log.Printf("🤖 Bot Play Failed: %v", err)
@@ -1000,15 +866,15 @@ func (r *Room) processBotMove(bot *game.Player) {
 
 	// Default: Pass
 	log.Printf("🤖 Bot %s passing", bot.Name)
-	err := r.game.Pass(bot.ID)
+	err := s.Game.Pass(bot.ID)
 	if err == nil {
-		if r.game.LastEvent == "pileDiscarded" {
+		if s.Game.LastEvent == "pileDiscarded" {
 			r.broadcaster.BroadcastStateLocked()
 		} else {
 			r.broadcaster.BroadcastActionLocked("PASS", map[string]interface{}{
 				"playerId":      bot.ID,
-				"nextPlayerId":  r.game.ActivePlayerID(),
-				"turnStartTime": r.game.TurnStartTime,
+				"nextPlayerId":  s.Game.ActivePlayerID(),
+				"turnStartTime": s.Game.TurnStartTime,
 			})
 		}
 	}
@@ -1017,22 +883,31 @@ func (r *Room) processBotMove(bot *game.Player) {
 // checkAllPlayersReady checks if all players have signaled ready and starts the game
 // This is called after a client sends CLIENT_READY message
 func (r *Room) checkAllPlayersReady() {
+	s := r.session
 	// Only applicable during PhaseStarting
-	if r.game.Phase != game.PhaseStarting {
+	if s.Game.Phase != game.PhaseStarting {
 		return
 	}
 
 	// Check if all players (non-spectators) are ready
-	totalPlayers := len(r.game.Players)
+	totalPlayers := len(s.Game.Players)
 	readyCount := 0
 
-	for _, player := range r.game.Players {
-		if r.readyClients[player.ID] {
+	for _, player := range s.Game.Players {
+		if s.ReadyClients[player.ID] || player.IsBot {
 			readyCount++
 		}
 	}
 
 	log.Printf("[Client-Ready] Room %s: %d/%d players ready", r.ID, readyCount, totalPlayers)
+	// DEBUG: Log who is not ready
+	if readyCount < totalPlayers {
+		for _, player := range s.Game.Players {
+			if !s.ReadyClients[player.ID] {
+				log.Printf("   -> Waiting for: %s (Bot: %v)", player.ID, player.IsBot)
+			}
+		}
+	}
 
 	// If all players are ready, start immediately
 	if readyCount >= totalPlayers {
@@ -1045,15 +920,15 @@ func (r *Room) checkAllPlayersReady() {
 		}
 
 		// Start the game
-		if err := r.game.Start(); err != nil {
+		if err := s.Game.Start(); err != nil {
 			log.Printf("Failed to start game after all ready: %v", err)
-			r.game.Phase = game.PhaseLobby
+			s.Game.Phase = game.PhaseLobby
 		} else {
 			log.Printf("🎮 Game started in room %s (all clients ready)", r.ID)
 		}
 		r.broadcaster.BroadcastStateLocked()
 
 		// Clear ready tracking for next game
-		r.readyClients = make(map[string]bool)
+		s.ReadyClients = make(map[string]bool)
 	}
 }

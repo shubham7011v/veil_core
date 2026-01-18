@@ -5,8 +5,7 @@ import (
 	"log"
 	"sync"
 	"time"
-
-	"veil_server/db"
+	"veil_server/game"
 	"veil_server/protocol"
 )
 
@@ -43,6 +42,7 @@ func (b *Broadcaster) sendToClient(c *Client, bytes []byte, critical bool) {
 		return
 	}
 
+	// log.Printf("Sending %d bytes to %s (Critical: %v)", len(bytes), c.ID, critical)
 	select {
 	case c.Send <- bytes:
 		// Success
@@ -99,8 +99,19 @@ func (b *Broadcaster) BroadcastStatsLocked() {
 	// Note: We copy clients slice so we don't need lock during iteration
 	go func(clients []*Client) {
 		for _, client := range clients {
-			stats, err := db.GetOrCreateUser(client.ID, "") // Name ignored on fetch
+			u, err := b.room.manager.UserRepo.GetOrCreate(client.ID, "")
 			if err == nil {
+				// Map to legacy stats format for protocol compatibility
+				stats := map[string]interface{}{
+					"userId":      u.ID,
+					"name":        u.Name,
+					"gamesPlayed": u.GamesPlayed,
+					"wins":        u.Wins,
+					"losses":      u.Losses,
+					"rank":        u.Rank,
+					"coins":       u.Coins,
+					"avatarUrl":   u.AvatarURL,
+				}
 				msg := protocol.NewMessage("STATS_UPDATE", stats)
 				bytes, _ := json.Marshal(msg)
 				b.sendToClient(client, bytes, false) // Stats are non-critical
@@ -119,7 +130,7 @@ func (b *Broadcaster) BroadcastVoiceState() {
 // BroadcastVoiceStateLocked sends current voice chat state to all clients
 // Caller must hold room.mu
 func (b *Broadcaster) BroadcastVoiceStateLocked() {
-	msg := protocol.NewMessage(protocol.MsgTypeVoiceState, b.room.voice)
+	msg := protocol.NewMessage(protocol.MsgTypeVoiceState, b.room.session.Voice)
 	bytes, _ := json.Marshal(msg)
 
 	for client := range b.room.clients {
@@ -143,35 +154,47 @@ func (b *Broadcaster) BroadcastStateLocked() {
 		}
 	}()
 
+	s := b.room.session
+	g := s.Game
+
 	// OPTIMIZATION: Build shared state once instead of per-client
 	sharedBaseState := map[string]interface{}{
-		"phase":              b.room.game.Phase,
-		"startTime":          b.room.game.StartTime,
-		"turnStartTime":      b.room.game.TurnStartTime,
-		"pileCount":          b.room.game.PileCount,
-		"activePlayerId":     b.room.game.ActivePlayerID(),
-		"declaredRank":       b.room.game.DeclaredRank,
-		"lastEvent":          b.room.game.LastEvent,
-		"lastEventId":        b.room.game.LastEventID,
-		"lastEventActorId":   b.room.game.LastEventActorID,
-		"lastEventCardCount": b.room.game.LastEventCardCount,
-		"isBluffSuccessful":  b.room.game.IsBluffSuccessful,
-		"gameLog":            b.room.game.GameLog,
-		"createdAt":          b.room.CreationTime,
-		"winnerId":           b.room.game.WinnerID,
+		"phase":              g.Phase,
+		"startTime":          g.StartTime,
+		"turnStartTime":      g.TurnStartTime,
+		"pileCount":          g.PileCount,
+		"activePlayerId":     g.ActivePlayerID(),
+		"declaredRank":       g.DeclaredRank,
+		"lastEvent":          g.LastEvent,
+		"lastEventId":        g.LastEventID,
+		"lastEventActorId":   g.LastEventActorID,
+		"lastEventCardCount": g.LastEventCardCount,
+		"gameLog":            g.GameLog,
+		"createdAt":          s.CreatedAt,
+		"winnerId":           g.WinnerID,
+	}
+
+	// Only reveal bluff result during Revealing or Finished phases
+	if g.Phase == game.PhaseRevealing || g.Phase == game.PhaseFinished {
+		sharedBaseState["isBluffSuccessful"] = g.IsBluffSuccessful
 	}
 
 	// Add lastMove if exists
-	if b.room.game.LastMove != nil {
-		sharedBaseState["lastMove"] = map[string]interface{}{
-			"playerId":     b.room.game.LastMove.PlayerID,
-			"declaredRank": b.room.game.LastMove.DeclaredRank,
+	if g.LastMove != nil {
+		moveData := map[string]interface{}{
+			"playerId":     g.LastMove.PlayerID,
+			"declaredRank": g.LastMove.DeclaredRank,
 		}
+		// REVEAL: Only show actual cards during Revealing or Finished phases
+		if g.Phase == game.PhaseRevealing || g.Phase == game.PhaseFinished {
+			moveData["actualCards"] = g.LastMove.ActualCards
+		}
+		sharedBaseState["lastMove"] = moveData
 	}
 
 	for client := range b.room.clients {
 		// Personalized participants for this client
-		participants := b.room.game.GetParticipantsView(client.ID)
+		participants := g.GetParticipantsView(client.ID)
 
 		if client.IsSpectator {
 			// Spectators get shared state + empty hand
@@ -190,7 +213,7 @@ func (b *Broadcaster) BroadcastStateLocked() {
 		}
 
 		// Players get personalized view with their hand
-		player := b.room.game.PlayerMap[client.ID]
+		player := g.PlayerMap[client.ID]
 		if player == nil {
 			continue
 		}
@@ -219,19 +242,20 @@ func (b *Broadcaster) BroadcastRoomInfo() {
 // BroadcastRoomInfoLocked sends private room information to all clients
 // Caller must hold room.mu
 func (b *Broadcaster) BroadcastRoomInfoLocked() {
+	s := b.room.session
 	for client := range b.room.clients {
 		// Personalized participants for this client
-		participants := b.room.game.GetParticipantsView(client.ID)
+		participants := s.Game.GetParticipantsView(client.ID)
 
 		info := map[string]interface{}{
-			"roomCode":     b.room.code,
-			"roomName":     b.room.name,
-			"hostId":       b.room.hostID,
-			"maxPlayers":   b.room.maxPlayers,
-			"bootAmount":   b.room.bootAmount,
+			"roomCode":     s.Settings.Code,
+			"roomName":     s.Settings.Name,
+			"hostId":       s.Settings.HostID,
+			"maxPlayers":   s.Settings.MaxPlayers,
+			"bootAmount":   s.Settings.BootAmount,
 			"participants": participants,
-			"phase":        b.room.game.Phase,
-			"createdAt":    b.room.CreationTime,
+			"phase":        s.Game.Phase,
+			"createdAt":    s.CreatedAt,
 		}
 
 		msg := protocol.NewMessage(protocol.MsgTypeRoomUpdate, info)

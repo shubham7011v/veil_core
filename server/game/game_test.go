@@ -8,9 +8,9 @@ func TestGameTurnCyclingWithDisconnects(t *testing.T) {
 	g := NewGame()
 
 	// Add 3 players
-	g.AddPlayer("p1", "Player 1", "")
-	g.AddPlayer("p2", "Player 2", "")
-	g.AddPlayer("p3", "Player 3", "")
+	g.AddPlayer("p1", "Player 1", "", false)
+	g.AddPlayer("p2", "Player 2", "", false)
+	g.AddPlayer("p3", "Player 3", "", false)
 
 	err := g.Start()
 	if err != nil {
@@ -61,8 +61,8 @@ func TestGameStartRules(t *testing.T) {
 		t.Error("Expected error when starting game with 0 players")
 	}
 
-	g.AddPlayer("p1", "p1", "")
-	g.AddPlayer("p2", "p2", "")
+	g.AddPlayer("p1", "p1", "", false)
+	g.AddPlayer("p2", "p2", "", false)
 
 	err = g.Start()
 	if err != nil {
@@ -89,8 +89,8 @@ func TestGameStartRules(t *testing.T) {
 
 func TestBluffLogic(t *testing.T) {
 	g := NewGame()
-	g.AddPlayer("p1", "p1", "")
-	g.AddPlayer("p2", "p2", "")
+	g.AddPlayer("p1", "p1", "", false)
+	g.AddPlayer("p2", "p2", "", false)
 	g.Start()
 
 	// Force p1's turn
@@ -136,9 +136,9 @@ func TestBluffLogic(t *testing.T) {
 
 func TestRemovePlayerDeckConsistency(t *testing.T) {
 	g := NewGame()
-	g.AddPlayer("p1", "p1", "")
-	g.AddPlayer("p2", "p2", "")
-	g.AddPlayer("p3", "p3", "")
+	g.AddPlayer("p1", "p1", "", false)
+	g.AddPlayer("p2", "p2", "", false)
+	g.AddPlayer("p3", "p3", "", false)
 
 	if err := g.Start(); err != nil {
 		t.Fatalf("Failed to start game: %v", err)

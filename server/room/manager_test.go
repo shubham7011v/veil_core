@@ -10,11 +10,15 @@ import (
 )
 
 func TestPlayerIndexing(t *testing.T) {
-	m := NewManager(nil)
+	dbConn, err := db.InitDB(":memory:")
+	if err != nil {
+		t.Fatalf("Failed to init DB: %v", err)
+	}
+	m := NewManager(nil, dbConn)
 
 	// Mock room and client
 	playerID := "test-player-1"
-	r := NewRoom("room-1")
+	r := NewRoom("room-1", m)
 	m.Rooms["room-1"] = r
 
 	// Test SetPlayerRoom
@@ -35,11 +39,15 @@ func TestPlayerIndexing(t *testing.T) {
 
 func TestMatchmakingCancellation(t *testing.T) {
 	// Initialize temporary database for test
-	dbPath := "test_room.db"
-	db.InitDB(dbPath)
+	dbPath := "test_room_cancel.db"
+	os.Remove(dbPath)
+	dbConn, err := db.InitDB(dbPath)
+	if err != nil {
+		t.Fatalf("Failed to init DB: %v", err)
+	}
 	defer os.Remove(dbPath)
 
-	m := NewManager(nil)
+	m := NewManager(nil, dbConn)
 	go m.Run() // Start manager loop
 
 	client := &Client{
@@ -74,7 +82,11 @@ func TestMatchmakingCancellation(t *testing.T) {
 }
 
 func TestRegistrationBuffer(t *testing.T) {
-	m := NewManager(nil)
+	dbConn, err := db.InitDB(":memory:")
+	if err != nil {
+		t.Fatalf("Failed to init DB: %v", err)
+	}
+	m := NewManager(nil, dbConn)
 	// Manager.Register is buffered at 1024
 	// We should be able to send many registrations without blocking even if Manager is not running
 

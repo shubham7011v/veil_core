@@ -11,18 +11,20 @@ import (
 	"path/filepath"
 	"strings"
 	"time"
-	"veil_server/db"
+	"veil_server/internal/domain/user"
 
 	"firebase.google.com/go/v4/auth"
 )
 
 type UserHandler struct {
 	AuthClient *auth.Client
+	UserRepo   user.Repository
 }
 
-func NewUserHandler(auth *auth.Client) *UserHandler {
+func NewUserHandler(auth *auth.Client, repo user.Repository) *UserHandler {
 	return &UserHandler{
 		AuthClient: auth,
+		UserRepo:   repo,
 	}
 }
 
@@ -119,7 +121,7 @@ func (h *UserHandler) UploadAvatar(w http.ResponseWriter, r *http.Request) {
 
 	// 6. Update DB
 	relativeURL := fmt.Sprintf("/uploads/avatars/%s", filename)
-	if err := db.UpdateUserAvatar(userID, relativeURL); err != nil {
+	if err := h.UserRepo.UpdateProfile(userID, "", relativeURL); err != nil {
 		log.Printf("Failed to update user avatar in DB: %v", err)
 	}
 

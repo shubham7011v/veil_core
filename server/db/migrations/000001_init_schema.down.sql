@@ -1,0 +1,5 @@
+DROP TABLE IF EXISTS user_challenges;
+DROP TABLE IF EXISTS challenges;
+DROP TABLE IF EXISTS friends;
+DROP TABLE IF EXISTS matches;
+DROP TABLE IF EXISTS users;

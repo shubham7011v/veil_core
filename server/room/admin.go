@@ -65,8 +65,8 @@ func (h *AdminHandler) ListRooms(w http.ResponseWriter, r *http.Request) {
 		rooms = append(rooms, map[string]interface{}{
 			"id":           id,
 			"player_count": len(room.clients),
-			"is_private":   room.isPrivate,
-			"game_started": room.game != nil,
+			"is_private":   room.session.Settings.IsPrivate,
+			"game_started": room.session.Game != nil,
 		})
 		room.mu.RUnlock()
 	}

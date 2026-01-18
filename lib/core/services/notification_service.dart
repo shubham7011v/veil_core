@@ -4,6 +4,8 @@ import 'package:veil_core/core/di/service_locator.dart';
 import 'package:veil_core/core/notifications/bloc/app_notification_event.dart';
 import 'package:veil_core/core/config/app_config.dart';
 import 'package:veil_core/core/engine/domain/models/session_enums.dart';
+import '../../features/session/session.dart';
+import '../navigation/app_router.dart';
 
 @pragma('vm:entry-point')
 Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
@@ -136,13 +138,23 @@ class NotificationService {
     if (message.data.containsKey('type')) {
       final type = message.data['type'];
       if (type == 'game_invite') {
-        // TODO: Navigate to lobby or join room
         final roomId = message.data['roomId'];
         AppLogger.info("Navigate to game invite for room: $roomId");
-        // Future work: Add navigation after connection is established
+
+        // 1. Join the room on the handler
+        handler.joinPrivateRoom(roomId);
+
+        // 2. Ensure SessionBloc is using the WebSocket handler
+        sl.sessionBloc.add(SessionHandlerSwapped(handler));
+
+        // 3. Navigate to the lobby screen
+        sl.navigationService.navigateTo(AppRouter.lobby);
       } else if (type == 'game_start') {
         AppLogger.info("Game started notification");
-        // Future work: Navigate to active game
+        // Ensure SessionBloc is using the WebSocket handler
+        sl.sessionBloc.add(SessionHandlerSwapped(handler));
+        // Navigate to the lobby (it will auto-redirect to session if game is active)
+        sl.navigationService.navigateTo(AppRouter.lobby);
       } else if (type == 'game_end') {
         AppLogger.info("Game ended notification");
       }

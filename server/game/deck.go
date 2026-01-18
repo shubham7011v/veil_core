@@ -108,3 +108,7 @@ func RankValue(r Rank) int {
 		return 0
 	}
 }
+
+func IsValidRank(r Rank) bool {
+	return RankValue(r) > 0
+}

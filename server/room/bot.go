@@ -131,9 +131,9 @@ func (b *Bot) decideTurn(phase string) {
 }
 
 func (b *Bot) decideMove(room *Room) {
-
 	room.mu.RLock()
-	g := room.game
+	s := room.session
+	g := s.Game
 	player := g.PlayerMap[b.Client.ID]
 	room.mu.RUnlock()
 
@@ -282,7 +282,8 @@ func (b *Bot) executeChallengeDecision(room *Room) bool {
 	}
 
 	room.mu.RLock()
-	g := room.game
+	s := room.session
+	g := s.Game
 	lastMove := g.LastMove
 	player := g.PlayerMap[b.Client.ID]
 	room.mu.RUnlock()

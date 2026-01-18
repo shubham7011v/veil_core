@@ -13,6 +13,7 @@ import '../../../../features/auth/domain/models/user_stats.dart';
 import '../../../../features/social/domain/models/friend_record.dart';
 import '../../domain/models/room_event.dart';
 import '../../../../features/challenges/domain/models/daily_challenge.dart';
+import '../../../../features/profile/domain/models/match_history_item.dart';
 import '../../../../features/voice/data/voice_audio_manager.dart';
 import '../../../../core/utils/app_logger.dart';
 import '../../../../core/di/service_locator.dart';
@@ -45,6 +46,8 @@ class WebSocketSessionHandler extends GameSessionHandler
   final _challengeClaimResultController =
       StreamController<Map<String, dynamic>>.broadcast();
   final _chatController = StreamController<Map<String, dynamic>>.broadcast();
+  final _matchHistoryController =
+      StreamController<List<MatchHistoryItem>>.broadcast();
   final _errorController = StreamController<Failure>.broadcast();
 
   // Connection state
@@ -220,6 +223,9 @@ class WebSocketSessionHandler extends GameSessionHandler
       _challengeClaimResultController;
   @override
   StreamController<Map<String, dynamic>> get chatController => _chatController;
+  @override
+  StreamController<List<MatchHistoryItem>> get matchHistoryController =>
+      _matchHistoryController;
   @override
   StreamController<Failure> get errorController => _errorController;
 
@@ -464,6 +470,11 @@ class WebSocketSessionHandler extends GameSessionHandler
     hand.insert(newIndex, u);
     _currentState = _currentState.copyWith(myHand: hand);
     if (!_stateController.isClosed) _stateController.add(_currentState);
+  }
+
+  /// Request match history from server
+  void requestMatchHistory() {
+    sendMessage({'type': 'MATCH_HISTORY_GET'});
   }
 
   @override

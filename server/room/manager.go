@@ -1,13 +1,21 @@
 package room
 
 import (
+	"database/sql"
 	"encoding/json"
 	"fmt"
 	"log"
 	"sync"
 	"time"
 	"veil_server/config"
-	"veil_server/db"
+	"veil_server/internal/domain/user"
+	"veil_server/internal/infrastructure/firebase"
+	"veil_server/internal/infrastructure/sqlite"
+	authUseCase "veil_server/internal/usecase/auth"
+	economyUseCase "veil_server/internal/usecase/economy"
+	gameUseCase "veil_server/internal/usecase/game"
+	socialUseCase "veil_server/internal/usecase/social"
+	"veil_server/internal/usecase/stats"
 	"veil_server/protocol"
 
 	"sync/atomic"
@@ -56,11 +64,22 @@ type Manager struct {
 	authHandler *AuthHandler
 	matchmaker  *Matchmaker
 
+	// Repositories
+	UserRepo user.Repository
+
+	// UseCases
+	statsUC   *stats.UseCase
+	authUC    *authUseCase.UseCase
+	socialUC  *socialUseCase.UseCase
+	gameUC    *gameUseCase.UseCase
+	economyUC *economyUseCase.UseCase
+
 	lastLoopTime int64 // Unix timestamp (monitored via atomic)
 	CreationTime time.Time
 }
 
-func NewManager(authClient *auth.Client) *Manager {
+func NewManager(authClient *auth.Client, dbConn *sql.DB) *Manager {
+	userRepo := sqlite.NewUserRepository(dbConn)
 	mgr := &Manager{
 		Clients:         make(map[*Client]bool),
 		Register:        make(chan *Client, config.ManagerRegisterBuffer),
@@ -70,14 +89,69 @@ func NewManager(authClient *auth.Client) *Manager {
 		Rooms:        make(map[string]*Room),
 		PlayerRooms:  make(map[string]*Room),
 		AuthClient:   authClient,
+		UserRepo:     userRepo,
 		CreationTime: time.Now(),
 	}
+
+	// Adapters
+	var idp authUseCase.IdentityProvider
+	if authClient != nil {
+		idp = firebase.NewAdapter(authClient)
+	}
+
 	// Initialize modular handlers
 	mgr.authHandler = NewAuthHandler(mgr)
-	mgr.matchmaker = NewMatchmaker(mgr)
+	mgr.matchmaker = NewMatchmaker(mgr, userRepo)
+	mgr.statsUC = stats.NewUseCase(userRepo)
+	mgr.authUC = authUseCase.NewUseCase(userRepo, idp)
+
+	// Phase 5 Injections
+	socialRepo := sqlite.NewSocialRepository(dbConn)
+	challengeRepo := sqlite.NewChallengeRepository(dbConn)
+	economyRepo := sqlite.NewEconomyRepository(dbConn)
+	matchRepo := sqlite.NewMatchRepository(dbConn)
+
+	mgr.socialUC = socialUseCase.NewUseCase(socialRepo)
+	mgr.economyUC = economyUseCase.NewUseCase(economyRepo)
+	mgr.gameUC = gameUseCase.NewUseCase(matchRepo, challengeRepo, economyRepo)
+
+	// Start Background Workers (Replaces db package workers)
+	mgr.startCoinFlusher(economyRepo)
+	mgr.startDailyResetWorker(challengeRepo)
 
 	mgr.startDeadlockMonitor()
 	return mgr
+}
+
+func (mgr *Manager) startCoinFlusher(repo *sqlite.EconomyRepository) {
+	go func() {
+		ticker := time.NewTicker(60 * time.Second)
+		for range ticker.C {
+			if err := repo.FlushCoins(); err != nil {
+				log.Printf("Error flushing coins from Manager: %v", err)
+			}
+		}
+	}()
+}
+
+func (mgr *Manager) startDailyResetWorker(repo *sqlite.ChallengeRepository) {
+	go func() {
+		for {
+			now := time.Now().UTC()
+			next := now.Add(time.Hour * 24)
+			next = time.Date(next.Year(), next.Month(), next.Day(), 0, 0, 0, 0, time.UTC)
+			t := time.NewTimer(next.Sub(now))
+
+			log.Printf("Daily Challenge Reset scheduled for %v", next)
+			<-t.C
+
+			if err := repo.ResetDailyProgress(); err != nil {
+				log.Printf("CRITICAL: Failed to reset daily challenges from Manager: %v", err)
+			} else {
+				log.Println("SUCCESS: Daily challenges have been reset via Manager.")
+			}
+		}
+	}()
 }
 
 func (mgr *Manager) startDeadlockMonitor() {
@@ -166,6 +240,40 @@ func (m *Manager) Shutdown() {
 	}
 }
 
+// ForceCloseRoom forcefully stops a specific room by ID (admin function)
+func (m *Manager) ForceCloseRoom(roomID string) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	room, exists := m.Rooms[roomID]
+	if !exists {
+		return fmt.Errorf("room not found: %s", roomID)
+	}
+
+	log.Printf("Admin: Force closing room %s", roomID)
+
+	// Notify all clients in the room before closing
+	msg := protocol.NewMessage(protocol.MsgTypeSystemAlert, map[string]string{
+		"message": "This room has been closed by an administrator.",
+	})
+	bytes, _ := json.Marshal(msg)
+
+	room.mu.RLock()
+	for client := range room.clients {
+		select {
+		case client.Send <- bytes:
+		default:
+			// Client buffer full, skip
+		}
+	}
+	room.mu.RUnlock()
+
+	// Stop the room (cleanup will happen via normal mechanisms)
+	room.Stop()
+
+	return nil
+}
+
 // DELEGATED to Matchmaker
 
 // DELEGATED to Matchmaker but wrapper kept for Interface Compliance
@@ -238,7 +346,7 @@ func (m *Manager) HandleMessage(c *Client, message []byte) {
 		return
 
 	case protocol.MsgTypeLeaderboardGet:
-		leaderboard, err := db.GetLeaderboard()
+		leaderboard, err := m.statsUC.GetLeaderboard()
 		if err == nil {
 			bytes, _ := json.Marshal(protocol.NewMessage(protocol.MsgTypeLeaderboardData, leaderboard))
 			c.Send <- bytes
@@ -248,13 +356,13 @@ func (m *Manager) HandleMessage(c *Client, message []byte) {
 	case protocol.MsgTypeFriendRequest:
 		var targetID string
 		json.Unmarshal(baseMsg.Data, &targetID)
-		db.AddFriend(c.ID, targetID)
+		m.socialUC.AddFriendRequest(c.ID, targetID)
 		return
 
 	case protocol.MsgTypeFriendAccept:
 		var targetID string
 		json.Unmarshal(baseMsg.Data, &targetID)
-		db.AcceptFriend(c.ID, targetID)
+		m.socialUC.AcceptFriendRequest(c.ID, targetID)
 		m.authHandler.AddFriendListResponse(c)
 		return
 
@@ -263,25 +371,80 @@ func (m *Manager) HandleMessage(c *Client, message []byte) {
 		return
 
 	case protocol.MsgTypeMatchHistoryGet:
-		history, err := db.GetUserMatchHistory(c.ID)
+		history, err := m.statsUC.GetMatchHistory(c.ID)
 		if err == nil {
 			bytes, _ := json.Marshal(protocol.NewMessage(protocol.MsgTypeMatchHistoryData, history))
 			c.Send <- bytes
 		}
 		return
 
-	case protocol.MsgTypeChallengesGet:
+	case protocol.MsgTypeDailyChallengesGet:
 		if !config.GetFeatureFlags().EnableDailyChallenges {
-			m.sendError(c, "FEATURE_DISABLED", "Daily Challenges are currently disabled")
+			m.sendError(c, protocol.ErrCodeFeatureOff, "Daily Challenges are currently disabled")
 			return
 		}
-		status, _ := db.GetDailyChallengesStatus(c.ID)
-		bytes, _ := json.Marshal(protocol.NewMessage(protocol.MsgTypeChallengesData, status))
+		challenges, err := m.gameUC.GetDailyChallenges(c.ID)
+		if err != nil {
+			log.Printf("Error getting daily challenges for %s: %v", c.ID, err)
+			m.sendError(c, protocol.ErrCodeChallengeErr, "Failed to retrieve daily challenges")
+			return
+		}
+		// Convert UseCase domain output to map for legacy protocol compatibility
+		// or update protocol handler later. For now, manual mapping.
+		// Ideally we use a method in authHandler to format this.
+		// The UseCase returns []challenge.ChallengeWithProgress
+		var status []map[string]interface{}
+		for _, ch := range challenges {
+			status = append(status, map[string]interface{}{
+				"id":          ch.ID,
+				"name":        ch.Title,
+				"description": ch.Description,
+				"reward":      ch.Reward,
+				"progress":    ch.Current,
+				"target":      ch.Goal,
+				"claimed":     ch.IsClaimed,
+				"completed":   ch.Completed,
+			})
+		}
+		bytes, _ := json.Marshal(protocol.NewMessage(protocol.MsgTypeDailyChallengesData, status))
 		c.Send <- bytes
 		return
 
 	case protocol.MsgTypeChallengeClaim:
-		m.authHandler.HandleChallengeClaim(c, baseMsg.Data)
+		var challengeID string
+		if err := json.Unmarshal(baseMsg.Data, &challengeID); err != nil {
+			log.Printf("ChallengeClaim unmarshal error: %v", err)
+			return
+		}
+		err := m.gameUC.ClaimDailyChallengeReward(c.ID, challengeID)
+		if err != nil {
+			log.Printf("Error claiming challenge reward for %s, challenge %s: %v", c.ID, challengeID, err)
+			m.sendError(c, protocol.ErrCodeClaimErr, err.Error())
+			return
+		}
+		// Send updated challenge status and player coins
+		m.authHandler.AddPlayerCoinsResponse(c)
+		// Re-fetch and send challenges to update UI
+		challenges, err := m.gameUC.GetDailyChallenges(c.ID)
+		if err != nil {
+			log.Printf("Error getting daily challenges after claim for %s: %v", c.ID, err)
+			return
+		}
+		var status []map[string]interface{}
+		for _, ch := range challenges {
+			status = append(status, map[string]interface{}{
+				"id":          ch.ID,
+				"name":        ch.Title,
+				"description": ch.Description,
+				"reward":      ch.Reward,
+				"progress":    ch.Current,
+				"target":      ch.Goal,
+				"claimed":     ch.IsClaimed,
+				"completed":   ch.Completed,
+			})
+		}
+		bytes, _ := json.Marshal(protocol.NewMessage(protocol.MsgTypeDailyChallengesData, status))
+		c.Send <- bytes
 		return
 
 	case protocol.MsgTypeJoinRoom:
@@ -390,7 +553,7 @@ func (m *Manager) HandleMessage(c *Client, message []byte) {
 			Message: baseMsg,
 		})
 	} else {
-		m.sendError(c, "NO_ROOM", "You must join a room first")
+		m.sendError(c, protocol.ErrCodeNoRoom, "You must join a room first")
 	}
 }
 
@@ -410,7 +573,7 @@ func (m *Manager) createPrivateRoom(c *Client, data protocol.CreatePrivateRoomMe
 	code := m.matchmaker.GenerateRoomCode()
 	roomID := fmt.Sprintf("private_%s_%d", code, time.Now().Unix())
 
-	r := NewPrivateRoom(roomID, data.RoomName, code, data.Password, c.ID, data.MaxPlayers, data.BootAmount)
+	r := NewPrivateRoom(roomID, data.RoomName, code, data.Password, c.ID, data.MaxPlayers, data.BootAmount, m)
 	r.SessionExpiry = m.ExpiredSessions
 
 	// Set cleanup callback
@@ -434,7 +597,7 @@ func (m *Manager) createPrivateRoom(c *Client, data protocol.CreatePrivateRoomMe
 		"roomId":    roomID,
 		"roomName":  data.RoomName,
 		"hostId":    c.ID,
-		"createdAt": r.CreationTime,
+		"createdAt": r.session.CreatedAt,
 	}
 	bytes, _ := json.Marshal(protocol.NewMessage(protocol.MsgTypeRoomCreated, response))
 	c.Send <- bytes
@@ -446,7 +609,7 @@ func (m *Manager) createPrivateRoom(c *Client, data protocol.CreatePrivateRoomMe
 
 func (m *Manager) joinPrivateRoom(c *Client, data protocol.JoinPrivateRoomMessage) {
 	if c.CurrentRoom != nil {
-		m.sendError(c, "ALREADY_IN_ROOM", "You are already in a room")
+		m.sendError(c, protocol.ErrCodeAlreadyInRoom, "You are already in a room")
 		return
 	}
 
@@ -455,18 +618,18 @@ func (m *Manager) joinPrivateRoom(c *Client, data protocol.JoinPrivateRoomMessag
 	m.mu.RUnlock()
 
 	if !ok {
-		m.sendError(c, "ROOM_NOT_FOUND", "Room not found")
+		m.sendError(c, protocol.ErrCodeRoomNotFound, "Room not found")
 		return
 	}
 
 	if !r.CheckPassword(data.Password) {
-		m.sendError(c, "INVALID_PASSWORD", "Incorrect password")
+		m.sendError(c, protocol.ErrCodeInvalidPass, "Incorrect password")
 		return
 	}
 
 	c.IsSpectator = data.IsSpectator
 	if !c.IsSpectator && r.IsFull() {
-		m.sendError(c, "ROOM_FULL", "Room is full")
+		m.sendError(c, protocol.ErrCodeRoomFull, "Room is full")
 		return
 	}
 
@@ -486,10 +649,7 @@ func (m *Manager) joinPrivateRoom(c *Client, data protocol.JoinPrivateRoomMessag
 }
 
 func (m *Manager) sendError(c *Client, code, message string) {
-	errBytes, _ := json.Marshal(protocol.NewMessage(protocol.MsgTypeError, protocol.ErrorMessage{
-		Code:    code,
-		Message: message,
-	}))
+	errBytes, _ := json.Marshal(protocol.NewErrorMessage(code, message))
 	select {
 	case c.Send <- errBytes:
 	default:
@@ -544,6 +704,11 @@ func (m *Manager) GetStatus() ManagerStatus {
 	}
 }
 
+// FlushEconomy flushes all buffered coin updates to the database
+func (m *Manager) FlushEconomy() error {
+	return m.economyUC.FlushCoins()
+}
+
 func (m *Manager) BroadcastSystemMessage(message string) {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
@@ -567,10 +732,7 @@ func (m *Manager) KickUser(userID string, reason string) {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
 
-	msg := protocol.NewMessage(protocol.MsgTypeError, protocol.ErrorMessage{
-		Code:    "KICKED",
-		Message: reason,
-	})
+	msg := protocol.NewErrorMessage(protocol.ErrCodeKicked, reason)
 	bytes, _ := json.Marshal(msg)
 
 	for client := range m.Clients {

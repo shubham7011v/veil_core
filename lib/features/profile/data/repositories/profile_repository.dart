@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'package:http/http.dart' as http;
 import 'package:firebase_auth/firebase_auth.dart';
 import '../../domain/models/user_profile.dart';
+import '../../domain/models/match_history_item.dart';
 import '../../../auth/domain/models/user_stats.dart';
 import '../../../../core/engine/data/handlers/websocket_session_handler.dart';
 import '../../../../core/config/app_config.dart';
@@ -105,5 +106,14 @@ class ProfileRepository {
   /// Remove a friend
   Future<void> removeFriend(String userId) async {
     _handler.removeFriend(userId);
+  }
+
+  // --- Match History ---
+
+  Stream<List<MatchHistoryItem>> get myMatchHistoryStream =>
+      _handler.matchHistoryController.stream;
+
+  Future<void> fetchMyMatchHistory() async {
+    _handler.requestMatchHistory();
   }
 }
