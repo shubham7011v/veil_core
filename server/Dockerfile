@@ -17,7 +17,7 @@ COPY . .
 ARG VERSION=dev
 
 # Build the binary with CGO enabled for SQLite and embed version
-RUN CGO_ENABLED=1 GOOS=linux go build -ldflags "-X veil_server/version.Version=${VERSION}" -o veil-server .
+RUN CGO_ENABLED=1 GOOS=linux go build -ldflags "-X veil_server/version.Version=${VERSION}" -o veil-server ./cmd/server
 
 # Runtime stage
 FROM alpine:latest
