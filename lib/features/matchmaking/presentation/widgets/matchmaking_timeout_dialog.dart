@@ -99,12 +99,12 @@ class _MatchmakingTimeoutDialogState extends State<MatchmakingTimeoutDialog> {
 }
 
 // Static helper to show the dialog
-void showMatchmakingTimeoutDialog(
+Future<dynamic> showMatchmakingTimeoutDialog(
   BuildContext context,
   AppColorPalette palette,
   MatchmakingBloc bloc,
 ) {
-  showDialog(
+  return showDialog(
     context: context,
     barrierDismissible: false,
     builder: (context) =>

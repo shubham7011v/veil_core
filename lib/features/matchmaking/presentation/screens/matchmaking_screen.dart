@@ -14,7 +14,7 @@ import '../bloc/matchmaking_bloc.dart';
 import '../bloc/matchmaking_event.dart';
 import '../bloc/matchmaking_state.dart';
 import '../widgets/matchmaking_connection_banner.dart';
-import '../widgets/matchmaking_timeout_dialog.dart';
+
 import '../widgets/matchmaking_orbit.dart';
 import '../widgets/matchmaking_header.dart';
 import '../widgets/matchmaking_status_view.dart';
@@ -80,11 +80,6 @@ class _MatchmakingViewState extends State<_MatchmakingView>
 
       AppLogger.info('🎉 [MatchmakingScreen] Match found! Navigating...');
 
-      // Close any open dialogs (like timeout dialog) before navigating
-      if (Navigator.of(context).canPop()) {
-        Navigator.of(context).pop();
-      }
-
       Future.delayed(
         Duration(seconds: AppConfig.instance.matchmakingDelaySeconds),
         () {
@@ -96,12 +91,6 @@ class _MatchmakingViewState extends State<_MatchmakingView>
             );
           }
         },
-      );
-    } else if (effect is MatchmakingShowTimeoutDialog) {
-      showMatchmakingTimeoutDialog(
-        context,
-        palette,
-        context.read<MatchmakingBloc>(),
       );
     } else if (effect is MatchmakingTriggerHaptic) {
       HapticFeedback.selectionClick();
