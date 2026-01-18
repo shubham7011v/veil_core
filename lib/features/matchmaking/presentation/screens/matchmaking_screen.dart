@@ -79,6 +79,12 @@ class _MatchmakingViewState extends State<_MatchmakingView>
       _hasNavigated = true;
 
       AppLogger.info('🎉 [MatchmakingScreen] Match found! Navigating...');
+
+      // Close any open dialogs (like timeout dialog) before navigating
+      if (Navigator.of(context).canPop()) {
+        Navigator.of(context).pop();
+      }
+
       Future.delayed(
         Duration(seconds: AppConfig.instance.matchmakingDelaySeconds),
         () {
@@ -108,7 +114,9 @@ class _MatchmakingViewState extends State<_MatchmakingView>
         ),
       );
     } else if (effect is MatchmakingPop) {
-      Navigator.pop(context);
+      if (Navigator.of(context).canPop()) {
+        Navigator.pop(context);
+      }
     }
   }
 

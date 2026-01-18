@@ -23,8 +23,14 @@ class OpponentRow extends StatelessWidget {
       opponents = [...afterMe, ...beforeMe];
     }
 
-    // Limit to 4 opponents as per design feedback
-    return opponents.take(4).toList();
+    // Ensure uniqueness by ID to prevent GlobalKey collisions
+    final seenIds = <String>{};
+    final uniqueOpponents = opponents
+        .where((p) => seenIds.add(p.id))
+        .take(4)
+        .toList();
+
+    return uniqueOpponents;
   }
 
   @override

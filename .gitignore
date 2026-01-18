@@ -89,3 +89,6 @@ test_*.txt
 # OS-specific
 .DS_Store
 Thumbs.db
+
+
+*.agent

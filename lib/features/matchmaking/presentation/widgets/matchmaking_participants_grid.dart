@@ -11,7 +11,13 @@ class MatchmakingParticipantsGrid extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final List<Participant> sorted = List.from(participants);
+    // Ensure uniqueness by ID to prevent key collisions
+    final seenIds = <String>{};
+    final uniqueParticipants = participants
+        .where((p) => seenIds.add(p.id))
+        .toList();
+
+    final List<Participant> sorted = List.from(uniqueParticipants);
     sorted.sort((a, b) {
       if (a.isMe) return -1;
       if (b.isMe) return 1;

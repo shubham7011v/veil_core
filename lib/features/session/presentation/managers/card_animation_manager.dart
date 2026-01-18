@@ -25,25 +25,40 @@ class CardAnimationManager {
 
   /// Update avatar keys based on current participant list
   void updateAvatarKeys(SessionBlocState state) {
+    // Keep track of which IDs we've already assigned a key to in this pass
+    // to avoid mapping multiple IDs (e.g. p.id and p.sessionId) inconsistently
+    final processedIds = <String>{};
+
     for (var p in state.engineState.participants) {
       if (p.isMe) {
         // Map my actual ID to the SessionIds.me key used by HandView
         _avatarKeys[p.id] = _avatarKeys[SessionIds.me]!;
+        processedIds.add(p.id);
+
         // Also map sessionId to the same key
         if (p.sessionId != null) {
           _avatarKeys[p.sessionId!] = _avatarKeys[SessionIds.me]!;
+          processedIds.add(p.sessionId!);
         }
       } else {
-        // If we don't have a key for this participant, create one
+        // If we don't have a key for this participant ID, create one
         if (!_avatarKeys.containsKey(p.id)) {
-          _avatarKeys[p.id] = GlobalKey();
+          _avatarKeys[p.id] = GlobalKey(debugLabel: 'avatar_${p.id}');
         }
+        processedIds.add(p.id);
+
         // Map sessionId to the same key so we can find them by either ID
-        if (p.sessionId != null && _avatarKeys.containsKey(p.id)) {
+        if (p.sessionId != null) {
+          // If sessionId is already processed (e.g. same as p.id), don't overwrite with a new key
           _avatarKeys[p.sessionId!] = _avatarKeys[p.id]!;
+          processedIds.add(p.sessionId!);
         }
       }
     }
+
+    // Optional: Clean up keys for participants no longer in the session
+    // This helps avoid lingering GlobalKeys in the tree
+    // _avatarKeys.removeWhere((id, _) => id != SessionIds.me && !processedIds.contains(id));
   }
 
   /// Get the center offset of a widget by its GlobalKey (PUBLIC for use by GameEventHandler)
