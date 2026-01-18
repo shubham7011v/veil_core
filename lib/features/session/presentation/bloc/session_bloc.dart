@@ -44,6 +44,24 @@ class SessionBloc extends Bloc<SessionEvent, SessionBlocState> {
     on<TypingStatusChanged>(_onTypingStatusChanged);
 
     // Engine update handlers
+    on<VisualCardIncrement>((event, emit) {
+      final updatedParticipants = state.engineState.participants.map((p) {
+        // Check both ID and SessionID to match either
+        if (p.id == event.playerId || p.sessionId == event.playerId) {
+          return p.copyWith(unitCount: p.unitCount + 1);
+        }
+        return p;
+      }).toList();
+
+      emit(
+        state.copyWith(
+          engineState: state.engineState.copyWith(
+            participants: updatedParticipants,
+          ),
+        ),
+      );
+    });
+
     on<EngineStateUpdated>((event, emit) {
       final isNewRound = _handler.lastMove == null;
       final hasCards = event.state.myHand.isNotEmpty;

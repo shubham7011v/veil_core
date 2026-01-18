@@ -66,15 +66,15 @@ class _SessionScreenState extends State<SessionScreen>
       duration: SessionDurations.entryAnimationDuration,
     );
     AppLogger.sessionEvent('Screen initialized');
-    _entryController.forward();
+    _entryController.forward().then((_) {
+      if (mounted) {
+        context.read<SessionBloc>().handler.signalClientReady();
+      }
+    });
 
     // Check for missed initial events (e.g. shuffling)
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
-
-      // Signal server that client UI is ready for game start
-      final handler = context.read<SessionBloc>().handler;
-      handler.signalClientReady();
 
       final state = context.read<SessionBloc>().state;
       if (state.lastEvent == engine.SessionEventType.shuffling) {

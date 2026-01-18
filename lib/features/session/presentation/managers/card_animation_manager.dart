@@ -81,6 +81,7 @@ class CardAnimationManager {
     bool randomOffset = false,
     Offset? customStartOffset,
     Offset? customEndOffset,
+    VoidCallback? onComplete,
   }) {
     // DEBUG LOG: Check entry count
     AppLogger.info(
@@ -178,6 +179,7 @@ class CardAnimationManager {
               randomOffset: randomOffset,
               customStartOffset: customStartOffset,
               customEndOffset: customEndOffset,
+              onComplete: onComplete,
             );
           });
         }
@@ -198,6 +200,7 @@ class CardAnimationManager {
         setState(() {
           _flyingCards.removeWhere((anim) => anim.id == id);
         });
+        onComplete?.call();
       });
     });
   }

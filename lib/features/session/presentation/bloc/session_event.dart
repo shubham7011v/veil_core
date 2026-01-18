@@ -69,6 +69,15 @@ class HandReorderRequested extends SessionEvent {
 }
 
 // -- Engine Update Events --
+
+class VisualCardIncrement extends SessionEvent {
+  final String playerId;
+  const VisualCardIncrement(this.playerId);
+
+  @override
+  List<Object?> get props => [playerId];
+}
+
 class EngineStateUpdated extends SessionEvent {
   final engine.SessionState state;
   const EngineStateUpdated(this.state);

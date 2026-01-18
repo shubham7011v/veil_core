@@ -9,6 +9,9 @@ import '../managers/card_animation_manager.dart';
 import '../managers/turn_popup_manager.dart';
 import '../widgets/floating_emoji_layer.dart';
 import '../../../../core/di/service_locator.dart' as di;
+import 'package:flutter_bloc/flutter_bloc.dart';
+import '../bloc/session_bloc.dart';
+import '../bloc/session_event.dart';
 
 /// Handles all game events and delegates to appropriate managers
 /// Extracted from session_screen.dart to improve separation of concerns
@@ -191,21 +194,46 @@ class GameEventHandler {
 
     if (!shouldAnimate) return;
 
-    // Clean distribution: Fly cards from pile directly to each player
+    // Sequential distribution: Deal one card to each player in round-robin fashion
     final participants = state.engineState.participants;
     if (participants.isEmpty) return;
 
     final totalCards = 52;
+    // Calculate cards per player
     final cardsPerPlayer = totalCards ~/ participants.length;
 
-    // Distribute cards to all players simultaneously
-    for (var participant in participants) {
-      cardAnimations.triggerCardAnimation(
-        context: context,
-        sourceId: SessionIds.pile,
-        targetId: participant.id,
-        count: cardsPerPlayer,
-      );
+    int dealIndex = 0;
+    final dealIntervalMs = 40; // Fast efficient dealing
+
+    for (int i = 0; i < cardsPerPlayer; i++) {
+      for (var participant in participants) {
+        final currentDelay = dealIndex * dealIntervalMs;
+
+        Future.delayed(Duration(milliseconds: currentDelay), () {
+          if (!context.mounted) return;
+
+          cardAnimations.triggerCardAnimation(
+            context: context,
+            sourceId: SessionIds.pile,
+            targetId: participant.id,
+            count: 1, // Single card visual
+            onComplete: () {
+              if (context.mounted) {
+                context.read<SessionBloc>().add(
+                  VisualCardIncrement(participant.id),
+                );
+              }
+            },
+          );
+
+          // Add subtle haptic feedback on every deal cycle (for first player) to keep rhythm
+          if (participant == participants.first) {
+            HapticFeedback.selectionClick();
+          }
+        });
+
+        dealIndex++;
+      }
     }
   }
 

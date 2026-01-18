@@ -135,7 +135,7 @@ class LocalBotSessionHandler extends BaseAuthoritativeHandler {
 
   @override
   void signalClientReady() {
-    // No-op for local games - instant start
+    super.signalClientReady();
   }
 
   String _getBotName(int index) {

@@ -2,7 +2,7 @@ import 'package:flutter/foundation.dart';
 import 'dart:io' show Platform;
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import '../utils/app_logger.dart';
-import 'remote_config_service.dart';
+
 import '../../main_common.dart' show bootStep;
 
 /// Environment-based configuration management
@@ -384,11 +384,8 @@ class AppConfig {
       'ENABLE_FRIENDS_MATCH_OFFLINE',
       false,
     );
-    enableBotPlayers = _getBoolConfig(
-      'enable_bot_players',
-      'ENABLE_BOT_PLAYERS',
-      false,
-    );
+    // Forced enabled (Remote Config disabled for this feature)
+    enableBotPlayers = true;
     enableInnerCircle = _getBoolConfig(
       'enable_inner_circle',
       'ENABLE_INNER_CIRCLE',
@@ -427,32 +424,16 @@ class AppConfig {
   }
 
   int _getIntConfig(String rcKey, String envKey, int defaultValue) {
-    // 1. Try Remote Config
-    try {
-      final rcValue = RemoteConfigService.instance.getInt(rcKey);
-      if (rcValue != 0) return rcValue;
-    } catch (_) {
-      // Ignore Remote Config errors, fall back to defaults
-    }
-
-    // 2. Try .env
+    // 1. Try .env
     final envFileValue = _safeGetEnv(envKey);
     if (envFileValue != null) return int.tryParse(envFileValue) ?? defaultValue;
 
-    // 3. Try Environment Variable (Build Time)
+    // 2. Try Environment Variable (Build Time)
     return int.fromEnvironment(envKey, defaultValue: defaultValue);
   }
 
   String _getStringConfig(String rcKey, String envKey, String defaultValue) {
-    // 1. Try Remote Config
-    try {
-      final rcValue = RemoteConfigService.instance.getString(rcKey);
-      if (rcValue.isNotEmpty) return rcValue;
-    } catch (_) {
-      // Ignore Remote Config errors
-    }
-
-    // 2. Try .env
+    // 1. Try .env
     final envFileValue = _safeGetEnv(envKey);
     if (envFileValue != null) return envFileValue;
 
@@ -469,13 +450,8 @@ class AppConfig {
     final envValue = bool.fromEnvironment(envKey, defaultValue: false);
     if (envValue) return true;
 
-    // 3. Try Remote Config (Server-side control)
-    try {
-      return RemoteConfigService.instance.getBool(rcKey);
-    } catch (_) {
-      // Ignore Remote Config errors
-      return defaultValue;
-    }
+    // 3. Fallback to default
+    return defaultValue;
   }
 
   List<String> _getStringListConfig(
@@ -483,21 +459,7 @@ class AppConfig {
     String envKey,
     List<String> defaultValues,
   ) {
-    // 1. Try Remote Config
-    try {
-      final rcValue = RemoteConfigService.instance.getString(rcKey);
-      if (rcValue.isNotEmpty) {
-        return rcValue
-            .split(',')
-            .map((s) => s.trim())
-            .where((u) => u.isNotEmpty)
-            .toList();
-      }
-    } catch (_) {
-      // Ignore
-    }
-
-    // 2. Try .env
+    // 1. Try .env
     final envFileValue = _safeGetEnv(envKey);
     if (envFileValue != null) {
       return envFileValue

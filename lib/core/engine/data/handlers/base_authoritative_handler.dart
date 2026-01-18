@@ -181,7 +181,7 @@ abstract class BaseAuthoritativeHandler implements GameSessionHandler {
       _hands[id] = hands[id]!;
     }
 
-    // Phase 1: Shuffling
+    // Phase 1: Shuffling (Initial State)
     _currentState = SessionState(
       roomId: '101',
       participants: participants.map((p) => p.copyWith(unitCount: 0)).toList(),
@@ -189,19 +189,22 @@ abstract class BaseAuthoritativeHandler implements GameSessionHandler {
       currentPhase: SessionPhase.thinking,
       activeParticipantId: 'me',
       pileCount: deck.length, // START WITH FULL DECK
-      lastActionText: 'Shuffling deck...',
+      lastActionText: 'Waiting for client...',
     );
     emitState();
+  }
 
-    // Phase 1.5: Shuffling (delayed to ensure UI is fully mounted and listening)
-    Future.delayed(const Duration(milliseconds: 800), () {
-      emitEvent(SessionEventType.shuffling);
-    });
+  @override
+  void signalClientReady() {
+    _addToLog("Client ready. Starting game sequence.");
+
+    // Phase 1.5: Shuffling (Triggered by UI signal)
+    emitEvent(SessionEventType.shuffling);
 
     // Phase 2: Update state after shuffle animation completes
-    Future.delayed(const Duration(milliseconds: 2000), () {
+    // Matched to the UI animation duration (~2.5s for sequential deal)
+    Future.delayed(const Duration(milliseconds: 2500), () {
       _currentState = _currentState.copyWith(
-        participants: participants,
         myHand: _hands['me']!,
         pileCount: 0, // PILE GOES TO 0 AFTER DEALING
         lastActionText: 'Game Started! Select a rank to begin.',

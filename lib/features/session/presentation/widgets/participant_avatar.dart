@@ -127,22 +127,22 @@ class _ParticipantAvatarState extends State<ParticipantAvatar>
 
               // Unit Count Badge (Circular & Premium)
               Positioned(
-                right: -4,
-                bottom: 0,
+                right: -6,
+                bottom: -2,
                 child: Container(
-                  width: 22,
-                  height: 22,
+                  width: 28,
+                  height: 28,
                   decoration: BoxDecoration(
                     color: const Color(0xFF1A1A1A),
                     shape: BoxShape.circle,
                     border: Border.all(
                       color: const Color(0xFF4E342E),
-                      width: 1,
+                      width: 1.5,
                     ),
                     boxShadow: const [
                       BoxShadow(
                         color: Colors.black45,
-                        blurRadius: 2,
+                        blurRadius: 3,
                         offset: Offset(0, 1),
                       ),
                     ],
@@ -152,7 +152,7 @@ class _ParticipantAvatarState extends State<ParticipantAvatar>
                       '${widget.participant.unitCount}',
                       style: const TextStyle(
                         color: Color(0xFFFFD700),
-                        fontSize: 9,
+                        fontSize: 13,
                         fontWeight: FontWeight.w900,
                       ),
                     ),

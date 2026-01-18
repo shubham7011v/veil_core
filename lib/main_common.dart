@@ -15,7 +15,7 @@ import 'features/profile/profile.dart';
 import 'features/challenges/presentation/bloc/challenges_bloc.dart';
 import 'core/di/service_locator.dart' as di;
 import 'core/navigation/app_router.dart';
-import 'core/config/remote_config_service.dart';
+
 import 'core/error/global_error_handler.dart';
 import 'core/error/failure.dart';
 import 'core/notifications/widgets/app_notification_listener.dart';
@@ -81,21 +81,6 @@ Future<void> mainCommon({required String env, required String appName}) async {
         }
       } catch (e) {
         throw 'Firebase Initialization Failed: $e';
-      }
-
-      // Initialize Remote Config Service (Fetch values from Firebase)
-      _bootStep = '3. Initializing Remote Config';
-      try {
-        await RemoteConfigService.instance.initialize().timeout(
-          const Duration(seconds: 10),
-          onTimeout: () => AppLogger.info(
-            '🚀 [STARTUP] 3. Remote Config Timeout (continuing)',
-          ),
-        );
-        AppLogger.info('🚀 [STARTUP] 3. Remote Config initialized');
-      } catch (e) {
-        // Non-fatal, continue
-        AppLogger.info('🚀 [STARTUP] 3. Remote Config Failed (continuing): $e');
       }
 
       // Fully load config
