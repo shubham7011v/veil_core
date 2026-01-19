@@ -1,5 +1,6 @@
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:google_sign_in/google_sign_in.dart';
+import '../../utils/app_logger.dart';
 
 class AuthRepository {
   FirebaseAuth? _firebaseAuthInstance;
@@ -18,6 +19,7 @@ class AuthRepository {
   User? get currentUser => _firebaseAuth.currentUser;
 
   Future<UserCredential> signInWithGoogle() async {
+    AppLogger.info('Auth: Starting Google Sign-In');
     try {
       final GoogleSignInAccount? googleUser = await _googleSignIn.signIn();
       if (googleUser == null) {
@@ -34,13 +36,20 @@ class AuthRepository {
         idToken: googleAuth.idToken,
       );
 
-      return await _firebaseAuth.signInWithCredential(credential);
+      final result = await _firebaseAuth.signInWithCredential(credential);
+      AppLogger.info(
+        'Auth: Google Sign-In Success',
+        data: {'uid': result.user?.uid},
+      );
+      return result;
     } catch (e) {
+      AppLogger.error('Auth: Google Sign-In Failed', exception: e);
       rethrow;
     }
   }
 
   Future<UserCredential?> signInSilently() async {
+    AppLogger.info('Auth: Attempting Silent Sign-In');
     try {
       final GoogleSignInAccount? googleUser = await _googleSignIn
           .signInSilently();
@@ -53,13 +62,20 @@ class AuthRepository {
         idToken: googleAuth.idToken,
       );
 
-      return await _firebaseAuth.signInWithCredential(credential);
+      final result = await _firebaseAuth.signInWithCredential(credential);
+      AppLogger.info(
+        'Auth: Silent Sign-In Success',
+        data: {'uid': result.user?.uid},
+      );
+      return result;
     } catch (e) {
+      AppLogger.info('Auth: Silent Sign-In Failed/Not available');
       return null;
     }
   }
 
   Future<void> signOut() async {
+    AppLogger.info('Auth: Signing out');
     await Future.wait([_firebaseAuth.signOut(), _googleSignIn.signOut()]);
   }
 

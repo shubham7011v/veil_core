@@ -82,6 +82,17 @@ class SessionBloc extends Bloc<SessionEvent, SessionBlocState> {
           hasCards &&
           (roundJustReset || gameJustStarted);
 
+      AppLogger.sessionEvent(
+        'EngineStateUpdated',
+        data: {
+          'phase': event.state.currentPhase.name,
+          'activeId': event.state.activeParticipantId,
+          'isMyTurn': isNowMyTurn,
+          'myHandCount': event.state.myHand.length,
+          'shouldShowRankSelector': shouldShowRankSelector,
+        },
+      );
+
       SessionBlocState nextState = state.copyWith(
         engineState: event.state,
         isRevealingBluff: _handler.isRevealingBluff,
@@ -120,6 +131,14 @@ class SessionBloc extends Bloc<SessionEvent, SessionBlocState> {
       }
     });
     on<EngineEventReceived>((event, emit) {
+      AppLogger.sessionEvent(
+        'EngineEventReceived',
+        data: {
+          'type': event.type.name,
+          'actor': event.actorId,
+          'count': event.cardCount,
+        },
+      );
       final shouldSync = _handler.lastMove != null;
       var updatedStats = state.matchStats;
 
@@ -466,6 +485,9 @@ class SessionBloc extends Bloc<SessionEvent, SessionBlocState> {
     HandlerSyncRequested event,
     Emitter<SessionBlocState> emit,
   ) {
+    AppLogger.info(
+      'HandlerSyncRequested: Syncing SessionBloc state with handler',
+    );
     emit(
       state.copyWith(
         engineState: _handler.currentState,

@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
+import '../../../../core/utils/app_logger.dart';
 import '../bloc/session_state.dart';
+import '../utils/session_constants.dart';
 import 'participant_avatar.dart';
 
 class OpponentRow extends StatelessWidget {
@@ -24,11 +26,18 @@ class OpponentRow extends StatelessWidget {
     }
 
     // Ensure uniqueness by ID to prevent GlobalKey collisions
+    // AND explicitly remove 'me' by ID and isMe flag to prevent conflict with SessionHandView
     final seenIds = <String>{};
     final uniqueOpponents = opponents
+        .where((p) => !p.isMe && p.id != SessionIds.me)
         .where((p) => seenIds.add(p.id))
         .take(4)
         .toList();
+
+    AppLogger.info(
+      'OpponentRow: Ordered ${uniqueOpponents.length} opponents (meIndex: ${meIndex != -1 ? meIndex : "not found"})',
+      data: {'ids': uniqueOpponents.map((p) => p.id).toList()},
+    );
 
     return uniqueOpponents;
   }

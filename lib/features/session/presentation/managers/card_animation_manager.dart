@@ -32,8 +32,13 @@ class CardAnimationManager {
     for (var p in state.engineState.participants) {
       if (p.isMe) {
         // Map my actual ID to the SessionIds.me key used by HandView
+        final oldKey = _avatarKeys[p.id];
         _avatarKeys[p.id] = _avatarKeys[SessionIds.me]!;
         processedIds.add(p.id);
+
+        if (oldKey != _avatarKeys[p.id]) {
+          AppLogger.info('Mapped "me" ID ${p.id} to shared me key');
+        }
 
         // Also map sessionId to the same key
         if (p.sessionId != null) {
@@ -41,15 +46,20 @@ class CardAnimationManager {
           processedIds.add(p.sessionId!);
         }
       } else {
-        // If we don't have a key for this participant ID, create one
-        if (!_avatarKeys.containsKey(p.id)) {
+        // If we don't have a key for this participant ID,
+        // OR if it's currently pointing to the "me" key (stale mapping),
+        // create a new unique key.
+        final currentKey = _avatarKeys[p.id];
+        if (currentKey == null || currentKey == _avatarKeys[SessionIds.me]) {
           _avatarKeys[p.id] = GlobalKey(debugLabel: 'avatar_${p.id}');
+          AppLogger.info(
+            'Assigned NEW unique key to opponent ${p.id} (was ${currentKey == null ? "null" : "stale me key"})',
+          );
         }
         processedIds.add(p.id);
 
         // Map sessionId to the same key so we can find them by either ID
         if (p.sessionId != null) {
-          // If sessionId is already processed (e.g. same as p.id), don't overwrite with a new key
           _avatarKeys[p.sessionId!] = _avatarKeys[p.id]!;
           processedIds.add(p.sessionId!);
         }

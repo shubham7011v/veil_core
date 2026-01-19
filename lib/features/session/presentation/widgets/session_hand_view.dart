@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
+import '../../../../core/utils/app_logger.dart';
 import '../bloc/session_bloc.dart';
 import '../bloc/session_event.dart';
 import '../bloc/session_state.dart';
@@ -18,6 +19,13 @@ class SessionHandView extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    AppLogger.info(
+      'SessionHandView: Building hand',
+      data: {
+        'fullHandCount': state.engineState.myHand.length,
+        'selectedCount': state.selectedUnitIds.length,
+      },
+    );
     final displayHand = state.engineState.myHand
         .where((u) => !state.selectedUnitIds.contains(u.id))
         .toList();

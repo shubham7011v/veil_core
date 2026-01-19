@@ -99,6 +99,7 @@ class VoiceAudioManager {
 
   Future<void> _connect() async {
     if (_peerConnection == null) return;
+    AppLogger.voiceEvent('Voice: Creating offer');
 
     // Create Offer
     RTCSessionDescription offer = await _peerConnection!.createOffer({});
@@ -106,6 +107,7 @@ class VoiceAudioManager {
 
     // Send Offer
     if (_signaling != null) {
+      AppLogger.voiceEvent('Voice: Sending offer to signaling');
       _signaling!.sendVoiceSDP({'sdp': offer.sdp, 'type': offer.type});
     }
   }
@@ -122,6 +124,7 @@ class VoiceAudioManager {
   }
 
   Future<void> handleAnswer(Map<String, dynamic> data) async {
+    AppLogger.voiceEvent('Voice: Handling answer');
     final sdp = RTCSessionDescription(data['sdp'], data['type']);
     await _peerConnection!.setRemoteDescription(sdp);
   }
@@ -143,10 +146,15 @@ class VoiceAudioManager {
     if (_localStream != null) {
       _isMicEnabled = !_isMicEnabled;
       _localStream!.getAudioTracks()[0].enabled = _isMicEnabled;
+      AppLogger.voiceEvent(
+        'Voice: Mic toggled',
+        data: {'enabled': _isMicEnabled},
+      );
     }
   }
 
   Future<void> dispose() async {
+    AppLogger.voiceEvent('Voice: Disposing VoiceAudioManager');
     _isMicEnabled = false; // Disable mic logic
 
     // Stop tracks first

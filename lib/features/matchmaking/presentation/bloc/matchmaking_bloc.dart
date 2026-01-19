@@ -245,6 +245,7 @@ class MatchmakingBloc extends Bloc<MatchmakingEvent, MatchmakingState> {
       add(UpdateTimer(remaining));
 
       if (remaining <= 0) {
+        AppLogger.info('⏳ [MatchmakingBloc] Lobby timer reached zero');
         timer.cancel();
       }
     });
@@ -254,6 +255,9 @@ class MatchmakingBloc extends Bloc<MatchmakingEvent, MatchmakingState> {
     UpdateParticipants event,
     Emitter<MatchmakingState> emit,
   ) {
+    AppLogger.info(
+      '👥 [MatchmakingBloc] Participants updated: ${event.participants.length}',
+    );
     emit(state.copyWith(participants: event.participants));
   }
 

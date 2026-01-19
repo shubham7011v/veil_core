@@ -43,6 +43,10 @@ void main() {
     when(
       () => mockHandler.currentState,
     ).thenReturn(engine.SessionState.initial());
+    when(
+      () => mockHandler.lastEventType,
+    ).thenReturn(engine.SessionEventType.none);
+    when(() => mockHandler.lastEventTimestamp).thenReturn(0);
     when(() => mockHandler.dispose()).thenAnswer((_) async {});
   });
 

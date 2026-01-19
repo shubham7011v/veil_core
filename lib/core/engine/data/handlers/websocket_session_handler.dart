@@ -438,11 +438,16 @@ class WebSocketSessionHandler extends GameSessionHandler
   // --- Game Related Actions (Delegated if needed, but simple ones here) ---
   @override
   Future<void> startGame({int playerCount = 5, int thinkingTimeS = 10}) async {
+    AppLogger.info('Game: Requesting START_GAME');
     sendMessage({'type': 'START_GAME'});
   }
 
   @override
   void playCards(List<String> unitIds, UnitRank declaredRank) {
+    AppLogger.info(
+      'Game: Playing cards',
+      data: {'count': unitIds.length, 'declaredRank': declaredRank.name},
+    );
     sendMessage({
       'type': 'PLAY_CARDS',
       'data': {'cardIds': unitIds, 'declaredRank': declaredRank.name},
@@ -450,10 +455,16 @@ class WebSocketSessionHandler extends GameSessionHandler
   }
 
   @override
-  void passTurn() => sendMessage({'type': 'PASS'});
+  void passTurn() {
+    AppLogger.info('Game: Passing turn');
+    sendMessage({'type': 'PASS'});
+  }
 
   @override
-  void raiseChallenge() => sendMessage({'type': 'CHALLENGE'});
+  void raiseChallenge() {
+    AppLogger.info('Game: Raising challenge');
+    sendMessage({'type': 'CHALLENGE'});
+  }
 
   @override
   void sortHand() {

@@ -43,6 +43,9 @@ Future<void> mainCommon({required String env, required String appName}) async {
       // Bindings are initialized inside GlobalErrorHandler.run
       FlutterNativeSplash.preserve(widgetsBinding: WidgetsBinding.instance);
 
+      // Initialize File Logging for development
+      await AppLogger.initFileLogging();
+
       // Initialize Core Configuration Singleton
       _bootStep = '1. Initializing AppConfig';
       try {

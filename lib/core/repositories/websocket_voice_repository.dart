@@ -1,5 +1,6 @@
 import '../repositories/voice_repository.dart';
 import '../engine/engine.dart';
+import '../utils/app_logger.dart';
 
 /// WebSocket implementation of VoiceRepository
 class WebSocketVoiceRepository implements VoiceRepository {
@@ -19,16 +20,19 @@ class WebSocketVoiceRepository implements VoiceRepository {
 
   @override
   Future<void> raiseHand() async {
+    AppLogger.voiceEvent('Voice: Raising hand');
     await _handler.raiseHand();
   }
 
   @override
   Future<void> sendSDP(Map<String, dynamic> sdpData) async {
+    AppLogger.voiceEvent('Voice: Sending SDP', data: {'type': sdpData['type']});
     _handler.sendVoiceSDP(sdpData);
   }
 
   @override
   Future<void> sendICE(Map<String, dynamic> iceData) async {
+    AppLogger.voiceEvent('Voice: Sending ICE candidate');
     _handler.sendVoiceICE(iceData);
   }
 

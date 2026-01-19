@@ -211,6 +211,7 @@ class GameEventHandler {
         di.sl.storageService.getBool('pref_shuffle_animation') ?? true;
 
     if (!shouldAnimate) {
+      AppLogger.info('Shuffling: Animation disabled by user preference');
       visualSync.setShuffling(false);
       return;
     }
@@ -218,6 +219,7 @@ class GameEventHandler {
     // Sequential distribution: Deal one card to each player in round-robin fashion
     final participants = state.engineState.participants;
     if (participants.isEmpty) {
+      AppLogger.warning('Shuffling: No participants found to deal cards to');
       visualSync.setShuffling(false);
       return;
     }
@@ -225,6 +227,9 @@ class GameEventHandler {
     final totalCards = 52;
     // Calculate cards per player
     final cardsPerPlayer = totalCards ~/ participants.length;
+    AppLogger.info(
+      'Shuffling: Starting deal animation for ${participants.length} players, ${cardsPerPlayer} cards each',
+    );
 
     final dealIntervalMs =
         80; // Increased slightly for better visual separation since multiple cards fly
