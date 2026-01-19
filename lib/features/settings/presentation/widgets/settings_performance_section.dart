@@ -58,15 +58,17 @@ class SettingsPerformanceSection extends StatelessWidget {
             ],
           ),
         ),
-        SettingsDivider(palette: palette),
-        SettingsSwitchTile(
-          icon: Icons.data_usage_rounded,
-          title: 'Data Saver Mode',
-          subtitle: 'Lower bandwidth usage',
-          value: dataSaver,
-          palette: palette,
-          onChanged: onDataSaverChanged,
-        ),
+        if (false) ...[
+          SettingsDivider(palette: palette),
+          SettingsSwitchTile(
+            icon: Icons.data_usage_rounded,
+            title: 'Data Saver Mode',
+            subtitle: 'Lower bandwidth usage',
+            value: dataSaver,
+            palette: palette,
+            onChanged: onDataSaverChanged,
+          ),
+        ],
       ],
     );
   }

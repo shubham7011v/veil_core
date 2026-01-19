@@ -309,7 +309,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 ),
 
                 const SizedBox(height: AppDimens.paddingXL),
-                _buildServerInfo(palette),
+                const SizedBox(height: AppDimens.paddingXL),
+
+                // Server Info hidden for V1 Offline
+                if (false) _buildServerInfo(palette),
 
                 const SizedBox(height: AppDimens.paddingXL),
                 const SizedBox(height: AppDimens.paddingXL),

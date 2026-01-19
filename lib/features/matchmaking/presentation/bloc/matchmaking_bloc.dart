@@ -391,7 +391,7 @@ class MatchmakingBloc extends Bloc<MatchmakingEvent, MatchmakingState> {
     final nextState = state.copyWith(isMatchFound: true);
     _emitEffect(
       emit,
-      const MatchmakingNavigateToSession(),
+      MatchmakingNavigateToSession(isOnline: !FeatureFlags.enableBotPlayers),
       baseState: nextState,
     );
   }

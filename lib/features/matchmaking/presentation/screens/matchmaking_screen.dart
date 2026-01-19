@@ -84,10 +84,11 @@ class _MatchmakingViewState extends State<_MatchmakingView>
         Duration(seconds: AppConfig.instance.matchmakingDelaySeconds),
         () {
           if (context.mounted) {
+            final isOnline = effect.isOnline;
             Navigator.pushReplacementNamed(
               context,
               '/session',
-              arguments: {'useWebSocket': true},
+              arguments: {'useWebSocket': isOnline},
             );
           }
         },
