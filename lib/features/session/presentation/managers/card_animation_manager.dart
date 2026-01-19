@@ -114,33 +114,35 @@ class CardAnimationManager {
               ? getCenterOffset(sourceKey, context)
               : Offset.zero);
 
-      // Fallback for start position
-      if (start == Offset.zero) {
-        if (sourceId == SessionIds.pile) {
-          start = Offset(screenSize.width / 2, screenSize.height / 2);
-        } else if (sourceId == SessionIds.staging) {
-          start = Offset(screenSize.width / 2, screenSize.height - 100);
-        } else {
-          // Default for Opponents/Unknown: Top Center (Opponent Carousel area)
-          start = Offset(screenSize.width / 2, 80);
-        }
-      }
-
       Offset end =
           customEndOffset ??
           (targetKey != null
               ? getCenterOffset(targetKey, context)
               : Offset.zero);
 
-      // Fallback for end position
-      if (end == Offset.zero) {
-        if (targetId == SessionIds.pile) {
-          end = Offset(screenSize.width / 2, screenSize.height / 2);
-        } else if (targetId == SessionIds.staging) {
-          end = Offset(screenSize.width / 2, screenSize.height - 100);
-        } else {
-          // Default for Opponents/Unknown: Top Center
-          end = Offset(screenSize.width / 2, 80);
+      // Final fallback logic: only apply if we've exhausted retries or don't have a key to find
+      if (retryCount >= 20 ||
+          (sourceKey == null && customStartOffset == null)) {
+        if (start == Offset.zero) {
+          if (sourceId == SessionIds.pile) {
+            start = Offset(screenSize.width / 2, screenSize.height / 2);
+          } else if (sourceId == SessionIds.staging) {
+            start = Offset(screenSize.width / 2, screenSize.height - 100);
+          } else {
+            start = Offset(screenSize.width / 2, 80);
+          }
+        }
+      }
+
+      if (retryCount >= 20 || (targetKey == null && customEndOffset == null)) {
+        if (end == Offset.zero) {
+          if (targetId == SessionIds.pile) {
+            end = Offset(screenSize.width / 2, screenSize.height / 2);
+          } else if (targetId == SessionIds.staging) {
+            end = Offset(screenSize.width / 2, screenSize.height - 100);
+          } else {
+            end = Offset(screenSize.width / 2, 80);
+          }
         }
       }
 

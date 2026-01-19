@@ -133,11 +133,6 @@ class LocalBotSessionHandler extends BaseAuthoritativeHandler {
   @override
   void setTypingStatus(bool isTyping) {}
 
-  @override
-  void signalClientReady() {
-    super.signalClientReady();
-  }
-
   String _getBotName(int index) {
     const names = [
       'Shubham',

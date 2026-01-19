@@ -94,8 +94,7 @@ class _AnimatedPileViewState extends State<AnimatedPileView>
                 Positioned(top: 16, child: _buildRoundRoleBadge()),
 
               // Pile Key Reference Point for Animations
-              if (!widget.isShuffling)
-                SizedBox(key: widget.pileKey, width: 1, height: 1),
+              SizedBox(key: widget.pileKey, width: 1, height: 1),
             ],
           ),
         ),

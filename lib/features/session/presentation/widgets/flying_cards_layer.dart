@@ -87,10 +87,7 @@ class _FlyingCardItemState extends State<_FlyingCardItem>
       builder: (context, child) {
         final progress = _controller.value;
         // Natural arc: reaches peak height at middle of flight
-        final arcHeight =
-            sin(progress * pi) *
-            100 *
-            (widget.anim.id.hashCode % 10 < 5 ? 1 : -1);
+        final arcHeight = sin(progress * pi) * -100;
 
         return Stack(
           children: _offsets.map((idx) {

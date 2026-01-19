@@ -482,6 +482,11 @@ class WebSocketSessionHandler extends GameSessionHandler
     AppLogger.sessionEvent(
       '📤 [Client-Ready] Signaling server that UI is ready',
     );
+    // Locally trigger the shuffling animation immediately to hide latency
+    // The server will eventually send its own 'shuffling' event, which we can debounce.
+    if (!_eventController.isClosed) {
+      _eventController.add(SessionEventType.shuffling);
+    }
     sendMessage({'type': 'CLIENT_READY'});
   }
 

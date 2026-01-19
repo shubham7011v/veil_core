@@ -11,15 +11,24 @@ class VisualSyncManager {
   String? _visualActivePlayerId;
   int _lastHandledEventTimestamp = 0;
   Timer? _visualUpdateTimer;
+  bool _isShuffling = false;
 
   VisualSyncManager({required this.setState});
 
   String? get visualActivePlayerId => _visualActivePlayerId;
   int get lastHandledEventTimestamp => _lastHandledEventTimestamp;
+  bool get isShuffling => _isShuffling;
 
   /// Initialize with starting state
   void initialize(SessionBlocState state) {
     _visualActivePlayerId ??= state.engineState.activeParticipantId;
+  }
+
+  /// Start or stop shuffling mask
+  void setShuffling(bool value) {
+    setState(() {
+      _isShuffling = value;
+    });
   }
 
   /// Should the event be handled (prevents duplicates)
@@ -54,8 +63,15 @@ class VisualSyncManager {
 
   /// Create a masked state for UI rendering that uses the visual active ID
   SessionBlocState getVisualState(SessionBlocState state) {
+    var engineState = state.engineState;
+
+    // Mask hand during shuffling to prevent jumping
+    if (_isShuffling) {
+      engineState = engineState.copyWith(myHand: const []);
+    }
+
     return state.copyWith(
-      engineState: state.engineState.copyWith(
+      engineState: engineState.copyWith(
         activeParticipantId:
             _visualActivePlayerId ?? state.engineState.activeParticipantId,
       ),

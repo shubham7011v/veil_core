@@ -49,6 +49,7 @@ class _SessionScreenState extends State<SessionScreen>
     _eventHandler = GameEventHandler(
       cardAnimations: _cardAnimations,
       turnPopups: _turnPopups,
+      visualSync: _visualSync,
       setState: setState,
       activeEmojis: _activeEmojis,
     );

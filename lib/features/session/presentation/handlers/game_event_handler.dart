@@ -8,6 +8,7 @@ import '../utils/session_constants.dart';
 import '../managers/card_animation_manager.dart';
 import '../managers/turn_popup_manager.dart';
 import '../widgets/floating_emoji_layer.dart';
+import '../managers/visual_sync_manager.dart';
 import '../../../../core/di/service_locator.dart' as di;
 import 'package:flutter_bloc/flutter_bloc.dart';
 import '../bloc/session_bloc.dart';
@@ -18,15 +19,19 @@ import '../bloc/session_event.dart';
 class GameEventHandler {
   final CardAnimationManager cardAnimations;
   final TurnPopupManager turnPopups;
+  final VisualSyncManager visualSync;
   final void Function(VoidCallback fn) setState;
   final List<FloatingEmoji> activeEmojis;
 
   GameEventHandler({
     required this.cardAnimations,
     required this.turnPopups,
+    required this.visualSync,
     required this.setState,
     required this.activeEmojis,
   });
+
+  int _lastShufflingTriggeredAt = 0;
 
   /// Handle a game event by type
   void handleEvent(
@@ -188,40 +193,78 @@ class GameEventHandler {
 
   void _handleShuffling(BuildContext context, SessionBlocState state) {
     HapticFeedback.lightImpact();
+
+    // Debounce: Ignore duplicate shuffling events within 5 seconds
+    final now = DateTime.now().millisecondsSinceEpoch;
+    if (now - _lastShufflingTriggeredAt < 5000) {
+      AppLogger.sessionEvent('Ignoring duplicate shuffling event (debounced)');
+      return;
+    }
+    _lastShufflingTriggeredAt = now;
+
+    // Enable visual mask to hide hand during shuffling
+    visualSync.setShuffling(true);
+
     // Check user setting for shuffle animation
     final shouldAnimate =
         di.sl.storageService.getBool('pref_shuffle_animation') ?? true;
 
-    if (!shouldAnimate) return;
+    if (!shouldAnimate) {
+      visualSync.setShuffling(false);
+      return;
+    }
 
     // Sequential distribution: Deal one card to each player in round-robin fashion
     final participants = state.engineState.participants;
-    if (participants.isEmpty) return;
+    if (participants.isEmpty) {
+      visualSync.setShuffling(false);
+      return;
+    }
 
     final totalCards = 52;
     // Calculate cards per player
     final cardsPerPlayer = totalCards ~/ participants.length;
 
-    int dealIndex = 0;
-    final dealIntervalMs = 40; // Fast efficient dealing
+    final dealIntervalMs =
+        80; // Increased slightly for better visual separation since multiple cards fly
+    final totalSteps = cardsPerPlayer * participants.length;
+    int completedSteps = 0;
 
     for (int i = 0; i < cardsPerPlayer; i++) {
-      for (var participant in participants) {
-        final currentDelay = dealIndex * dealIntervalMs;
+      final currentDelay = i * dealIntervalMs;
+
+      for (int pIdx = 0; pIdx < participants.length; pIdx++) {
+        final participant = participants[pIdx];
 
         Future.delayed(Duration(milliseconds: currentDelay), () {
           if (!context.mounted) return;
+
+          // Add a small radial offset at the source so cards in a wave don't perfectly overlap
+          final angle = (pIdx / participants.length) * 2 * math.pi;
+          final sourceOffset = Offset(
+            math.cos(angle) * 15,
+            math.sin(angle) * 10,
+          );
 
           cardAnimations.triggerCardAnimation(
             context: context,
             sourceId: SessionIds.pile,
             targetId: participant.id,
             count: 1, // Single card visual
+            customStartOffset: cardAnimations
+                .getCenterOffset(cardAnimations.pileKey, context)
+                .translate(sourceOffset.dx, sourceOffset.dy),
             onComplete: () {
               if (context.mounted) {
                 context.read<SessionBloc>().add(
                   VisualCardIncrement(participant.id),
                 );
+
+                completedSteps++;
+                if (completedSteps >= totalSteps) {
+                  // Final reveal
+                  visualSync.setShuffling(false);
+                }
               }
             },
           );
@@ -231,8 +274,6 @@ class GameEventHandler {
             HapticFeedback.selectionClick();
           }
         });
-
-        dealIndex++;
       }
     }
   }

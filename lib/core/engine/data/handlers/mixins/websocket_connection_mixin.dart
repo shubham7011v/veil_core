@@ -148,10 +148,11 @@ mixin WebSocketConnectionMixin on WebSocketHandlerBase, WidgetsBindingObserver {
     authTimeoutTimer = Timer(_authTimeout, () {
       if (connectionStatus != ConnectionStatus.connected) {
         AppLogger.networkError('❌ AUTH_OK timeout - no response from server');
-        // Check if channel is still open before closing
-        if (channel != null) {
+        // Cleanup channel state
+        try {
           channel?.sink.close(1008, 'Auth timeout');
-        }
+        } catch (_) {}
+        channel = null;
         handleConnectionFailure(firebaseToken, displayName: displayName);
       }
     });
@@ -492,17 +493,16 @@ mixin WebSocketConnectionMixin on WebSocketHandlerBase, WidgetsBindingObserver {
       AppLogger.networkEvent(
         '🔄 Network switch detected while connected. Restarting connection...',
       );
+
+      // Comprehensive cleanup before reconnecting
+      _cleanupConnectionState();
+
       // Mark as reconnecting immediately to block potential sends
       updateConnectionStatus(ConnectionStatus.reconnecting);
 
-      // Close existing channel silently (don't want to trigger failure logic yet)
-      try {
-        heartbeatTimer?.cancel();
-        await channel?.sink.close();
-      } catch (_) {}
+      // Reset retry counter for fresh start on network switch
+      reconnectAttempts = 0;
 
-      // Force break lock if any (though usually false if connected)
-      isConnecting = false;
       return attemptAutoReconnect(force: true);
     }
 
@@ -515,8 +515,13 @@ mixin WebSocketConnectionMixin on WebSocketHandlerBase, WidgetsBindingObserver {
       AppLogger.networkEvent(
         '🚀 Network restored/switched. Triggering connection immediately.',
       );
-      reconnectTimer?.cancel();
-      isConnecting = false; // Force break lock to allow new attempt
+
+      // Comprehensive cleanup before reconnecting
+      _cleanupConnectionState();
+
+      // Reset retry counter for fresh start
+      reconnectAttempts = 0;
+
       return attemptAutoReconnect(force: true);
     }
   }
@@ -605,8 +610,7 @@ mixin WebSocketConnectionMixin on WebSocketHandlerBase, WidgetsBindingObserver {
 
       if (token != null && lastUrl != null) {
         AppLogger.info('🔄 Auto-reconnecting with fresh token...');
-        // Reset attempts to 0 for a fresh start on resume
-        reconnectAttempts = 0;
+        // Don't reset attempts here - let the caller decide (network switch already resets)
         // ✅ FIX: Don't await the full connection here, just ensure it's started.
         // This allows the _isAutoReconnecting lock to be released sooner and
         // allows subsequent triggers (like network switches) to be processed.
@@ -623,6 +627,45 @@ mixin WebSocketConnectionMixin on WebSocketHandlerBase, WidgetsBindingObserver {
     } finally {
       _isAutoReconnecting = false;
     }
+  }
+
+  /// Comprehensive cleanup of connection state
+  /// Called before starting a fresh connection attempt (e.g., network switch)
+  void _cleanupConnectionState() {
+    AppLogger.networkEvent('🧹 Cleaning up connection state...');
+
+    // Cancel all timers
+    heartbeatTimer?.cancel();
+    heartbeatTimer = null;
+
+    authTimeoutTimer?.cancel();
+    authTimeoutTimer = null;
+
+    watchdogTimer?.cancel();
+    watchdogTimer = null;
+
+    reconnectTimer?.cancel();
+    reconnectTimer = null;
+
+    // Close channel safely
+    try {
+      channel?.sink.close();
+    } catch (_) {}
+    channel = null;
+
+    // Cancel active subscription
+    subscription?.cancel();
+    subscription = null;
+
+    // Increment connection ID to invalidate old attempts
+    connectionId++;
+
+    // Break connection lock
+    isConnecting = false;
+
+    AppLogger.networkEvent(
+      '✅ Connection state cleaned (ID now: $connectionId)',
+    );
   }
 
   /// Helper to fetch a fresh token with exponential backoff/cooldown

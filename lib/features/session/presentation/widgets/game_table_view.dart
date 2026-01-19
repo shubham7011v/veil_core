@@ -17,8 +17,7 @@ class GameTableView extends StatelessWidget {
         final double finalHeight = constraints.maxHeight;
 
         final isShuffling =
-            state.engineState.currentPhase == engine.SessionPhase.thinking &&
-            (state.engineState.lastActionText?.contains("Shuffling") ?? false);
+            state.lastEvent == engine.SessionEventType.shuffling;
 
         return Padding(
           padding: const EdgeInsets.symmetric(horizontal: 16.0),
