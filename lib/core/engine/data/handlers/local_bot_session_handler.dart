@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:math';
+import '../../../constants/bot_names.dart';
 import '../../../../core/error/failure.dart';
 import '../../domain/models/session_enums.dart';
 import '../../domain/logic/bot_brain.dart';
@@ -134,30 +135,8 @@ class LocalBotSessionHandler extends BaseAuthoritativeHandler {
   void setTypingStatus(bool isTyping) {}
 
   String _getBotName(int index) {
-    const names = [
-      'Shubham',
-      'Julie',
-      'Shivam',
-      'Sandhya',
-      'Sabhya',
-      'Sanchit',
-      'Satyam',
-      'Sarvottam',
-      'Dipesh',
-      'Divyam',
-      'Rashmi',
-      'Gaurav',
-      'Saurav',
-      'Nitish',
-      'Nishu',
-      'Aarush',
-      'Arman',
-      'Riya',
-      'Angel',
-      'Mushkan',
-    ];
-    // Use a fixed seed based on index + timestamp or just Random() for variety
+    // Use the comprehensive list of Indian names
     final random = Random();
-    return names[random.nextInt(names.length)];
+    return kBotNames[random.nextInt(kBotNames.length)];
   }
 }

@@ -43,6 +43,12 @@ Future<void> mainCommon({required String env, required String appName}) async {
       // Bindings are initialized inside GlobalErrorHandler.run
       FlutterNativeSplash.preserve(widgetsBinding: WidgetsBinding.instance);
 
+      // Lock Orientation to Portrait
+      await SystemChrome.setPreferredOrientations([
+        DeviceOrientation.portraitUp,
+        DeviceOrientation.portraitDown,
+      ]);
+
       // Initialize File Logging for development
       await AppLogger.initFileLogging();
 

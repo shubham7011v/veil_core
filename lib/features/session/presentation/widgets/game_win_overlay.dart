@@ -100,62 +100,64 @@ class GameWinOverlay extends StatelessWidget {
                   const SizedBox(height: 40),
 
                   // Coins Badge
-                  Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 24,
-                      vertical: 12,
-                    ),
-                    decoration: BoxDecoration(
-                      color: Colors.black87,
-                      borderRadius: BorderRadius.circular(50),
-                      border: Border.all(
-                        color: coinsEarned >= 0
-                            ? goldColor.withValues(alpha: 0.5)
-                            : lossColor.withValues(alpha: 0.5),
-                        width: 2,
+                  // HIDDEN: Coins Badge for V1 Offline Release
+                  if (false)
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 24,
+                        vertical: 12,
                       ),
-                      boxShadow: [
-                        BoxShadow(
+                      decoration: BoxDecoration(
+                        color: Colors.black87,
+                        borderRadius: BorderRadius.circular(50),
+                        border: Border.all(
                           color: coinsEarned >= 0
-                              ? goldColor.withValues(alpha: 0.2)
-                              : Colors.transparent,
-                          blurRadius: 15,
-                          spreadRadius: 1,
+                              ? goldColor.withValues(alpha: 0.5)
+                              : lossColor.withValues(alpha: 0.5),
+                          width: 2,
                         ),
-                      ],
-                    ),
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Icon(
-                          coinsEarned >= 0
-                              ? Icons.add_circle
-                              : Icons.remove_circle,
-                          color: coinsEarned >= 0 ? goldColor : lossColor,
-                          size: 28,
-                        ),
-                        const SizedBox(width: 12),
-                        Text(
-                          "${coinsEarned >= 0 ? '+' : ''}$coinsEarned",
-                          style: TextStyle(
+                        boxShadow: [
+                          BoxShadow(
+                            color: coinsEarned >= 0
+                                ? goldColor.withValues(alpha: 0.2)
+                                : Colors.transparent,
+                            blurRadius: 15,
+                            spreadRadius: 1,
+                          ),
+                        ],
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(
+                            coinsEarned >= 0
+                                ? Icons.add_circle
+                                : Icons.remove_circle,
                             color: coinsEarned >= 0 ? goldColor : lossColor,
-                            fontSize: 32,
-                            fontWeight: FontWeight.w900,
+                            size: 28,
                           ),
-                        ),
-                        const SizedBox(width: 8),
-                        Text(
-                          "COINS",
-                          style: TextStyle(
-                            color: Colors.white.withValues(alpha: 0.6),
-                            fontSize: 14,
-                            fontWeight: FontWeight.w900,
-                            letterSpacing: 1,
+                          const SizedBox(width: 12),
+                          Text(
+                            "${coinsEarned >= 0 ? '+' : ''}$coinsEarned",
+                            style: TextStyle(
+                              color: coinsEarned >= 0 ? goldColor : lossColor,
+                              fontSize: 32,
+                              fontWeight: FontWeight.w900,
+                            ),
                           ),
-                        ),
-                      ],
+                          const SizedBox(width: 8),
+                          Text(
+                            "COINS",
+                            style: TextStyle(
+                              color: Colors.white.withValues(alpha: 0.6),
+                              fontSize: 14,
+                              fontWeight: FontWeight.w900,
+                              letterSpacing: 1,
+                            ),
+                          ),
+                        ],
+                      ),
                     ),
-                  ),
 
                   const SizedBox(height: 40),
 

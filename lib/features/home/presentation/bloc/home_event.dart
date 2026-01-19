@@ -22,6 +22,10 @@ class HomeNewGameConfirmed extends HomeEvent {}
 
 class HomeCreateRoomClicked extends HomeEvent {}
 
+class HomeCreateHotspotClicked extends HomeEvent {}
+
+class HomeJoinHotspotClicked extends HomeEvent {}
+
 class HomeJoinRoomClicked extends HomeEvent {}
 
 class HomeBotMatchClicked extends HomeEvent {}
