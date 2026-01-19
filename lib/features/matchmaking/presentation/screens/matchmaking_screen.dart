@@ -80,16 +80,6 @@ class _MatchmakingViewState extends State<_MatchmakingView>
 
       AppLogger.info('🎉 [MatchmakingScreen] Match found! Navigating...');
 
-      // OFF-RAMP: Initialize Local Session for Offline Mode
-      if (!effect.isOnline) {
-        AppLogger.sessionEvent('Initializing Local Bot Session...');
-        // Use factory method in ServiceLocator
-        final handler = sl.createSessionHandler(online: false);
-        handler.startGame(); // CRITICAL: Must start game to populate hands
-
-        context.read<SessionBloc>().add(SessionHandlerSwapped(handler));
-      }
-
       Future.delayed(
         Duration(seconds: AppConfig.instance.matchmakingDelaySeconds),
         () {
