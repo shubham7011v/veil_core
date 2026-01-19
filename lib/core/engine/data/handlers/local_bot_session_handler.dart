@@ -13,10 +13,7 @@ class LocalBotSessionHandler extends BaseAuthoritativeHandler {
   final _chatController = StreamController<Map<String, dynamic>>.broadcast();
   String _currentSessionId = '';
 
-  @override
-  SessionEventType get lastEventType => SessionEventType.none;
-  @override
-  int get lastEventTimestamp => 0;
+  // Removed dummy overrides to use BaseAuthoritativeHandler's implementation
 
   LocalBotSessionHandler({BotBrain? brain})
     : _brain = brain ?? DefaultBotBrain();

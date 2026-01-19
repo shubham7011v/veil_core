@@ -20,6 +20,15 @@ abstract class BaseAuthoritativeHandler implements GameSessionHandler {
   Timer? _turnTimer;
   int _currentTimerSeconds = 0;
 
+  // Event Tracking
+  SessionEventType _lastEventType = SessionEventType.none;
+  int _lastEventTimestamp = 0;
+
+  @override
+  SessionEventType get lastEventType => _lastEventType;
+  @override
+  int get lastEventTimestamp => _lastEventTimestamp;
+
   /// Ensures stream controllers are open, recreating them if they were closed.
   void _ensureControllersOpen() {
     if (_disposed || _stateController.isClosed) {
@@ -182,13 +191,15 @@ abstract class BaseAuthoritativeHandler implements GameSessionHandler {
     }
 
     // Phase 1: Shuffling (Initial State)
+    // Note: We emit participants with their ACTUAL card counts so SessionBloc
+    // can properly sync before signalClientReady() triggers animations.
     _currentState = SessionState(
       roomId: '101',
-      participants: participants.map((p) => p.copyWith(unitCount: 0)).toList(),
+      participants: participants,
       myHand: [],
-      currentPhase: SessionPhase.thinking,
-      activeParticipantId: 'me',
-      pileCount: deck.length, // START WITH FULL DECK
+      currentPhase: SessionPhase.lobby,
+      activeParticipantId: null,
+      pileCount: 0,
       lastActionText: 'Waiting for client...',
     );
     emitState();
@@ -198,15 +209,25 @@ abstract class BaseAuthoritativeHandler implements GameSessionHandler {
   void signalClientReady() {
     _addToLog("Client ready. Starting game sequence.");
 
-    // Phase 1.5: Shuffling (Triggered by UI signal)
+    // Phase 2: Trigger Shuffling Animation
+    // (Participants already have their card counts from startGame)
     emitEvent(SessionEventType.shuffling);
 
-    // Phase 2: Update state after shuffle animation completes
+    // Phase 3: Reveal hand and start game after animation completes
     // Matched to the UI animation duration (~2.5s for sequential deal)
     Future.delayed(const Duration(milliseconds: 2500), () {
+      if (_disposed) return;
+
+      final myHand = _hands['me'];
+      if (myHand == null) {
+        // This shouldn't happen if startGame was called, but safety first
+        return;
+      }
+
       _currentState = _currentState.copyWith(
-        myHand: _hands['me']!,
-        pileCount: 0, // PILE GOES TO 0 AFTER DEALING
+        myHand: myHand,
+        currentPhase: SessionPhase.thinking,
+        activeParticipantId: 'me',
         lastActionText: 'Game Started! Select a rank to begin.',
       );
       emitState();
@@ -341,6 +362,8 @@ abstract class BaseAuthoritativeHandler implements GameSessionHandler {
   }
 
   void emitEvent(SessionEventType event) {
+    _lastEventType = event;
+    _lastEventTimestamp = DateTime.now().millisecondsSinceEpoch;
     if (!_eventController.isClosed) {
       _eventController.add(event);
     }
