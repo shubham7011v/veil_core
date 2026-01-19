@@ -10,6 +10,7 @@ import '../managers/turn_popup_manager.dart';
 import '../widgets/floating_emoji_layer.dart';
 import '../managers/visual_sync_manager.dart';
 import '../../../../core/di/service_locator.dart' as di;
+import '../../../../core/constants/sound_assets.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import '../bloc/session_bloc.dart';
 import '../bloc/session_event.dart';
@@ -232,6 +233,12 @@ class GameEventHandler {
 
     for (int i = 0; i < cardsPerPlayer; i++) {
       final currentDelay = i * dealIntervalMs;
+
+      // Play sound per wave (not per card, to avoid clipping/loudness)
+      Future.delayed(Duration(milliseconds: currentDelay), () {
+        if (!context.mounted) return;
+        di.sl.audioService.playSfx(SoundAssets.dealCard);
+      });
 
       for (int pIdx = 0; pIdx < participants.length; pIdx++) {
         final participant = participants[pIdx];
