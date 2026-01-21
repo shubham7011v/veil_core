@@ -73,8 +73,8 @@ type BroadcastEvent struct {
 
 // Logic Methods extracted from Room
 
-func (s *Session) AddPlayer(id, name, avatar string, isBot bool) error {
-	return s.Game.AddPlayer(id, name, avatar, isBot)
+func (s *Session) AddPlayer(id, name, avatar string) error {
+	return s.Game.AddPlayer(id, name, avatar)
 }
 
 func (s *Session) RemovePlayer(id string) {

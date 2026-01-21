@@ -79,30 +79,15 @@ func (mm *Matchmaker) CheckLobbyTimeout() {
 	}
 
 	if time.Since(mm.manager.ActiveLobbyStartTime) > currentTimeout {
-		// Timeout Reached! Fill with Bots.
-		if !config.GetFeatureFlags().EnableBotPlayers {
-			return // Leave open if bots disabled
-		}
+		// Timeout Reached!
+		// Logic Change: Do NOT spawn bots. Just reset the lobby or let it wait.
+		log.Printf("Lobby Timeout for Room %s: No bots spawned (Bot logic disabled). Resetting active lobby pointer.", lobby.ID)
 
-		botsNeeded := TargetPlayers - mm.manager.ActiveLobbyCount
-		if botsNeeded <= 0 {
-			mm.manager.ActiveLobby = nil
-			mm.manager.ActiveLobbyCount = 0
-			return
-		}
-
-		log.Printf("Lobby Timeout: Spawning %d bots for Room %s", botsNeeded, lobby.ID)
-
-		// Spawn Bots
-		for i := 0; i < botsNeeded; i++ {
-			bot := NewBot(mm.manager)
-			bot.Client.CurrentRoom = lobby
-			lobby.Join(bot.Client)
-		}
-
-		// Seal the lobby
+		// Seal the lobby so new players start a fresh one, but don't add bots.
+		// Existing players will just have to wait or invite friends.
 		mm.manager.ActiveLobby = nil
 		mm.manager.ActiveLobbyCount = 0
+	} else {		mm.manager.ActiveLobbyCount = 0
 	} else {
 		// Log how much time is left
 		timeLeft := currentTimeout - time.Since(mm.manager.ActiveLobbyStartTime)

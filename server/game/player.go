@@ -12,7 +12,6 @@ type Player struct {
 	// Game state flags
 	HasPassed      bool `json:"hasPassed"`      // Reset every round
 	IsDisconnected bool `json:"isDisconnected"` // For grace period
-	IsBot          bool `json:"isBot"`          // ✅ FIX: Bot check
 
 	Stats MatchStats `json:"matchStats"`
 }
@@ -26,14 +25,13 @@ type MatchStats struct {
 	TotalCardsPlayed     int `json:"totalCardsPlayed"`
 }
 
-func NewPlayer(id, name, avatar string, isBot bool) *Player {
+func NewPlayer(id, name, avatar string) *Player {
 	return &Player{
 		ID:          id,
 		Name:        name,
 		AvatarURL:   avatar,
 		Hand:        []Card{},
 		IsConnected: true,
-		IsBot:       isBot,
 	}
 }
 

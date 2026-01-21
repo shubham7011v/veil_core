@@ -357,8 +357,8 @@ func (r *Room) Run() {
 				log.Printf("Client %s rejoined room %s within grace period.", client.ID, r.ID)
 			}
 
-			// Only deduct coins if not rejoining, not spectator, not bot
-			if !isRejoining && !client.IsSpectator && !client.IsBot {
+			// Only deduct coins if not rejoining, not spectator
+			if !isRejoining && !client.IsSpectator {
 				// ✅ Use buffered coin update - deferred async deduction
 				// This avoids the dangerous unlock/relock pattern
 				r.manager.economyUC.BufferCoinUpdate(client.ID, -boot)
@@ -371,10 +371,10 @@ func (r *Room) Run() {
 			if !client.IsSpectator {
 				// Use client's stored name and avatar (synced during AUTH)
 				playerName := game.DefaultPlayerName(client.ID, client.Name)
-				if err := s.Game.AddPlayer(client.ID, playerName, client.AvatarURL, client.IsBot); err != nil {
+				if err := s.Game.AddPlayer(client.ID, playerName, client.AvatarURL); err != nil {
 					log.Printf("Error adding player %s to game in room %s: %v", client.ID, r.ID, err)
 					// Refund if add fails
-					if !client.IsBot && !isRejoining {
+					if !isRejoining {
 						r.manager.economyUC.BufferCoinUpdate(client.ID, boot) // Async refund
 					}
 				} else {
@@ -391,11 +391,7 @@ func (r *Room) Run() {
 					s.Game.StartTime = time.Now().Unix() + int64(config.LobbyStartDelaySec)
 
 					// Pre-mark all Bots as ready immediately
-					for _, p := range s.Game.Players {
-						if p.IsBot {
-							s.ReadyClients[p.ID] = true
-						}
-					}
+					// (Bots removed - this loop is now empty or removed)
 
 					// ✅ FIX: Check readiness immediately (in case all players are bots or already ready)
 					r.checkAllPlayersReady()
@@ -515,27 +511,9 @@ func (r *Room) Run() {
 				}
 			}
 
-			// ✅ FIX: Process Bot Turns
-			// Check every tick (200ms) but strict throttled by TurnStartTime
-			if r.session.Game.Phase == game.PhaseThinking || r.session.Game.Phase == game.PhaseChallenging {
-				activeID := r.session.Game.ActivePlayerID()
-				if player := r.session.Game.PlayerMap[activeID]; player != nil && player.IsBot {
-					// Add delay so bot doesn't play instantly (human-like)
-					if time.Now().Unix() >= r.session.Game.TurnStartTime+config.BotThinkingDelaySec {
-						r.processBotMove(player)
-					}
-				}
-			}
-
 			// Grace Period Check
 			now := time.Now()
-			humanCount := 0
-			for client := range r.clients {
-				if !client.IsBot {
-					humanCount++
-				}
-			}
-			humanCount += len(r.session.DisconnectTimes)
+			humanCount := len(r.clients) + len(r.session.DisconnectTimes)
 
 			// ✅ FIX #5: If NO humans are left (connected or waiting), stop the room immediately
 			// This prevents ghost rooms with only bots running forever.
@@ -773,113 +751,6 @@ func (r *Room) ForceBroadcastState() {
 	r.broadcaster.BroadcastState()
 }
 
-func (r *Room) processBotMove(bot *game.Player) {
-	log.Printf("🤖 Bot %s (Hand: %d) is thinking...", bot.Name, len(bot.Hand))
-
-	s := r.session
-	// Access game safely (lock held in caller)
-	pile := s.Game.Pile // ✅ Corrected for updated Game struct
-
-	// Candidates
-	hand := bot.Hand
-
-	var cardsToPlay []string
-	var rankToDeclare game.Rank
-
-	if len(pile) == 0 {
-		// Play lowest single
-		if len(hand) > 0 {
-			// Find lowest card
-			lowest := hand[0]
-			for _, c := range hand {
-				if game.RankValue(c.Rank) < game.RankValue(lowest.Rank) { // ✅ Corrected with RankValue
-					lowest = c
-				}
-			}
-			cardsToPlay = []string{lowest.ID}
-			rankToDeclare = lowest.Rank
-		}
-	} else {
-		// Must match count and beat rank
-		countNeeded := len(pile)
-		var rankToBeat game.Rank
-
-		if s.Game.DeclaredRank != nil {
-			rankToBeat = *s.Game.DeclaredRank // ✅ Corrected pointer access
-		}
-
-		// Naive: Try to find N cards of same rank > rankToBeat
-		// Map cards by rank
-		rankMap := make(map[game.Rank][]game.Card)
-		for _, c := range hand {
-			rankMap[c.Rank] = append(rankMap[c.Rank], c)
-		}
-
-		// Iterate possible ranks higher than current
-		currentVal := game.RankValue(rankToBeat)
-
-		// All ranks logic
-		allRanks := []game.Rank{
-			game.RankTwo, game.RankThree, game.RankFour, game.RankFive,
-			game.RankSix, game.RankSeven, game.RankEight, game.RankNine,
-			game.RankTen, game.RankJack, game.RankQueen, game.RankKing, game.RankAce,
-		}
-
-		for _, rk := range allRanks {
-			if game.RankValue(rk) > currentVal {
-				if cards, ok := rankMap[rk]; ok {
-					if len(cards) >= countNeeded {
-						// Take first N
-						subset := cards[:countNeeded]
-						for _, c := range subset {
-							cardsToPlay = append(cardsToPlay, c.ID)
-						}
-						rankToDeclare = rk
-						break
-					}
-				}
-			}
-		}
-	}
-
-	if len(cardsToPlay) > 0 {
-		log.Printf("🤖 Bot %s playing %d cards (Rank: %s)", bot.Name, len(cardsToPlay), rankToDeclare)
-
-		// Use same broadcast logic as processAction
-		err := s.Game.PlayCards(bot.ID, cardsToPlay, rankToDeclare)
-		if err == nil {
-			r.broadcaster.BroadcastActionLocked("PLAY_CARDS", map[string]interface{}{
-				"playerId":           bot.ID,
-				"count":              len(cardsToPlay),
-				"declaredRank":       rankToDeclare,
-				"newPileCount":       s.Game.PileCount,
-				"nextPlayerId":       s.Game.ActivePlayerID(),
-				"playerNewCardCount": len(bot.Hand),
-				"turnStartTime":      s.Game.TurnStartTime,
-			})
-			r.broadcaster.BroadcastStateLocked()
-			return
-		} else {
-			log.Printf("🤖 Bot Play Failed: %v", err)
-		}
-	}
-
-	// Default: Pass
-	log.Printf("🤖 Bot %s passing", bot.Name)
-	err := s.Game.Pass(bot.ID)
-	if err == nil {
-		if s.Game.LastEvent == "pileDiscarded" {
-			r.broadcaster.BroadcastStateLocked()
-		} else {
-			r.broadcaster.BroadcastActionLocked("PASS", map[string]interface{}{
-				"playerId":      bot.ID,
-				"nextPlayerId":  s.Game.ActivePlayerID(),
-				"turnStartTime": s.Game.TurnStartTime,
-			})
-		}
-	}
-}
-
 // checkAllPlayersReady checks if all players have signaled ready and starts the game
 // This is called after a client sends CLIENT_READY message
 func (r *Room) checkAllPlayersReady() {
@@ -894,7 +765,7 @@ func (r *Room) checkAllPlayersReady() {
 	readyCount := 0
 
 	for _, player := range s.Game.Players {
-		if s.ReadyClients[player.ID] || player.IsBot {
+		if s.ReadyClients[player.ID] {
 			readyCount++
 		}
 	}
@@ -904,7 +775,7 @@ func (r *Room) checkAllPlayersReady() {
 	if readyCount < totalPlayers {
 		for _, player := range s.Game.Players {
 			if !s.ReadyClients[player.ID] {
-				log.Printf("   -> Waiting for: %s (Bot: %v)", player.ID, player.IsBot)
+				log.Printf("   -> Waiting for: %s", player.ID)
 			}
 		}
 	}

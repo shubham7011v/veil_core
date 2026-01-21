@@ -112,15 +112,13 @@ class HomeTopBar extends StatelessWidget {
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
               _buildInfoChip(context, 'Rank', rank, palette.primary, palette),
-              // HIDDEN: Coin Balance for V1 Offline Release
-              if (false)
-                _buildInfoChip(
-                  context,
-                  'Coins',
-                  coins.toString(),
-                  palette.primary,
-                  palette,
-                ),
+              _buildInfoChip(
+                context,
+                'Coins',
+                coins.toString(),
+                palette.primary,
+                palette,
+              ),
             ],
           ),
         ],

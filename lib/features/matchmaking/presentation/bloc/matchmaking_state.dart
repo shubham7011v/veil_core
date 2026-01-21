@@ -60,10 +60,7 @@ abstract class MatchmakingSideEffect extends Equatable {
 }
 
 class MatchmakingNavigateToSession extends MatchmakingSideEffect {
-  final bool isOnline;
-  const MatchmakingNavigateToSession({this.isOnline = true});
-  @override
-  List<Object?> get props => [isOnline];
+  const MatchmakingNavigateToSession();
 }
 
 class MatchmakingShowTimeoutDialog extends MatchmakingSideEffect {

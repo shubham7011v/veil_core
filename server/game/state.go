@@ -71,7 +71,7 @@ func NewGame() *Game {
 	}
 }
 
-func (g *Game) AddPlayer(id, name, avatar string, isBot bool) error {
+func (g *Game) AddPlayer(id, name, avatar string) error {
 	if g.Phase != PhaseLobby {
 		return errors.New("cannot join active game")
 	}
@@ -82,7 +82,7 @@ func (g *Game) AddPlayer(id, name, avatar string, isBot bool) error {
 		return errors.New("player already in game")
 	}
 
-	p := NewPlayer(id, name, avatar, isBot)
+	p := NewPlayer(id, name, avatar)
 	g.Players = append(g.Players, p)
 	g.PlayerMap[id] = p
 	g.SyncParticipants() // Public view initially

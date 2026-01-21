@@ -14,9 +14,6 @@ var (
 	// Maximum time allowed per turn (seconds)
 	TurnTimeoutSec = int64(30)
 
-	// Bot thinking delay to simulate human behavior (seconds)
-	BotThinkingDelaySec = int64(10)
-
 	// Interval for periodic full state sync (seconds)
 	PeriodicSyncIntervalSec = int64(30)
 
@@ -35,7 +32,6 @@ var (
 	DefaultGracePeriod     = time.Duration(DefaultGracePeriodSec) * time.Second
 	LobbyStartDelay        = time.Duration(LobbyStartDelaySec) * time.Second
 	TurnTimeout            = time.Duration(TurnTimeoutSec) * time.Second
-	BotThinkingDelay       = time.Duration(BotThinkingDelaySec) * time.Second
 	PeriodicSyncInterval   = time.Duration(PeriodicSyncIntervalSec) * time.Second
 	ChallengeRevealDelay   = time.Duration(ChallengeRevealDelaySec) * time.Second
 	LobbyTimeout           = time.Duration(LobbyTimeoutSec) * time.Second

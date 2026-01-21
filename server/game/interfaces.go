@@ -15,7 +15,7 @@ type GameEngine interface {
 	GetPlayerHand(playerID string) []Card
 
 	// Player Management
-	AddPlayer(id, name, avatar string, isBot bool) error
+	AddPlayer(id, name, avatar string) error
 	RemovePlayer(id string)
 	Start() error
 

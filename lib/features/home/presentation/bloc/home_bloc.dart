@@ -45,8 +45,6 @@ class HomeBloc extends Bloc<HomeEvent, HomeState> {
     on<HomeRejoinGameConfirmed>(_onRejoinGameConfirmed);
     on<HomeNewGameConfirmed>(_onNewGameConfirmed);
     on<HomeCreateRoomClicked>(_onCreateRoomClicked);
-    on<HomeCreateHotspotClicked>(_onCreateHotspotClicked);
-    on<HomeJoinHotspotClicked>(_onJoinHotspotClicked);
     on<HomeJoinRoomClicked>(_onJoinRoomClicked);
     on<HomeBotMatchClicked>(_onBotMatchClicked);
     on<HomeFriendsMatchClicked>(_onFriendsMatchClicked);
@@ -157,36 +155,6 @@ class HomeBloc extends Bloc<HomeEvent, HomeState> {
     }
   }
 
-  Future<void> _onCreateHotspotClicked(
-    HomeCreateHotspotClicked event,
-    Emitter<HomeState> emit,
-  ) async {
-    _emitEffect(
-      emit,
-      HomeShowComingSoonDialog(
-        featureName: 'Create Hotspot',
-        description:
-            'Host a local offline game via Wi-Fi Hotspot for nearby friends to join.',
-        icon: Icons.wifi_tethering,
-      ),
-    );
-  }
-
-  Future<void> _onJoinHotspotClicked(
-    HomeJoinHotspotClicked event,
-    Emitter<HomeState> emit,
-  ) async {
-    _emitEffect(
-      emit,
-      HomeShowComingSoonDialog(
-        featureName: 'Join Hotspot',
-        description: 'Join a nearby friend\'s offline Hotspot game.',
-        icon: Icons
-            .wifi_find_outlined, // Using a different icon for scanning/joining
-      ),
-    );
-  }
-
   Future<void> _onJoinRoomClicked(
     HomeJoinRoomClicked event,
     Emitter<HomeState> emit,
@@ -211,8 +179,7 @@ class HomeBloc extends Bloc<HomeEvent, HomeState> {
     Emitter<HomeState> emit,
   ) async {
     if (FeatureFlags.enableBotPlayers) {
-      // Navigate to Matchmaking (Fake Online Mode)
-      _emitEffect(emit, HomeNavigateTo('/matchmaking'));
+      _emitEffect(emit, HomeNavigateTo('/bot_settings'));
     } else {
       _emitEffect(
         emit,

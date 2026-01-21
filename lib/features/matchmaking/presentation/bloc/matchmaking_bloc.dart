@@ -5,10 +5,6 @@ import '../../../../core/engine/engine.dart';
 import '../../../../core/config/app_config.dart';
 import '../../../../core/engine/data/handlers/websocket_session_handler.dart';
 import '../../../../core/engine/domain/models/room_event.dart';
-import 'dart:math';
-import '../../../../core/config/feature_flags.dart';
-import '../../../../core/constants/bot_names.dart';
-import '../../../../core/engine/domain/models/participant.dart';
 import '../../../../core/data/repositories/auth_repository.dart';
 
 import 'matchmaking_event.dart';
@@ -68,12 +64,6 @@ class MatchmakingBloc extends Bloc<MatchmakingEvent, MatchmakingState> {
       return;
     }
 
-    // V1 Offline Mode: Fake Matchmaking Simulation
-    if (FeatureFlags.enableBotPlayers) {
-      await _startFakeMatchmaking(emit);
-      return;
-    }
-
     AppLogger.info('🚀 [MatchmakingBloc] Starting matchmaking...');
 
     emit(
@@ -118,85 +108,6 @@ class MatchmakingBloc extends Bloc<MatchmakingEvent, MatchmakingState> {
         baseState: nextState,
       );
     }
-  }
-
-  Future<void> _startFakeMatchmaking(Emitter<MatchmakingState> emit) async {
-    AppLogger.info('🤖 [MatchmakingBloc] Starting FAKE matchmaking simulation');
-
-    // 1. Simulate "Connecting"
-    emit(state.copyWith(isConnecting: true));
-    await Future.delayed(const Duration(milliseconds: 800));
-    emit(
-      state.copyWith(
-        isConnecting: false,
-        connectionStatus: ConnectionStatus.connected,
-        participants: [], // Clear any previous
-      ),
-    );
-
-    // 2. Start Lobby Timer (Simulated)
-    _lobbyCreatedAt = DateTime.now().millisecondsSinceEpoch ~/ 1000;
-    _startLobbyTimer();
-
-    // 3. Simulate "Searching..." delay
-    // Wait a random bit before first player joins
-    final random = Random();
-    await Future.delayed(Duration(seconds: 1 + random.nextInt(2)));
-
-    // 4. Add Fake Participants gradually
-    // We need 3 bots + Me (Me is usually added by the UI knowing my own profile,
-    // but the list here usually comes from server. Let's add Me first or last?
-    // Usually 'me' is implicitly in the list if the server sends it.
-    // For V1 UI, we just need to show "Found Player X".
-
-    List<Participant> fakeParticipants = [];
-
-    // Add Myself (Mock)
-    final me = Participant(
-      id: 'me',
-      sessionId: 'me',
-      name: _authRepository.currentUser?.displayName ?? 'Me',
-      isMe: true,
-      unitCount: 5,
-    );
-    fakeParticipants.add(me);
-    emit(state.copyWith(participants: List.from(fakeParticipants)));
-
-    // Ensure we have unique names
-    Set<String> usedNames = {};
-    while (fakeParticipants.length < 4) {
-      // Wait random time between joins (1-3 seconds)
-      await Future.delayed(Duration(milliseconds: 1500 + random.nextInt(2000)));
-
-      // Pick random name
-      String name;
-      do {
-        name = kBotNames[random.nextInt(kBotNames.length)];
-      } while (usedNames.contains(name));
-      usedNames.add(name);
-
-      final bot = Participant(
-        id: 'bot_${fakeParticipants.length}',
-        sessionId: 'bot_${fakeParticipants.length}',
-        name: name,
-        isMe: false,
-        unitCount: 5,
-        isActive: false, // Default
-      );
-
-      fakeParticipants.add(bot);
-      AppLogger.info('🤖 [MatchmakingBloc] Found player: $name');
-
-      // Update State
-      emit(state.copyWith(participants: List.from(fakeParticipants)));
-    }
-
-    // 5. Lobby Full -> "Match Found"
-    await Future.delayed(
-      const Duration(seconds: 1),
-    ); // Brief pause at full lobby
-    AppLogger.info('🎉 [MatchmakingBloc] Fake Match Full! Starting game...');
-    add(MatchFound());
   }
 
   Future<void> _establishConnection() async {
@@ -391,7 +302,7 @@ class MatchmakingBloc extends Bloc<MatchmakingEvent, MatchmakingState> {
     final nextState = state.copyWith(isMatchFound: true);
     _emitEffect(
       emit,
-      MatchmakingNavigateToSession(isOnline: !FeatureFlags.enableBotPlayers),
+      const MatchmakingNavigateToSession(),
       baseState: nextState,
     );
   }

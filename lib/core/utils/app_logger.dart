@@ -98,15 +98,6 @@ class AppLogger {
     if (exception != null) _writeToLog('EXCEPTION', exception.toString());
   }
 
-  // Bot-related logs (for debugging local bot behavior)
-  static void botEvent(
-    String botId,
-    String event, {
-    Map<String, dynamic>? data,
-  }) {
-    _writeToLog('BOT[$botId]', event, data: data);
-  }
-
   // General logs
   static void info(String message, {Map<String, dynamic>? data}) {
     _writeToLog('INFO', message, data: data);

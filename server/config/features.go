@@ -10,7 +10,6 @@ type FeatureFlags struct {
 	EnableTournaments     bool `json:"enableTournaments"`
 	EnableAdminDashboard  bool `json:"enableAdminDashboard"`
 	EnableVoiceChat       bool `json:"enableVoiceChat"`
-	EnableBotPlayers      bool `json:"enableBotPlayers"`
 	EnableGameChat        bool `json:"enableGameChat"`
 }
 
@@ -21,7 +20,6 @@ func GetFeatureFlags() FeatureFlags {
 		EnableTournaments:     getEnvBool("ENABLE_TOURNAMENTS", false),
 		EnableAdminDashboard:  getEnvBool("ENABLE_ADMIN_DASHBOARD", true),
 		EnableVoiceChat:       getEnvBool("ENABLE_VOICE_CHAT", false),
-		EnableBotPlayers:      getEnvBool("ENABLE_BOT_PLAYERS", true),
 		EnableGameChat:        getEnvBool("ENABLE_GAME_CHAT", false),
 	}
 }

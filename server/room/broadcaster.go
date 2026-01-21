@@ -34,14 +34,6 @@ func (b *Broadcaster) sendToClient(c *Client, bytes []byte, critical bool) {
 		}
 	}()
 
-	if c.IsBot {
-		select {
-		case c.Send <- bytes:
-		default:
-		}
-		return
-	}
-
 	// log.Printf("Sending %d bytes to %s (Critical: %v)", len(bytes), c.ID, critical)
 	select {
 	case c.Send <- bytes:

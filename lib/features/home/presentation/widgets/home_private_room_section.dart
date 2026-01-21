@@ -12,54 +12,24 @@ class HomePrivateRoomSection extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Column(
+    return Row(
       children: [
-        Row(
-          children: [
-            Expanded(
-              child: HomeMatchCard(
-                title: 'CREATE\nROOM',
-                icon: Icons.add_circle_outline,
-                onTap: () =>
-                    context.read<HomeBloc>().add(HomeCreateRoomClicked()),
-                palette: palette,
-              ),
-            ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: HomeMatchCard(
-                title: 'JOIN\nROOM',
-                icon: Icons.login,
-                onTap: () =>
-                    context.read<HomeBloc>().add(HomeJoinRoomClicked()),
-                palette: palette,
-              ),
-            ),
-          ],
+        Expanded(
+          child: HomeMatchCard(
+            title: 'CREATE\nROOM',
+            icon: Icons.add_circle_outline,
+            onTap: () => context.read<HomeBloc>().add(HomeCreateRoomClicked()),
+            palette: palette,
+          ),
         ),
-        const SizedBox(height: 12),
-        Row(
-          children: [
-            Expanded(
-              child: HomeMatchCard(
-                title: 'CREATE\nHOTSPOT',
-                icon: Icons.wifi_tethering,
-                onTap: () =>
-                    context.read<HomeBloc>().add(HomeCreateHotspotClicked()),
-                palette: palette,
-              ),
-            ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: HomeMatchCard(
-                title: 'JOIN\nHOTSPOT',
-                icon: Icons.wifi_find_outlined,
-                onTap: () =>
-                    context.read<HomeBloc>().add(HomeJoinHotspotClicked()),
-                palette: palette,
-              ),
-            ),
-          ],
+        const SizedBox(width: 16),
+        Expanded(
+          child: HomeMatchCard(
+            title: 'JOIN\nROOM',
+            icon: Icons.login,
+            onTap: () => context.read<HomeBloc>().add(HomeJoinRoomClicked()),
+            palette: palette,
+          ),
         ),
       ],
     );

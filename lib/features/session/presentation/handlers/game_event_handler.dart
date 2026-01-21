@@ -228,7 +228,7 @@ class GameEventHandler {
     // Calculate cards per player
     final cardsPerPlayer = totalCards ~/ participants.length;
     AppLogger.info(
-      'Shuffling: Starting deal animation for ${participants.length} players, ${cardsPerPlayer} cards each',
+      'Shuffling: Starting deal animation for ${participants.length} players, $cardsPerPlayer cards each',
     );
 
     final dealIntervalMs =

@@ -1,5 +1,4 @@
 import 'dart:math';
-import '../../../utils/app_logger.dart';
 import '../models/session_state.dart';
 import '../models/session_enums.dart';
 import '../models/unit.dart';
@@ -41,22 +40,7 @@ class DefaultBotBrain implements BotBrain {
     required GameMove? lastMove,
     required BotPersonality personality,
   }) {
-    AppLogger.botEvent(
-      botId,
-      'THINKING',
-      data: {
-        'personality': personality.name,
-        'handSize': botHand.length,
-        'pileCount': currentState.pileCount,
-        'currentRank': currentState.currentRank?.name,
-        'lastMoveBy': lastMove?.playerId,
-      },
-    );
-
-    if (botHand.isEmpty) {
-      AppLogger.botEvent(botId, 'DECISION: PASS (empty hand)');
-      return BotDecision.pass();
-    }
+    if (botHand.isEmpty) return BotDecision.pass();
 
     // 1. Challenge Logic
     if (lastMove != null && lastMove.playerId != botId) {
@@ -65,20 +49,7 @@ class DefaultBotBrain implements BotBrain {
       if (personality == BotPersonality.conservative) {
         challengeChance = currentState.pileCount > 8 ? 0.25 : 0.05;
       }
-
-      final roll = _random.nextDouble();
-      AppLogger.botEvent(
-        botId,
-        'Challenge check',
-        data: {
-          'chance': challengeChance,
-          'roll': roll.toStringAsFixed(2),
-          'willChallenge': roll < challengeChance,
-        },
-      );
-
-      if (roll < challengeChance) {
-        AppLogger.botEvent(botId, 'DECISION: CHALLENGE');
+      if (_random.nextDouble() < challengeChance) {
         return BotDecision.challenge();
       }
     }
@@ -88,29 +59,13 @@ class DefaultBotBrain implements BotBrain {
     bool isStartingRound = targetRank == null;
     if (isStartingRound) {
       targetRank = botHand[_random.nextInt(botHand.length)].rank;
-      AppLogger.botEvent(
-        botId,
-        'Starting round, chose rank: ${targetRank.name}',
-      );
     } else {
       // 3. Play/Pass Logic
       double passChance = 0.15;
       if (personality == BotPersonality.ghost) passChance = 0.45;
       if (personality == BotPersonality.conservative) passChance = 0.25;
 
-      final roll = _random.nextDouble();
-      AppLogger.botEvent(
-        botId,
-        'Pass check',
-        data: {
-          'chance': passChance,
-          'roll': roll.toStringAsFixed(2),
-          'willPass': roll < passChance,
-        },
-      );
-
-      if (roll < passChance) {
-        AppLogger.botEvent(botId, 'DECISION: PASS');
+      if (_random.nextDouble() < passChance) {
         return BotDecision.pass();
       }
     }
@@ -133,7 +88,6 @@ class DefaultBotBrain implements BotBrain {
       } else if (_random.nextDouble() < 0.1) {
         botUnitsToPlay = [botHand[_random.nextInt(botHand.length)]];
       } else {
-        AppLogger.botEvent(botId, 'DECISION: PASS (conservative, no match)');
         return BotDecision.pass();
       }
     } else {
@@ -152,20 +106,8 @@ class DefaultBotBrain implements BotBrain {
     }
 
     if (botUnitsToPlay.isEmpty) {
-      AppLogger.botEvent(botId, 'DECISION: PASS (no cards selected)');
       return BotDecision.pass();
     } else {
-      final isBluff = botUnitsToPlay.any((u) => u.rank != targetRank);
-      AppLogger.botEvent(
-        botId,
-        'DECISION: PLAY',
-        data: {
-          'count': botUnitsToPlay.length,
-          'declaredRank': targetRank.name,
-          'isBluff': isBluff,
-          'matchingCount': matchingCards.length,
-        },
-      );
       return BotDecision.play(botUnitsToPlay, targetRank);
     }
   }
