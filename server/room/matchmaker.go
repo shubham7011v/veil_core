@@ -8,7 +8,6 @@ import (
 	"strings"
 	"time"
 
-	"veil_server/config"
 	"veil_server/game"
 	"veil_server/internal/domain/user"
 	"veil_server/protocol"
@@ -87,7 +86,6 @@ func (mm *Matchmaker) CheckLobbyTimeout() {
 		// Existing players will just have to wait or invite friends.
 		mm.manager.ActiveLobby = nil
 		mm.manager.ActiveLobbyCount = 0
-	} else {		mm.manager.ActiveLobbyCount = 0
 	} else {
 		// Log how much time is left
 		timeLeft := currentTimeout - time.Since(mm.manager.ActiveLobbyStartTime)

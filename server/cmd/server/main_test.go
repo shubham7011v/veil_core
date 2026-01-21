@@ -9,7 +9,6 @@ import (
 	"testing"
 	"time"
 
-	"veil_server/config"
 	"veil_server/db"
 	"veil_server/protocol"
 	"veil_server/room"
@@ -197,9 +196,9 @@ func TestBotBehavior(t *testing.T) {
 	defer os.Unsetenv("LOBBY_TIMEOUT_S")
 	defer os.Unsetenv("START_GAME_DELAY")
 
-	originalDelay := config.BotThinkingDelaySec
-	config.BotThinkingDelaySec = 1
-	defer func() { config.BotThinkingDelaySec = originalDelay }()
+	// originalDelay := config.BotThinkingDelaySec
+	// config.BotThinkingDelaySec = 1
+	// defer func() { config.BotThinkingDelaySec = originalDelay }()
 
 	// 1. Setup Server
 	dbConn, _ := db.InitDB(dbPath)

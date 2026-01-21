@@ -8,9 +8,9 @@ func TestGameTurnCyclingWithDisconnects(t *testing.T) {
 	g := NewGame()
 
 	// Add 3 players
-	g.AddPlayer("p1", "Player 1", "", false)
-	g.AddPlayer("p2", "Player 2", "", false)
-	g.AddPlayer("p3", "Player 3", "", false)
+	g.AddPlayer("p1", "Player 1", "")
+	g.AddPlayer("p2", "Player 2", "")
+	g.AddPlayer("p3", "Player 3", "")
 
 	err := g.Start()
 	if err != nil {
@@ -61,8 +61,8 @@ func TestGameStartRules(t *testing.T) {
 		t.Error("Expected error when starting game with 0 players")
 	}
 
-	g.AddPlayer("p1", "p1", "", false)
-	g.AddPlayer("p2", "p2", "", false)
+	g.AddPlayer("p1", "p1", "")
+	g.AddPlayer("p2", "p2", "")
 
 	err = g.Start()
 	if err != nil {
@@ -89,8 +89,8 @@ func TestGameStartRules(t *testing.T) {
 
 func TestBluffLogic(t *testing.T) {
 	g := NewGame()
-	g.AddPlayer("p1", "p1", "", false)
-	g.AddPlayer("p2", "p2", "", false)
+	g.AddPlayer("p1", "p1", "")
+	g.AddPlayer("p2", "p2", "")
 	g.Start()
 
 	// Force p1's turn
@@ -136,9 +136,9 @@ func TestBluffLogic(t *testing.T) {
 
 func TestRemovePlayerDeckConsistency(t *testing.T) {
 	g := NewGame()
-	g.AddPlayer("p1", "p1", "", false)
-	g.AddPlayer("p2", "p2", "", false)
-	g.AddPlayer("p3", "p3", "", false)
+	g.AddPlayer("p1", "p1", "")
+	g.AddPlayer("p2", "p2", "")
+	g.AddPlayer("p3", "p3", "")
 
 	if err := g.Start(); err != nil {
 		t.Fatalf("Failed to start game: %v", err)
@@ -175,8 +175,8 @@ func TestRemovePlayerDeckConsistency(t *testing.T) {
 
 func TestChallengeResolution(t *testing.T) {
 	g := NewGame()
-	g.AddPlayer("p1", "Player 1", "", false)
-	g.AddPlayer("p2", "Player 2", "", false)
+	g.AddPlayer("p1", "Player 1", "")
+	g.AddPlayer("p2", "Player 2", "")
 	g.Start()
 
 	// Test successful bluff detection
@@ -199,8 +199,8 @@ func TestChallengeResolution(t *testing.T) {
 	// Test honest play
 	t.Run("Honest play not marked as bluff", func(t *testing.T) {
 		g2 := NewGame()
-		g2.AddPlayer("p1", "P1", "", false)
-		g2.AddPlayer("p2", "P2", "", false)
+		g2.AddPlayer("p1", "P1", "")
+		g2.AddPlayer("p2", "P2", "")
 		g2.Start()
 		g2.SetTurnMessages("p1")
 
@@ -221,9 +221,9 @@ func TestChallengeResolution(t *testing.T) {
 
 func TestPassMechanics(t *testing.T) {
 	g := NewGame()
-	g.AddPlayer("p1", "Player 1", "", false)
-	g.AddPlayer("p2", "Player 2", "", false)
-	g.AddPlayer("p3", "Player 3", "", false)
+	g.AddPlayer("p1", "Player 1", "")
+	g.AddPlayer("p2", "Player 2", "")
+	g.AddPlayer("p3", "Player 3", "")
 	g.Start()
 
 	// Set up game state: p1 plays cards
@@ -263,8 +263,8 @@ func TestPassMechanics(t *testing.T) {
 func TestWinCondition(t *testing.T) {
 	t.Run("Player wins when hand is empty", func(t *testing.T) {
 		g := NewGame()
-		g.AddPlayer("p1", "Winner", "", false)
-		g.AddPlayer("p2", "Loser", "", false)
+		g.AddPlayer("p1", "Winner", "")
+		g.AddPlayer("p2", "Loser", "")
 		g.Start()
 
 		// Give p1 only one card
@@ -290,8 +290,8 @@ func TestWinCondition(t *testing.T) {
 func TestCardValidation(t *testing.T) {
 	t.Run("Invalid card ID should fail", func(t *testing.T) {
 		g := NewGame()
-		g.AddPlayer("p1", "P1", "", false)
-		g.AddPlayer("p2", "P2", "", false)
+		g.AddPlayer("p1", "P1", "")
+		g.AddPlayer("p2", "P2", "")
 		g.Start()
 
 		g.SetTurnMessages("p1")
@@ -305,8 +305,8 @@ func TestCardValidation(t *testing.T) {
 
 	t.Run("Cannot play on other player's turn", func(t *testing.T) {
 		g := NewGame()
-		g.AddPlayer("p1", "P1", "", false)
-		g.AddPlayer("p2", "P2", "", false)
+		g.AddPlayer("p1", "P1", "")
+		g.AddPlayer("p2", "P2", "")
 		g.Start()
 
 		// Set p1 as active
@@ -325,8 +325,8 @@ func TestCardValidation(t *testing.T) {
 
 func TestMultiCardPlay(t *testing.T) {
 	g := NewGame()
-	g.AddPlayer("p1", "Player 1", "", false)
-	g.AddPlayer("p2", "Player 2", "", false)
+	g.AddPlayer("p1", "Player 1", "")
+	g.AddPlayer("p2", "Player 2", "")
 	g.Start()
 
 	g.SetTurnMessages("p1")

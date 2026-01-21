@@ -4,20 +4,18 @@ import 'dart:io';
 import 'dart:math';
 
 import 'package:veil_core/core/engine/domain/logic/bot_brain.dart';
-import 'package:veil_core/core/engine/domain/models/game_move.dart';
 import 'package:veil_core/core/engine/domain/models/participant.dart';
 import 'package:veil_core/core/engine/domain/models/session_enums.dart';
 import 'package:veil_core/core/engine/domain/models/session_state.dart';
 import 'package:veil_core/core/engine/domain/models/unit.dart';
 import 'package:web_socket_channel/web_socket_channel.dart';
-import 'package:web_socket_channel/status.dart' as status;
 
 // Configuration
 const String defaultWsUrl = 'ws://localhost:8080/ws';
 const int defaultBotCount = 4; // Fill a standard lobby (1 human + 4 bots)
 
 void main(List<String> args) async {
-  final botCount = args.length > 0
+  final botCount = args.isNotEmpty
       ? int.tryParse(args[0]) ?? defaultBotCount
       : defaultBotCount;
   final wsUrl = args.length > 1 ? args[1] : defaultWsUrl;
@@ -52,7 +50,6 @@ class HeadlessBot {
   final BotPersonality personality;
 
   WebSocketChannel? _channel;
-  StreamSubscription? _subscription;
   SessionState? _currentState;
   bool _isConnected = false;
   Completer<void>? _cleanupCompleter;
@@ -89,7 +86,7 @@ class HeadlessBot {
     try {
       final uri = Uri.parse(wsUrl);
       _channel = WebSocketChannel.connect(uri);
-      _subscription = _channel!.stream.listen(
+      _channel!.stream.listen(
         (message) => _onMessage(message),
         onDone: () {
           if (_cleanupCompleter == null) {
@@ -207,8 +204,9 @@ class HeadlessBot {
   }
 
   void _takeTurn() {
-    if (_currentState == null || _currentState!.activeParticipantId != 'me')
+    if (_currentState == null || _currentState!.activeParticipantId != 'me') {
       return;
+    }
 
     final decision = brain.decideAction(
       botId: 'me',
